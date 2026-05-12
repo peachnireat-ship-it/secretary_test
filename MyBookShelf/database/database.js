@@ -14,6 +14,7 @@ db.execSync(`
     review TEXT DEFAULT '',
     startDate INTEGER,
     endDate INTEGER,
+    goalDate INTEGER,
     createdAt INTEGER,
     bookType TEXT DEFAULT 'physical'
   );
@@ -21,6 +22,9 @@ db.execSync(`
 
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN bookType TEXT DEFAULT 'physical'`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN goalDate INTEGER`);
 } catch (_) {}
 
 export const getAllBooks = () =>
@@ -52,7 +56,7 @@ export const insertBook = (book) => {
 export const updateBook = (book) => {
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
-     status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, bookType = ? WHERE id = ?`,
+     status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?, bookType = ? WHERE id = ?`,
     [
       book.title,
       book.author || '',
@@ -63,6 +67,7 @@ export const updateBook = (book) => {
       book.review || '',
       book.startDate || null,
       book.endDate || null,
+      book.goalDate || null,
       book.bookType || 'physical',
       book.id,
     ]

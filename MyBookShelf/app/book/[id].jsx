@@ -23,6 +23,7 @@ export default function BookDetailScreen() {
   const [currentPage, setCurrentPage] = useState('');
   const [startDateStr, setStartDateStr] = useState('');
   const [endDateStr, setEndDateStr] = useState('');
+  const [goalDateStr, setGoalDateStr] = useState('');
   const [bookType, setBookType] = useState('physical');
 
   const tsToDateStr = (ts) => {
@@ -46,6 +47,7 @@ export default function BookDetailScreen() {
       setCurrentPage(data.currentPage > 0 ? data.currentPage.toString() : '');
       setStartDateStr(tsToDateStr(data.startDate));
       setEndDateStr(tsToDateStr(data.endDate));
+      setGoalDateStr(tsToDateStr(data.goalDate));
       setBookType(data.bookType || 'physical');
     }
   }, [id]);
@@ -69,6 +71,7 @@ export default function BookDetailScreen() {
       currentPage: parseInt(currentPage) || 0,
       startDate: dateStrToTs(startDateStr),
       endDate: dateStrToTs(endDateStr),
+      goalDate: dateStrToTs(goalDateStr),
       bookType,
     });
     Alert.alert('저장 완료', '변경사항이 저장되었습니다.', [
@@ -90,6 +93,7 @@ export default function BookDetailScreen() {
             currentPage: parseInt(currentPage) || 0,
             status: 'completed',
             endDate: Date.now(),
+            goalDate: dateStrToTs(goalDateStr),
           });
           router.back();
         },
@@ -180,6 +184,19 @@ export default function BookDetailScreen() {
               style={styles.input}
               value={endDateStr}
               onChangeText={setEndDateStr}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#CAC4D0"
+            />
+          </>
+        )}
+
+        {(book.status === 'reading' || book.status === 'want_to_read') && (
+          <>
+            <Text style={styles.sectionLabel}>완독 목표일 🎯</Text>
+            <TextInput
+              style={styles.input}
+              value={goalDateStr}
+              onChangeText={setGoalDateStr}
               placeholder="YYYY-MM-DD"
               placeholderTextColor="#CAC4D0"
             />

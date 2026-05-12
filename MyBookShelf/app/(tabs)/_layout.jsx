@@ -39,6 +39,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="challenge"
+        options={{
+          title: '챌린지',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="trophy-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
