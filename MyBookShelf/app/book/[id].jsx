@@ -85,14 +85,25 @@ export default function BookDetailScreen() {
 
   const handleSave = () => {
     if (!book) return;
+    const startTs = dateStrToTs(startDateStr);
+    const endTs = dateStrToTs(endDateStr);
+    const goalTs = dateStrToTs(goalDateStr);
+    if (startTs && endTs && endTs < startTs) {
+      Alert.alert('날짜 오류', '독서 종료일은 시작일 이전으로 설정할 수 없습니다.');
+      return;
+    }
+    if (startTs && goalTs && goalTs < startTs) {
+      Alert.alert('날짜 오류', '완독 목표일은 시작일 이전으로 설정할 수 없습니다.');
+      return;
+    }
     updateBook({
       ...book,
       rating,
       review,
       currentPage: parseInt(currentPage) || 0,
-      startDate: dateStrToTs(startDateStr),
-      endDate: dateStrToTs(endDateStr),
-      goalDate: dateStrToTs(goalDateStr),
+      startDate: startTs,
+      endDate: endTs,
+      goalDate: goalTs,
       bookType,
     });
     Alert.alert('저장 완료', '변경사항이 저장되었습니다.', [
@@ -100,8 +111,36 @@ export default function BookDetailScreen() {
     ]);
   };
 
+  const handleMarkReading = () => {
+    if (!book) return;
+    Alert.alert('독서 시작', '이 책을 읽는 중으로 변경할까요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '독서중',
+        onPress: () => {
+          const now = Date.now();
+          updateBook({
+            ...book,
+            rating,
+            review,
+            currentPage: parseInt(currentPage) || 0,
+            status: 'reading',
+            startDate: dateStrToTs(startDateStr) || now,
+          });
+          router.back();
+        },
+      },
+    ]);
+  };
+
   const handleMarkCompleted = () => {
     if (!book) return;
+    const startTs = dateStrToTs(startDateStr);
+    const goalTs = dateStrToTs(goalDateStr);
+    if (startTs && goalTs && goalTs < startTs) {
+      Alert.alert('날짜 오류', '완독 목표일은 시작일 이전으로 설정할 수 없습니다.');
+      return;
+    }
     Alert.alert('완독 처리', '이 책을 완독 처리할까요?', [
       { text: '취소', style: 'cancel' },
       {
@@ -114,7 +153,7 @@ export default function BookDetailScreen() {
             currentPage: parseInt(currentPage) || 0,
             status: 'completed',
             endDate: Date.now(),
-            goalDate: dateStrToTs(goalDateStr),
+            goalDate: goalTs,
           });
           router.back();
         },
@@ -190,32 +229,28 @@ export default function BookDetailScreen() {
           placeholderTextColor="#CAC4D0"
         />
 
-        {(book.status === 'reading' || book.status === 'completed') && (
-          <>
-            <Text style={styles.sectionLabel}>독서 시작일</Text>
-            <TextInput
-              ref={startDateRef}
-              style={styles.input}
-              value={startDateStr}
-              onChangeText={(v) => setStartDateStr(formatDateInput(v))}
-              onFocus={() => scrollToInput(startDateRef)}
-              keyboardType="numeric"
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#CAC4D0"
-            />
-            <Text style={styles.sectionLabel}>독서 종료일</Text>
-            <TextInput
-              ref={endDateRef}
-              style={styles.input}
-              value={endDateStr}
-              onChangeText={(v) => setEndDateStr(formatDateInput(v))}
-              onFocus={() => scrollToInput(endDateRef)}
-              keyboardType="numeric"
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#CAC4D0"
-            />
-          </>
-        )}
+        <Text style={styles.sectionLabel}>독서 시작일</Text>
+        <TextInput
+          ref={startDateRef}
+          style={styles.input}
+          value={startDateStr}
+          onChangeText={(v) => setStartDateStr(formatDateInput(v))}
+          onFocus={() => scrollToInput(startDateRef)}
+          keyboardType="numeric"
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor="#CAC4D0"
+        />
+        <Text style={styles.sectionLabel}>독서 종료일</Text>
+        <TextInput
+          ref={endDateRef}
+          style={styles.input}
+          value={endDateStr}
+          onChangeText={(v) => setEndDateStr(formatDateInput(v))}
+          onFocus={() => scrollToInput(endDateRef)}
+          keyboardType="numeric"
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor="#CAC4D0"
+        />
 
         {(book.status === 'reading' || book.status === 'want_to_read') && (
           <>
@@ -245,6 +280,11 @@ export default function BookDetailScreen() {
         />
 
         <View style={styles.btnRow}>
+          {book.status === 'want_to_read' && (
+            <TouchableOpacity style={styles.readingBtn} onPress={handleMarkReading}>
+              <Text style={styles.readingBtnText}>독서중</Text>
+            </TouchableOpacity>
+          )}
           {book.status !== 'completed' && (
             <TouchableOpacity style={styles.completedBtn} onPress={handleMarkCompleted}>
               <Text style={styles.completedBtnText}>완독</Text>
@@ -292,6 +332,15 @@ const styles = StyleSheet.create({
   typeBtnText: { fontSize: 14, color: '#49454F' },
   typeBtnTextActive: { color: '#fff', fontWeight: '600' },
   btnRow: { flexDirection: 'row', gap: 8, marginTop: 24, marginBottom: 8 },
+  readingBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#1976D2',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  readingBtnText: { color: '#1976D2', fontSize: 14, fontWeight: '600' },
   completedBtn: {
     flex: 1,
     borderWidth: 1,
