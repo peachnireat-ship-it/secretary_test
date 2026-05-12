@@ -1,6 +1,6 @@
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, KeyboardAvoidingView, Platform, findNodeHandle,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,6 +17,10 @@ export default function BookDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const cardRef = useRef(null);
+  const scrollViewRef = useRef(null);
+  const startDateRef = useRef(null);
+  const endDateRef = useRef(null);
+  const goalDateRef = useRef(null);
   const [book, setBook] = useState(null);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
@@ -30,6 +34,23 @@ export default function BookDetailScreen() {
     if (!ts) return '';
     const d = new Date(ts);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const scrollToInput = (ref) => {
+    setTimeout(() => {
+      ref.current?.measureLayout(
+        findNodeHandle(scrollViewRef.current),
+        (left, top) => scrollViewRef.current?.scrollTo({ y: top - 120, animated: true }),
+        () => {}
+      );
+    }, 300);
+  };
+
+  const formatDateInput = (text) => {
+    const digits = text.replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 4) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
   };
 
   const dateStrToTs = (str) => {
@@ -126,9 +147,9 @@ export default function BookDetailScreen() {
     </View>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: insets.bottom + 16 }} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={{ paddingBottom: insets.bottom + 120 }} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>{book.title}</Text>
         {book.author ? <Text style={styles.author}>{book.author}</Text> : null}
         <View style={styles.badgeRow}>
@@ -173,17 +194,23 @@ export default function BookDetailScreen() {
           <>
             <Text style={styles.sectionLabel}>독서 시작일</Text>
             <TextInput
+              ref={startDateRef}
               style={styles.input}
               value={startDateStr}
-              onChangeText={setStartDateStr}
+              onChangeText={(v) => setStartDateStr(formatDateInput(v))}
+              onFocus={() => scrollToInput(startDateRef)}
+              keyboardType="numeric"
               placeholder="YYYY-MM-DD"
               placeholderTextColor="#CAC4D0"
             />
             <Text style={styles.sectionLabel}>독서 종료일</Text>
             <TextInput
+              ref={endDateRef}
               style={styles.input}
               value={endDateStr}
-              onChangeText={setEndDateStr}
+              onChangeText={(v) => setEndDateStr(formatDateInput(v))}
+              onFocus={() => scrollToInput(endDateRef)}
+              keyboardType="numeric"
               placeholder="YYYY-MM-DD"
               placeholderTextColor="#CAC4D0"
             />
@@ -194,9 +221,12 @@ export default function BookDetailScreen() {
           <>
             <Text style={styles.sectionLabel}>완독 목표일 🎯</Text>
             <TextInput
+              ref={goalDateRef}
               style={styles.input}
               value={goalDateStr}
-              onChangeText={setGoalDateStr}
+              onChangeText={(v) => setGoalDateStr(formatDateInput(v))}
+              onFocus={() => scrollToInput(goalDateRef)}
+              keyboardType="numeric"
               placeholder="YYYY-MM-DD"
               placeholderTextColor="#CAC4D0"
             />
