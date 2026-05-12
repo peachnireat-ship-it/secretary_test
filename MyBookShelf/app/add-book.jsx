@@ -1,6 +1,6 @@
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, KeyboardAvoidingView, Platform, findNodeHandle,
+  ScrollView, Alert, KeyboardAvoidingView, Platform,
   ActivityIndicator,
 } from 'react-native';
 import { useState, useRef } from 'react';
@@ -32,7 +32,7 @@ export default function AddBookScreen() {
   const scrollToInput = (ref) => {
     setTimeout(() => {
       ref.current?.measureLayout(
-        findNodeHandle(scrollViewRef.current),
+        scrollViewRef.current,
         (left, top) => scrollViewRef.current?.scrollTo({ y: top - 120, animated: true }),
         () => {}
       );

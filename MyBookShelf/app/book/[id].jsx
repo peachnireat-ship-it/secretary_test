@@ -1,6 +1,6 @@
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, KeyboardAvoidingView, Platform, findNodeHandle,
+  ScrollView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -39,7 +39,7 @@ export default function BookDetailScreen() {
   const scrollToInput = (ref) => {
     setTimeout(() => {
       ref.current?.measureLayout(
-        findNodeHandle(scrollViewRef.current),
+        scrollViewRef.current,
         (left, top) => scrollViewRef.current?.scrollTo({ y: top - 120, animated: true }),
         () => {}
       );
