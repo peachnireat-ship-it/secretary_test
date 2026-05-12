@@ -21,6 +21,7 @@ export default function BookDetailScreen() {
   const [currentPage, setCurrentPage] = useState('');
   const [startDateStr, setStartDateStr] = useState('');
   const [endDateStr, setEndDateStr] = useState('');
+  const [bookType, setBookType] = useState('physical');
 
   const tsToDateStr = (ts) => {
     if (!ts) return '';
@@ -43,6 +44,7 @@ export default function BookDetailScreen() {
       setCurrentPage(data.currentPage > 0 ? data.currentPage.toString() : '');
       setStartDateStr(tsToDateStr(data.startDate));
       setEndDateStr(tsToDateStr(data.endDate));
+      setBookType(data.bookType || 'physical');
     }
   }, [id]);
 
@@ -65,6 +67,7 @@ export default function BookDetailScreen() {
       currentPage: parseInt(currentPage) || 0,
       startDate: dateStrToTs(startDateStr),
       endDate: dateStrToTs(endDateStr),
+      bookType,
     });
     Alert.alert('저장 완료', '변경사항이 저장되었습니다.', [
       { text: '확인', onPress: () => router.back() },
@@ -129,13 +132,34 @@ export default function BookDetailScreen() {
         <Text style={styles.sectionLabel}>별점</Text>
         <StarRating rating={rating} onRate={setRating} size={32} />
 
-        <Text style={styles.sectionLabel}>현재 페이지</Text>
+        <Text style={styles.sectionLabel}>책 형태</Text>
+        <View style={styles.typeRow}>
+          {[{ key: 'physical', label: '종이책' }, { key: 'ebook', label: 'E-Book' }].map((opt) => (
+            <TouchableOpacity
+              key={opt.key}
+              style={[styles.typeBtn, bookType === opt.key && styles.typeBtnActive]}
+              onPress={() => setBookType(opt.key)}
+            >
+              <Text style={[styles.typeBtnText, bookType === opt.key && styles.typeBtnTextActive]}>
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.sectionLabel}>
+          {bookType === 'ebook' ? '현재 위치 (E-Book)' : '현재 페이지 (종이책)'}
+        </Text>
         <TextInput
           style={styles.input}
           value={currentPage}
           onChangeText={setCurrentPage}
           keyboardType="numeric"
-          placeholder={book.totalPages > 0 ? `전체 ${book.totalPages}p` : '페이지 입력'}
+          placeholder={
+            bookType === 'ebook'
+              ? '위치 번호 입력'
+              : book.totalPages > 0 ? `전체 ${book.totalPages}p` : '페이지 입력'
+          }
           placeholderTextColor="#CAC4D0"
         />
 
@@ -206,6 +230,18 @@ const styles = StyleSheet.create({
     color: '#1C1B1F',
   },
   reviewInput: { height: 120 },
+  typeRow: { flexDirection: 'row', gap: 8 },
+  typeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#CAC4D0',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  typeBtnActive: { backgroundColor: '#6750A4', borderColor: '#6750A4' },
+  typeBtnText: { fontSize: 14, color: '#49454F' },
+  typeBtnTextActive: { color: '#fff', fontWeight: '600' },
   completedBtn: {
     borderWidth: 1,
     borderColor: '#6750A4',

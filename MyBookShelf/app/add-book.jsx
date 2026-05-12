@@ -15,6 +15,11 @@ const STATUS_OPTIONS = [
   { key: 'completed', label: '완독' },
 ];
 
+const BOOK_TYPE_OPTIONS = [
+  { key: 'physical', label: '종이책' },
+  { key: 'ebook', label: 'E-Book' },
+];
+
 export default function AddBookScreen() {
   const router = useRouter();
   const cardRef = useRef(null);
@@ -22,6 +27,7 @@ export default function AddBookScreen() {
   const [author, setAuthor] = useState('');
   const [totalPages, setTotalPages] = useState('');
   const [status, setStatus] = useState('want_to_read');
+  const [bookType, setBookType] = useState('physical');
   const [review, setReview] = useState('');
 
   const handleShare = async () => {
@@ -47,6 +53,7 @@ export default function AddBookScreen() {
       author: author.trim(),
       totalPages: parseInt(totalPages) || 0,
       status,
+      bookType,
       review: review.trim(),
     });
     router.back();
@@ -103,6 +110,21 @@ export default function AddBookScreen() {
           multiline
           textAlignVertical="top"
         />
+
+        <Text style={styles.label}>책 형태</Text>
+        <View style={styles.statusGroup}>
+          {BOOK_TYPE_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.key}
+              style={[styles.statusBtn, bookType === option.key && styles.statusBtnActive]}
+              onPress={() => setBookType(option.key)}
+            >
+              <Text style={[styles.statusBtnText, bookType === option.key && styles.statusBtnTextActive]}>
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         <Text style={styles.label}>읽기 상태</Text>
         <View style={styles.statusGroup}>

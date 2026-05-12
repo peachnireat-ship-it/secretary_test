@@ -14,9 +14,14 @@ db.execSync(`
     review TEXT DEFAULT '',
     startDate INTEGER,
     endDate INTEGER,
-    createdAt INTEGER
+    createdAt INTEGER,
+    bookType TEXT DEFAULT 'physical'
   );
 `);
+
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN bookType TEXT DEFAULT 'physical'`);
+} catch (_) {}
 
 export const getAllBooks = () =>
   db.getAllSync('SELECT * FROM books ORDER BY createdAt DESC');
@@ -29,8 +34,8 @@ export const getBookById = (id) =>
 
 export const insertBook = (book) => {
   db.runSync(
-    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, createdAt)
-     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?)`,
+    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, createdAt, bookType)
+     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?, ?)`,
     [
       book.title,
       book.author || '',
@@ -39,6 +44,7 @@ export const insertBook = (book) => {
       book.review || '',
       book.status === 'reading' ? Date.now() : null,
       Date.now(),
+      book.bookType || 'physical',
     ]
   );
 };
@@ -46,7 +52,7 @@ export const insertBook = (book) => {
 export const updateBook = (book) => {
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
-     status = ?, rating = ?, review = ?, startDate = ?, endDate = ? WHERE id = ?`,
+     status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, bookType = ? WHERE id = ?`,
     [
       book.title,
       book.author || '',
@@ -57,6 +63,7 @@ export const updateBook = (book) => {
       book.review || '',
       book.startDate || null,
       book.endDate || null,
+      book.bookType || 'physical',
       book.id,
     ]
   );
