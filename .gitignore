@@ -1,0 +1,35 @@
+# Windows system files
+NTUSER.DAT
+NTUSER.DAT*
+ntuser.dat*
+ntuser.ini
+desktop.ini
+*.blf
+*.regtrans-ms
+
+# Windows user profile directories
+AppData/
+Contacts/
+Documents/
+Downloads/
+Favorites/
+Links/
+Music/
+OneDrive/
+OneDrive - HN GROUP/
+OneDriveCloudTemp/
+Pictures/
+Saved Games/
+Searches/
+Videos/
+
+# Shell history
+.bash_history
+.node_repl_history
+
+# Claude config (may contain sensitive data)
+.claude.json
+.claude/
+
+# Node
+node_modules/

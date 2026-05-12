@@ -1,0 +1,5 @@
+[user]
+	email = peach.nireat@gmail.com
+	name = nireat
+[core]
+	autocrlf = true

@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "내 서재",
+    "slug": "mybookshelf",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "mybookshelf",
+    "android": {
+      "package": "com.example.mybookshelf"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-asset"
+    ]
+  }
+}

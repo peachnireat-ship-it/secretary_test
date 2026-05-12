@@ -1,0 +1,131 @@
+# project
+
+## 1. 요구사항
+
+- Android 영상 편집 앱 (Java, Kotlin 미사용)
+- 패키지명: `com.videoeditor.app`
+- 최소 SDK: 24 / 타겟 SDK: 34
+- 빌드 도구: AGP 8.2.0, Gradle (Groovy DSL)
+
+### 기능 요구사항
+
+- 영상 목록 그리드 표시
+- 영상 편집: 트림, 구간 삭제, 속도 조절, 필터 적용
+- 텍스트 오버레이 삽입
+- BGM 추가 및 믹싱
+- 여러 영상 이어붙이기 (Merge)
+- 콜라주 생성
+- 음악 포맷 변환
+- 해상도·포맷 선택 후 내보내기
+- Android 13 이상/미만 권한 분기 처리
+
+---
+
+## 2. 설계
+
+### 화면 구조
+
+```
+MainActivity (영상 목록 그리드)
+├── EditActivity (영상 편집 허브)
+│   ├── TextOverlayActivity  — 텍스트 삽입 (REQ_TEXT=1001)
+│   ├── BgmActivity          — BGM 추가 (REQ_BGM=1002)
+│   ├── PreviewActivity      — 가로 모드 미리보기
+│   └── ExportActivity       — 해상도·포맷 선택 후 내보내기
+├── MergeActivity            — 여러 영상 이어붙이기
+├── CollageActivity          — 콜라주
+└── AudioConvertActivity     — 음악 포맷 변환
+```
+
+### 아키텍처 레이어
+
+| 레이어 | 위치 | 역할 |
+|--------|------|------|
+| Activities | `activities/` | UI 로직, ExoPlayer 라이프사이클 |
+| Utils | `utils/FFmpegHelper.java` | FFmpeg 처리 (유일한 진입점) |
+| Utils | `utils/VideoLoader.java`, `utils/AudioLoader.java` | MediaStore 파일 목록 로드 |
+| Adapters | `adapters/` | RecyclerView 어댑터 |
+| Views | `views/RangeSeekBar.java` | 커스텀 구간 선택 슬라이더 |
+| Models | `models/` | `VideoItem`, `AudioItem`, `TextOverlayItem` |
+
+### FFmpegHelper 보안 설계
+
+모든 FFmpeg 명령어는 `FFmpegHelper` 클래스를 통해서만 실행되며, 화이트리스트로 입력을 검증한다.
+
+| 항목 | 허용 값 |
+|------|---------|
+| 색상 | white, black, red, green, blue, yellow, cyan, magenta, orange, pink, purple, gray |
+| 해상도 | 640x360, 1280x720, 1920x1080 |
+| 영상 포맷 | mp4_h264, mp4_h265, mkv, mov |
+| 오디오 포맷 | mp3, aac, wav, flac, ogg |
+| 비트레이트 | 64, 96, 128, 192, 256, 320 kbps |
+| 텍스트 길이 | 최대 100자 (`MAX_TEXT_LENGTH`) |
+| 출력 경로 | 앱 캐시 디렉토리(`getCacheDir()`)로만 출력 → MediaStore로 갤러리 저장 |
+
+### 권한 처리
+
+- API 33 이상: `READ_MEDIA_VIDEO` / `READ_MEDIA_AUDIO`
+- API 33 미만: `READ_EXTERNAL_STORAGE`
+- `MainActivity.requestPermissions()`에서 SDK 버전 분기 처리
+
+### 주요 의존성
+
+| 라이브러리 | 버전 | 용도 |
+|------------|------|------|
+| ExoPlayer (`androidx.media3:*`) | 1.3.1 | 영상 재생 |
+| FFmpegKit (`com.arthenica:ffmpeg-kit-full`) | 6.0-2 | 영상·오디오 처리 |
+| Glide | 4.16.0 | 썸네일 로딩 |
+| EasyPermissions | 3.0.0 | 저장소 권한 처리 |
+
+---
+
+## 3. 구현
+
+### EditActivity (핵심 편집 화면)
+
+- ExoPlayer 기반 영상 재생/일시정지
+- `RangeSeekBar` (커스텀 뷰)로 구간 선택
+- **Trim**: 시작~끝 구간만 잘라내기
+- **구간 삭제**: 선택 구간을 제거하고 앞뒤를 이어붙이기
+- **속도 조절**: FFmpeg `setpts` 필터 적용
+- **필터 적용**: FFmpeg 필터그래프 활용
+- **텍스트 오버레이**: `TextOverlayActivity` 연동
+- **BGM 추가**: `BgmActivity` 연동
+- **내보내기**: `ExportActivity`로 해상도·포맷 선택
+
+### FFmpegHelper 주요 메서드
+
+| 메서드 | 기능 |
+|--------|------|
+| `trimVideo()` | 구간 자르기 |
+| `applyFilter()` | 영상 필터 적용 |
+| `addTextOverlay()` | 텍스트 삽입 (drawtext) |
+| `deleteSection()` | 구간 삭제 후 이어붙이기 |
+| `addBgm()` | BGM 믹싱 |
+| `mergeVideos()` | 여러 영상 병합 |
+| `exportVideo()` | 해상도·포맷 지정 내보내기 |
+| `createCollage()` | 콜라주 생성 |
+| `convertAudio()` | 오디오 포맷 변환 |
+| `sanitizeDrawtext()` | FFmpeg drawtext 입력 이스케이프 |
+
+### 문서화
+
+| 파일 | 역할 |
+|------|------|
+| `README.md` | 프로젝트 스펙, 빌드 명령어, 화면 구조, 아키텍처, 의존성 정리 |
+| `CLAUDE.md` | Claude Code 작업 가이드 (보안 설계, 진행 중인 작업) |
+| `claude_log.md` | 작업 히스토리 날짜별 기록 |
+
+---
+
+## 4. todo
+
+- (없음)
+
+---
+
+## 5. 변경 이력
+
+| 날짜 | 내용 |
+|------|------|
+| 2026-04-29 | prompt.txt 구조 재정리 — 요구사항/설계/구현/todo/변경이력 섹션으로 분리 |
