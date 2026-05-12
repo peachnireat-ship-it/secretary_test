@@ -65,12 +65,13 @@ export default function AddBookScreen() {
       const json = await res.json();
       const data = json[`ISBN:${cleaned}`];
       if (!data) {
-        Alert.alert('검색 결과 없음', 'ISBN으로 책 정보를 찾을 수 없습니다.\n제목 등을 직접 입력해 등록할 수 있습니다.');
+        Alert.alert('검색 결과 없음', '일치하는 책 정보가 없습니다.\nISBN 번호를 다시 확인해보세요.');
         return;
       }
       if (data.title) setTitle(data.title);
       if (data.authors?.length > 0) setAuthor(data.authors[0].name || '');
       if (data.number_of_pages) setTotalPages(String(data.number_of_pages));
+      Alert.alert('검색 완료', '책 정보가 자동으로 입력되었습니다.');
     } catch {
       Alert.alert('오류', '책 정보를 가져오지 못했습니다. 네트워크를 확인해주세요.');
     } finally {
