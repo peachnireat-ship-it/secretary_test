@@ -1,6 +1,6 @@
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, KeyboardAvoidingView, Platform, findNodeHandle,
 } from 'react-native';
 import { useState, useRef } from 'react';
 import { useRouter } from 'expo-router';
@@ -23,6 +23,20 @@ const BOOK_TYPE_OPTIONS = [
 export default function AddBookScreen() {
   const router = useRouter();
   const cardRef = useRef(null);
+  const scrollViewRef = useRef(null);
+  const authorRef = useRef(null);
+  const totalPagesRef = useRef(null);
+  const reviewRef = useRef(null);
+
+  const scrollToInput = (ref) => {
+    setTimeout(() => {
+      ref.current?.measureLayout(
+        findNodeHandle(scrollViewRef.current),
+        (left, top) => scrollViewRef.current?.scrollTo({ y: top - 120, animated: true }),
+        () => {}
+      );
+    }, 300);
+  };
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [totalPages, setTotalPages] = useState('');
@@ -68,9 +82,9 @@ export default function AddBookScreen() {
     </View>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
 
         <Text style={styles.label}>책 제목 *</Text>
         <TextInput
@@ -83,18 +97,22 @@ export default function AddBookScreen() {
 
         <Text style={styles.label}>저자</Text>
         <TextInput
+          ref={authorRef}
           style={styles.input}
           value={author}
           onChangeText={setAuthor}
+          onFocus={() => scrollToInput(authorRef)}
           placeholder="저자를 입력하세요"
           placeholderTextColor="#CAC4D0"
         />
 
         <Text style={styles.label}>총 페이지 수</Text>
         <TextInput
+          ref={totalPagesRef}
           style={styles.input}
           value={totalPages}
           onChangeText={setTotalPages}
+          onFocus={() => scrollToInput(totalPagesRef)}
           placeholder="페이지 수를 입력하세요"
           placeholderTextColor="#CAC4D0"
           keyboardType="numeric"
@@ -102,9 +120,11 @@ export default function AddBookScreen() {
 
         <Text style={styles.label}>독서 후기</Text>
         <TextInput
+          ref={reviewRef}
           style={[styles.input, styles.reviewInput]}
           value={review}
           onChangeText={setReview}
+          onFocus={() => scrollToInput(reviewRef)}
           placeholder="독서 후기를 입력하세요"
           placeholderTextColor="#CAC4D0"
           multiline
