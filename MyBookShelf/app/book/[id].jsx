@@ -2,15 +2,19 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { getBookById, updateBook } from '../../database/database';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
+import BookShareCard from '../../components/BookShareCard';
 
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const cardRef = useRef(null);
   const [book, setBook] = useState(null);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
@@ -41,6 +45,16 @@ export default function BookDetailScreen() {
       setEndDateStr(tsToDateStr(data.endDate));
     }
   }, [id]);
+
+  const handleShare = async () => {
+    if (!book) return;
+    try {
+      const uri = await captureRef(cardRef, { format: 'png', quality: 1 });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: '책 카드 공유' });
+    } catch {
+      Alert.alert('오류', '이미지 생성에 실패했습니다.');
+    }
+  };
 
   const handleSave = () => {
     if (!book) return;
@@ -87,6 +101,20 @@ export default function BookDetailScreen() {
   }
 
   return (
+    <>
+    <View style={{ position: 'absolute', top: -9999, left: 0 }} pointerEvents="none">
+      <View ref={cardRef} collapsable={false}>
+        <BookShareCard
+          title={book.title}
+          author={book.author}
+          status={book.status}
+          rating={rating}
+          startDate={startDateStr}
+          endDate={endDateStr}
+          review={review}
+        />
+      </View>
+    </View>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -149,11 +177,16 @@ export default function BookDetailScreen() {
           </TouchableOpacity>
         )}
 
+        <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+          <Text style={styles.shareBtnText}>공유하기</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
           <Text style={styles.saveBtnText}>저장</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 }
 
@@ -182,6 +215,15 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   completedBtnText: { color: '#6750A4', fontSize: 16, fontWeight: '600' },
+  shareBtn: {
+    borderWidth: 1,
+    borderColor: '#6750A4',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  shareBtnText: { color: '#6750A4', fontSize: 16, fontWeight: '600' },
   saveBtn: {
     backgroundColor: '#6750A4',
     borderRadius: 8,

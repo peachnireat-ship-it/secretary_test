@@ -2,9 +2,12 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'expo-router';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { insertBook } from '../database/database';
+import BookShareCard from '../components/BookShareCard';
 
 const STATUS_OPTIONS = [
   { key: 'want_to_read', label: '읽고 싶음' },
@@ -14,11 +17,25 @@ const STATUS_OPTIONS = [
 
 export default function AddBookScreen() {
   const router = useRouter();
+  const cardRef = useRef(null);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [totalPages, setTotalPages] = useState('');
   const [status, setStatus] = useState('want_to_read');
   const [review, setReview] = useState('');
+
+  const handleShare = async () => {
+    if (!title.trim()) {
+      Alert.alert('알림', '공유하려면 책 제목을 입력해주세요.');
+      return;
+    }
+    try {
+      const uri = await captureRef(cardRef, { format: 'png', quality: 1 });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: '책 카드 공유' });
+    } catch {
+      Alert.alert('오류', '이미지 생성에 실패했습니다.');
+    }
+  };
 
   const handleSave = () => {
     if (!title.trim()) {
@@ -36,6 +53,12 @@ export default function AddBookScreen() {
   };
 
   return (
+    <>
+    <View style={{ position: 'absolute', top: -9999, left: 0 }} pointerEvents="none">
+      <View ref={cardRef} collapsable={false}>
+        <BookShareCard title={title} author={author} status={status} review={review} />
+      </View>
+    </View>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -100,8 +123,13 @@ export default function AddBookScreen() {
           <Text style={styles.saveBtnText}>저장</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+          <Text style={styles.shareBtnText}>공유하기</Text>
+        </TouchableOpacity>
+
       </ScrollView>
     </KeyboardAvoidingView>
+    </>
   );
 }
 
@@ -142,4 +170,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  shareBtn: {
+    borderWidth: 1,
+    borderColor: '#6750A4',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 32,
+  },
+  shareBtnText: { color: '#6750A4', fontSize: 16, fontWeight: '600' },
 });
