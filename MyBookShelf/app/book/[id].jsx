@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { getBookById, updateBook } from '../../database/database';
@@ -14,6 +15,7 @@ import BookShareCard from '../../components/BookShareCard';
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const cardRef = useRef(null);
   const [book, setBook] = useState(null);
   const [rating, setRating] = useState(0);
@@ -122,7 +124,7 @@ export default function BookDetailScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: insets.bottom + 16 }} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>{book.title}</Text>
         {book.author ? <Text style={styles.author}>{book.author}</Text> : null}
         <View style={styles.badgeRow}>
@@ -195,19 +197,19 @@ export default function BookDetailScreen() {
           textAlignVertical="top"
         />
 
-        {book.status !== 'completed' && (
-          <TouchableOpacity style={styles.completedBtn} onPress={handleMarkCompleted}>
-            <Text style={styles.completedBtnText}>완독 처리</Text>
+        <View style={styles.btnRow}>
+          {book.status !== 'completed' && (
+            <TouchableOpacity style={styles.completedBtn} onPress={handleMarkCompleted}>
+              <Text style={styles.completedBtnText}>완독</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+            <Text style={styles.shareBtnText}>공유</Text>
           </TouchableOpacity>
-        )}
-
-        <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
-          <Text style={styles.shareBtnText}>공유하기</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnText}>저장</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+            <Text style={styles.saveBtnText}>저장</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
     </>
@@ -242,31 +244,31 @@ const styles = StyleSheet.create({
   typeBtnActive: { backgroundColor: '#6750A4', borderColor: '#6750A4' },
   typeBtnText: { fontSize: 14, color: '#49454F' },
   typeBtnTextActive: { color: '#fff', fontWeight: '600' },
+  btnRow: { flexDirection: 'row', gap: 8, marginTop: 24, marginBottom: 8 },
   completedBtn: {
+    flex: 1,
     borderWidth: 1,
     borderColor: '#6750A4',
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 24,
   },
-  completedBtnText: { color: '#6750A4', fontSize: 16, fontWeight: '600' },
+  completedBtnText: { color: '#6750A4', fontSize: 14, fontWeight: '600' },
   shareBtn: {
+    flex: 1,
     borderWidth: 1,
     borderColor: '#6750A4',
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 12,
   },
-  shareBtnText: { color: '#6750A4', fontSize: 16, fontWeight: '600' },
+  shareBtnText: { color: '#6750A4', fontSize: 14, fontWeight: '600' },
   saveBtn: {
+    flex: 1,
     backgroundColor: '#6750A4',
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 12,
-    marginBottom: 40,
   },
-  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 });
