@@ -26,6 +26,9 @@ try {
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN goalDate INTEGER`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN checkins TEXT DEFAULT '[]'`);
+} catch (_) {}
 
 export const getAllBooks = () =>
   db.getAllSync('SELECT * FROM books ORDER BY createdAt DESC');
@@ -76,6 +79,15 @@ export const updateBook = (book) => {
 
 export const deleteBook = (id) =>
   db.runSync('DELETE FROM books WHERE id = ?', [id]);
+
+export const addCheckin = (bookId, dayTs) => {
+  const row = db.getFirstSync('SELECT checkins FROM books WHERE id = ?', [bookId]);
+  const list = JSON.parse(row?.checkins || '[]');
+  if (!list.includes(dayTs)) {
+    list.push(dayTs);
+    db.runSync('UPDATE books SET checkins = ? WHERE id = ?', [JSON.stringify(list), bookId]);
+  }
+};
 
 export const getStats = () => {
   const total = db.getFirstSync('SELECT COUNT(*) as count FROM books');

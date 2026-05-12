@@ -2,7 +2,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-nati
 import { useState, useCallback, Fragment } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getBooksByStatus } from '../../database/database';
+import { getBooksByStatus, addCheckin } from '../../database/database';
 
 const STEPS = 7;
 const PURPLE = '#6750A4';
@@ -35,7 +35,7 @@ function DaysBadge({ goalTs }) {
   );
 }
 
-function BoardTrack({ stepIdx }) {
+function BoardTrack({ stepIdx, checkedInSteps }) {
   return (
     <View style={styles.track}>
       {Array.from({ length: STEPS }).map((_, i) => {
@@ -43,9 +43,12 @@ function BoardTrack({ stepIdx }) {
         const isLast = i === STEPS - 1;
         const isPast = i < stepIdx;
         const isCurrent = i === stepIdx;
+        const isCheckedIn = !isFirst && !isLast && checkedInSteps?.has(i);
 
         const nodeExtra = isFirst || isLast
           ? styles.nodeSpecial
+          : isCheckedIn
+          ? styles.nodeCheckedIn
           : isPast
           ? styles.nodePast
           : isCurrent
@@ -54,11 +57,12 @@ function BoardTrack({ stepIdx }) {
 
         const content = isFirst ? '📖'
           : isLast ? '🏆'
+          : isCheckedIn ? '🚩'
           : isPast ? '✓'
           : isCurrent ? '🔖'
           : String(i);
 
-        const textStyle = isPast || isCurrent || isFirst || isLast
+        const textStyle = isPast || isCurrent || isFirst || isLast || isCheckedIn
           ? styles.nodeTextLight
           : styles.nodeTextDark;
 
@@ -79,7 +83,7 @@ function BoardTrack({ stepIdx }) {
 
 const NODES_PER_ROW = 10;
 
-function DynamicSnakeTrack({ stepIdx, totalSteps }) {
+function DynamicSnakeTrack({ stepIdx, totalSteps, checkedInSteps }) {
   const [trackWidth, setTrackWidth] = useState(0);
 
   const tiny = totalSteps > 30;
@@ -104,13 +108,15 @@ function DynamicSnakeTrack({ stepIdx, totalSteps }) {
     const isLast = ni === totalSteps - 1;
     const isPast = ni < stepIdx;
     const isCurrent = ni === stepIdx;
+    const isCheckedIn = !isFirst && !isLast && checkedInSteps?.has(ni);
     const extra = (isFirst || isLast) ? styles.nodeSpecial
+      : isCheckedIn ? styles.nodeCheckedIn
       : isPast ? styles.nodePast
       : isCurrent ? styles.nodeCurrent
       : styles.nodeFuture;
     const content = isFirst ? '📖' : isLast ? '🏆'
-      : isPast ? '✓' : isCurrent ? '🔖' : '·';
-    const textStyle = (isPast || isCurrent || isFirst || isLast)
+      : isCheckedIn ? '🚩' : isPast ? '✓' : isCurrent ? '🔖' : '·';
+    const textStyle = (isPast || isCurrent || isFirst || isLast || isCheckedIn)
       ? styles.nodeTextLight : styles.nodeTextDark;
     const sizeStyle = { width: nodeSize, height: nodeSize, borderRadius: nodeSize / 2 };
     return (
@@ -166,6 +172,10 @@ function DynamicSnakeTrack({ stepIdx, totalSteps }) {
 }
 
 function ChallengeCard({ book, onPress }) {
+  const [checkins, setCheckins] = useState(() => {
+    try { return JSON.parse(book.checkins || '[]'); } catch { return []; }
+  });
+
   const startTs = book.startDate || book.createdAt;
   const totalDays = (book.goalDate && startTs)
     ? Math.max(Math.ceil((book.goalDate - startTs) / 86400000), 1)
@@ -173,6 +183,27 @@ function ChallengeCard({ book, onPress }) {
   const totalSteps = totalDays !== null ? totalDays : STEPS;
   const stepIdx = calcStepIdx(book, totalSteps);
   const useSnake = totalDays !== null && totalDays >= 6;
+
+  const todayTs = new Date().setHours(0, 0, 0, 0);
+  const alreadyCheckedIn = checkins.includes(todayTs);
+
+  const startMidnight = startTs ? new Date(startTs).setHours(0, 0, 0, 0) : null;
+
+  const checkedInSteps = new Set(
+    checkins.flatMap((ts) => {
+      if (!startMidnight || !book.goalDate || book.goalDate <= startMidnight) return [];
+      const ratio = Math.min(1, Math.max(0, (ts - startMidnight) / (book.goalDate - startMidnight)));
+      const step = Math.round(ratio * (totalSteps - 1));
+      const clamped = Math.min(Math.max(1, step), totalSteps - 2);
+      return [clamped];
+    })
+  );
+
+  const handleCheckin = () => {
+    if (alreadyCheckedIn) return;
+    addCheckin(book.id, todayTs);
+    setCheckins((prev) => [...prev, todayTs]);
+  };
 
   const startLabel = book.status === 'want_to_read'
     ? '시작 전'
@@ -189,12 +220,25 @@ function ChallengeCard({ book, onPress }) {
           <Text style={styles.bookTitle} numberOfLines={1}>{book.title}</Text>
           {book.author ? <Text style={styles.bookAuthor} numberOfLines={1}>{book.author}</Text> : null}
         </View>
-        <DaysBadge goalTs={book.goalDate} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {book.status === 'reading' && (
+            <TouchableOpacity
+              style={[styles.checkinBtn, alreadyCheckedIn && styles.checkinBtnDone]}
+              onPress={handleCheckin}
+              disabled={alreadyCheckedIn}
+            >
+              <Text style={styles.checkinBtnText}>
+                {alreadyCheckedIn ? '✓ 인증완료' : '오늘 독서인증'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <DaysBadge goalTs={book.goalDate} />
+        </View>
       </View>
 
       {useSnake
-        ? <DynamicSnakeTrack stepIdx={stepIdx} totalSteps={totalSteps} />
-        : <BoardTrack stepIdx={stepIdx} />}
+        ? <DynamicSnakeTrack stepIdx={stepIdx} totalSteps={totalSteps} checkedInSteps={checkedInSteps} />
+        : <BoardTrack stepIdx={stepIdx} checkedInSteps={checkedInSteps} />}
 
       <View style={styles.dateRow}>
         <Text style={styles.dateLabel}>{startLabel}</Text>
@@ -290,12 +334,22 @@ const styles = StyleSheet.create({
   nodeSpecial: { backgroundColor: PURPLE_MID },
   nodePast: { backgroundColor: PURPLE },
   nodeCurrent: { backgroundColor: PURPLE },
+  nodeCheckedIn: { backgroundColor: '#4CAF50' },
   nodeFuture: { backgroundColor: PURPLE_LIGHT, borderWidth: 1.5, borderColor: PURPLE_MID },
   nodeTextLight: { fontSize: 13, color: '#fff', fontWeight: '600' },
   nodeTextDark: { fontSize: 11, color: '#9E8FB2' },
 
   dateRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   dateLabel: { fontSize: 11, color: '#9E8FB2', flexShrink: 1 },
+
+  checkinBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: PURPLE,
+  },
+  checkinBtnDone: { backgroundColor: '#4CAF50' },
+  checkinBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
 
   snakeTrack: { marginBottom: 12, flexDirection: 'column' },
   vertConnector: { width: 4, height: 20, borderRadius: 2 },
