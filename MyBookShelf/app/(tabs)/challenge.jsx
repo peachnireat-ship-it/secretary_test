@@ -15,12 +15,12 @@ function fmtDate(ts) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function calcStepIdx(book) {
+function calcStepIdx(book, totalSteps) {
   if (book.status !== 'reading') return 0;
   const { startDate, goalDate } = book;
   if (!startDate || !goalDate || goalDate <= startDate) return 0;
   const ratio = Math.min(1, Math.max(0, (Date.now() - startDate) / (goalDate - startDate)));
-  return Math.round(ratio * (STEPS - 1));
+  return Math.round(ratio * (totalSteps - 1));
 }
 
 function DaysBadge({ goalTs }) {
@@ -77,9 +77,102 @@ function BoardTrack({ stepIdx }) {
   );
 }
 
+const NODES_PER_ROW = 10;
+
+function DynamicSnakeTrack({ stepIdx, totalSteps }) {
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  const tiny = totalSteps > 30;
+  const small = totalSteps > 14;
+  const nodeSize = tiny ? 14 : small ? 18 : 24;
+  const nodeFontSize = tiny ? 7 : small ? 9 : 11;
+  const connHeight = tiny ? 10 : 14;
+
+  const connectorWidth = trackWidth > 0
+    ? Math.max(4, (trackWidth - NODES_PER_ROW * nodeSize) / (NODES_PER_ROW - 1))
+    : 0;
+
+  const rows = [];
+  for (let start = 0; start < totalSteps; start += NODES_PER_ROW) {
+    rows.push(
+      Array.from({ length: Math.min(NODES_PER_ROW, totalSteps - start) }, (_, j) => start + j)
+    );
+  }
+
+  const renderNode = (ni) => {
+    const isFirst = ni === 0;
+    const isLast = ni === totalSteps - 1;
+    const isPast = ni < stepIdx;
+    const isCurrent = ni === stepIdx;
+    const extra = (isFirst || isLast) ? styles.nodeSpecial
+      : isPast ? styles.nodePast
+      : isCurrent ? styles.nodeCurrent
+      : styles.nodeFuture;
+    const content = isFirst ? '📖' : isLast ? '🏆'
+      : isPast ? '✓' : isCurrent ? '🔖' : '·';
+    const textStyle = (isPast || isCurrent || isFirst || isLast)
+      ? styles.nodeTextLight : styles.nodeTextDark;
+    const sizeStyle = { width: nodeSize, height: nodeSize, borderRadius: nodeSize / 2 };
+    return (
+      <View style={[styles.node, extra, isCurrent && styles.nodeLarge, sizeStyle]}>
+        <Text style={[textStyle, { fontSize: nodeFontSize }]}>{content}</Text>
+      </View>
+    );
+  };
+
+  const hConn = (done) => (
+    <View style={[
+      { width: connectorWidth, height: 4, borderRadius: 2 },
+      done ? styles.connectorDone : styles.connectorTodo,
+    ]} />
+  );
+
+  return (
+    <View style={styles.snakeTrack} onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}>
+      {trackWidth > 0 && rows.map((row, rowIdx) => {
+        const isReverse = rowIdx % 2 === 1;
+        const lastNodeInRow = row[row.length - 1];
+        const isLastRow = rowIdx === rows.length - 1;
+        const connJustify = isReverse ? 'flex-start' : 'flex-end';
+
+        return (
+          <Fragment key={rowIdx}>
+            <View style={[styles.track, {
+              flexDirection: isReverse ? 'row-reverse' : 'row',
+              marginBottom: 0,
+            }]}>
+              {row.map((ni, i) => (
+                <Fragment key={ni}>
+                  {i > 0 && hConn(stepIdx >= ni)}
+                  {renderNode(ni)}
+                </Fragment>
+              ))}
+            </View>
+            {!isLastRow && (
+              <View style={{ flexDirection: 'row', justifyContent: connJustify }}>
+                <View style={{ width: nodeSize, alignItems: 'center', paddingVertical: 2 }}>
+                  <View style={[
+                    { width: 4, height: connHeight, borderRadius: 2 },
+                    stepIdx > lastNodeInRow ? styles.connectorDone : styles.connectorTodo,
+                  ]} />
+                </View>
+              </View>
+            )}
+          </Fragment>
+        );
+      })}
+    </View>
+  );
+}
+
 function ChallengeCard({ book, onPress }) {
-  const stepIdx = calcStepIdx(book);
   const startTs = book.startDate || book.createdAt;
+  const totalDays = (book.goalDate && startTs)
+    ? Math.max(Math.ceil((book.goalDate - startTs) / 86400000), 1)
+    : null;
+  const totalSteps = totalDays !== null ? totalDays : STEPS;
+  const stepIdx = calcStepIdx(book, totalSteps);
+  const useSnake = totalDays !== null && totalDays >= 6;
 
   const startLabel = book.status === 'want_to_read'
     ? '시작 전'
@@ -99,7 +192,9 @@ function ChallengeCard({ book, onPress }) {
         <DaysBadge goalTs={book.goalDate} />
       </View>
 
-      <BoardTrack stepIdx={stepIdx} />
+      {useSnake
+        ? <DynamicSnakeTrack stepIdx={stepIdx} totalSteps={totalSteps} />
+        : <BoardTrack stepIdx={stepIdx} />}
 
       <View style={styles.dateRow}>
         <Text style={styles.dateLabel}>{startLabel}</Text>
@@ -201,6 +296,9 @@ const styles = StyleSheet.create({
 
   dateRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   dateLabel: { fontSize: 11, color: '#9E8FB2', flexShrink: 1 },
+
+  snakeTrack: { marginBottom: 12, flexDirection: 'column' },
+  vertConnector: { width: 4, height: 20, borderRadius: 2 },
 
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 14, color: '#9E9E9E', textAlign: 'center' },
