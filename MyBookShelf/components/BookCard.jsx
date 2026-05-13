@@ -38,7 +38,7 @@ export default function BookCard({ book, onPress, onLongPress }) {
           <Text style={styles.goalText}>완독 목표 {goalDateStr}</Text>
         </View>
       )}
-      {progress > 0 && (
+      {book.status === 'reading' && (
         <View style={styles.progressRow}>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
