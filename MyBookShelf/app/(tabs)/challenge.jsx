@@ -29,7 +29,9 @@ function calcStepIdx(book, totalSteps) {
 
 function DaysBadge({ goalTs }) {
   if (!goalTs) return <Text style={styles.noGoalText}>목표일 없음</Text>;
-  const days = Math.ceil((goalTs - Date.now()) / 86400000);
+  const todayMidnight = new Date().setHours(0, 0, 0, 0);
+  const goalMidnight = new Date(goalTs).setHours(0, 0, 0, 0);
+  const days = Math.round((goalMidnight - todayMidnight) / 86400000);
   const label = days < 0 ? `D+${-days}` : days === 0 ? 'D-Day' : `D-${days}`;
   const extra = days < 0 ? styles.badgeOver : days <= 7 ? styles.badgeUrgent : null;
   return (
@@ -210,8 +212,14 @@ function ChallengeCard({ book, onPress }) {
     setCheckins((prev) => [...prev, todayTs]);
   };
 
+  const elapsedDays = (book.status === 'reading' && startMidnight)
+    ? Math.max(0, Math.round((todayTs - startMidnight) / 86400000)) + 1
+    : null;
+
   const startLabel = book.status === 'want_to_read'
     ? '시작 전'
+    : elapsedDays !== null
+    ? `${elapsedDays}일째 독서 중`
     : fmtDate(startTs) ?? '?';
 
   const goalLabel = book.goalDate
