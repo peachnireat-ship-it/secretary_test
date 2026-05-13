@@ -29,6 +29,7 @@ export default function BookDetailScreen() {
   const [endDateStr, setEndDateStr] = useState('');
   const [goalDateStr, setGoalDateStr] = useState('');
   const [bookType, setBookType] = useState('physical');
+  const [progressPct, setProgressPct] = useState('');
 
   const tsToDateStr = (ts) => {
     if (!ts) return '';
@@ -70,6 +71,7 @@ export default function BookDetailScreen() {
       setEndDateStr(tsToDateStr(data.endDate));
       setGoalDateStr(tsToDateStr(data.goalDate));
       setBookType(data.bookType || 'physical');
+      setProgressPct(data.progressPct > 0 ? data.progressPct.toString() : '');
     }
   }, [id]);
 
@@ -105,6 +107,7 @@ export default function BookDetailScreen() {
       endDate: endTs,
       goalDate: goalTs,
       bookType,
+      progressPct: parseInt(progressPct) || 0,
     });
     Alert.alert('저장 완료', '변경사항이 저장되었습니다.', [
       { text: '확인', onPress: () => router.back() },
@@ -126,6 +129,7 @@ export default function BookDetailScreen() {
             currentPage: parseInt(currentPage) || 0,
             status: 'reading',
             startDate: dateStrToTs(startDateStr) || now,
+            progressPct: parseInt(progressPct) || 0,
           });
           router.back();
         },
@@ -154,6 +158,7 @@ export default function BookDetailScreen() {
             status: 'completed',
             endDate: Date.now(),
             goalDate: goalTs,
+            progressPct: parseInt(progressPct) || 0,
           });
           router.back();
         },
@@ -168,6 +173,10 @@ export default function BookDetailScreen() {
       </View>
     );
   }
+
+  const effectiveProgress = book.totalPages > 0
+    ? Math.min(100, Math.round((parseInt(currentPage || 0) / book.totalPages) * 100))
+    : Math.min(100, parseInt(progressPct) || 0);
 
   return (
     <>
@@ -229,6 +238,35 @@ export default function BookDetailScreen() {
           placeholderTextColor="#CAC4D0"
         />
 
+        {book.status === 'reading' && (
+          <>
+            <Text style={styles.sectionLabel}>독서 진척률</Text>
+            <View style={styles.progressBarBg}>
+              <View style={[styles.progressBarFill, { width: `${effectiveProgress}%` }]} />
+            </View>
+            {book.totalPages > 0 ? (
+              <Text style={styles.progressInfo}>
+                {effectiveProgress}% ({parseInt(currentPage) || 0} / {book.totalPages}p)
+              </Text>
+            ) : (
+              <View style={styles.pctInputRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={progressPct}
+                  onChangeText={(v) => {
+                    const n = v.replace(/\D/g, '');
+                    setProgressPct(n ? Math.min(100, parseInt(n)).toString() : '');
+                  }}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor="#CAC4D0"
+                />
+                <Text style={styles.pctSuffix}>%</Text>
+              </View>
+            )}
+          </>
+        )}
+
         <Text style={styles.sectionLabel}>독서 시작일</Text>
         <TextInput
           ref={startDateRef}
@@ -282,7 +320,7 @@ export default function BookDetailScreen() {
         <View style={styles.btnRow}>
           {book.status === 'want_to_read' && (
             <TouchableOpacity style={styles.readingBtn} onPress={handleMarkReading}>
-              <Text style={styles.readingBtnText}>독서중</Text>
+              <Text style={styles.readingBtnText}>읽는 중</Text>
             </TouchableOpacity>
           )}
           {book.status !== 'completed' && (
@@ -367,4 +405,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: '#E8DEF8',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#6750A4',
+    borderRadius: 4,
+  },
+  progressInfo: { fontSize: 13, color: '#6750A4', fontWeight: '600' },
+  pctInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pctSuffix: { fontSize: 18, color: '#49454F', fontWeight: '600' },
 });

@@ -267,7 +267,16 @@ export default function ChallengeScreen() {
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
     >
-      <Text style={styles.screenTitle}>독서 챌린지</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.screenTitle}>독서 챌린지</Text>
+        <TouchableOpacity
+          style={styles.endedBtn}
+          onPress={() => router.push('/ended-challenges')}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.endedBtnText}>종료된 챌린지 목록</Text>
+        </TouchableOpacity>
+      </View>
       <Text style={styles.screenSub}>목표일을 향해 한 칸씩 나아가세요!</Text>
 
       {books.length === 0 ? (
@@ -291,7 +300,15 @@ export default function ChallengeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
   content: { padding: 16 },
-  screenTitle: { fontSize: 22, fontWeight: 'bold', color: '#1C1B1F', marginBottom: 4 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  screenTitle: { fontSize: 22, fontWeight: 'bold', color: '#1C1B1F' },
+  endedBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: PURPLE_LIGHT,
+  },
+  endedBtnText: { fontSize: 12, fontWeight: '600', color: PURPLE },
   screenSub: { fontSize: 13, color: '#6B6278', marginBottom: 20 },
 
   card: {

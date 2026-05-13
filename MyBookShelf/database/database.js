@@ -16,7 +16,8 @@ db.execSync(`
     endDate INTEGER,
     goalDate INTEGER,
     createdAt INTEGER,
-    bookType TEXT DEFAULT 'physical'
+    bookType TEXT DEFAULT 'physical',
+    progressPct INTEGER DEFAULT 0
   );
 `);
 
@@ -28,6 +29,9 @@ try {
 } catch (_) {}
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN checkins TEXT DEFAULT '[]'`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN progressPct INTEGER DEFAULT 0`);
 } catch (_) {}
 
 export const getAllBooks = () =>
@@ -59,7 +63,7 @@ export const insertBook = (book) => {
 export const updateBook = (book) => {
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
-     status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?, bookType = ? WHERE id = ?`,
+     status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?, bookType = ?, progressPct = ? WHERE id = ?`,
     [
       book.title,
       book.author || '',
@@ -72,6 +76,7 @@ export const updateBook = (book) => {
       book.endDate || null,
       book.goalDate || null,
       book.bookType || 'physical',
+      book.progressPct || 0,
       book.id,
     ]
   );
@@ -88,6 +93,12 @@ export const addCheckin = (bookId, dayTs) => {
     db.runSync('UPDATE books SET checkins = ? WHERE id = ?', [JSON.stringify(list), bookId]);
   }
 };
+
+export const getExpiredChallengeBooks = () =>
+  db.getAllSync(
+    'SELECT * FROM books WHERE goalDate IS NOT NULL AND goalDate < ? ORDER BY goalDate DESC',
+    [Date.now()]
+  );
 
 export const getStats = () => {
   const total = db.getFirstSync('SELECT COUNT(*) as count FROM books');
