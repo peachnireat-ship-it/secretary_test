@@ -18,8 +18,12 @@ function fmtDate(ts) {
 function calcStepIdx(book, totalSteps) {
   if (book.status !== 'reading') return 0;
   const { startDate, goalDate } = book;
-  if (!startDate || !goalDate || goalDate <= startDate) return 0;
-  const ratio = Math.min(1, Math.max(0, (Date.now() - startDate) / (goalDate - startDate)));
+  if (!startDate || !goalDate) return 0;
+  const startMidnight = new Date(startDate).setHours(0, 0, 0, 0);
+  const goalMidnight = new Date(goalDate).setHours(0, 0, 0, 0);
+  if (goalMidnight <= startMidnight) return 0;
+  const todayMidnight = new Date().setHours(0, 0, 0, 0);
+  const ratio = Math.min(1, Math.max(0, (todayMidnight - startMidnight) / (goalMidnight - startMidnight)));
   return Math.round(ratio * (totalSteps - 1));
 }
 
@@ -177,8 +181,11 @@ function ChallengeCard({ book, onPress }) {
   });
 
   const startTs = book.startDate || book.createdAt;
-  const totalDays = (book.goalDate && startTs)
-    ? Math.max(Math.ceil((book.goalDate - startTs) / 86400000), 1)
+  const startMidnight = startTs ? new Date(startTs).setHours(0, 0, 0, 0) : null;
+  const goalMidnight = book.goalDate ? new Date(book.goalDate).setHours(0, 0, 0, 0) : null;
+
+  const totalDays = (goalMidnight && startMidnight && goalMidnight > startMidnight)
+    ? Math.max(Math.ceil((goalMidnight - startMidnight) / 86400000), 1)
     : null;
   const totalSteps = totalDays !== null ? totalDays : STEPS;
   const stepIdx = calcStepIdx(book, totalSteps);
@@ -187,12 +194,10 @@ function ChallengeCard({ book, onPress }) {
   const todayTs = new Date().setHours(0, 0, 0, 0);
   const alreadyCheckedIn = checkins.includes(todayTs);
 
-  const startMidnight = startTs ? new Date(startTs).setHours(0, 0, 0, 0) : null;
-
   const checkedInSteps = new Set(
     checkins.flatMap((ts) => {
-      if (!startMidnight || !book.goalDate || book.goalDate <= startMidnight) return [];
-      const ratio = Math.min(1, Math.max(0, (ts - startMidnight) / (book.goalDate - startMidnight)));
+      if (!startMidnight || !goalMidnight || goalMidnight <= startMidnight) return [];
+      const ratio = Math.min(1, Math.max(0, (ts - startMidnight) / (goalMidnight - startMidnight)));
       const step = Math.round(ratio * (totalSteps - 1));
       const clamped = Math.min(Math.max(1, step), totalSteps - 2);
       return [clamped];
