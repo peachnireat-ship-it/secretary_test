@@ -6,9 +6,12 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!getUsername()) {
-      router.replace('/username-setup');
-    }
+    const timer = setTimeout(() => {
+      if (!getUsername()) {
+        router.replace('/username-setup');
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
