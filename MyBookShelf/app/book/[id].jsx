@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { getBookById, updateBook, trackDailyReading, onBookCompleted } from '../../database/database';
+import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview } from '../../database/database';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
 import BookShareCard from '../../components/BookShareCard';
@@ -24,6 +24,8 @@ export default function BookDetailScreen() {
   const [book, setBook] = useState(null);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
+  const [reviews, setReviews] = useState([]);
+  const [newReviewText, setNewReviewText] = useState('');
   const [currentPage, setCurrentPage] = useState('');
   const [startDateStr, setStartDateStr] = useState('');
   const [endDateStr, setEndDateStr] = useState('');
@@ -60,6 +62,10 @@ export default function BookDetailScreen() {
     return isNaN(d.getTime()) ? null : d.getTime();
   };
 
+  const loadReviews = () => {
+    setReviews(getBookReviews(parseInt(id)));
+  };
+
   useEffect(() => {
     const data = getBookById(parseInt(id));
     if (data) {
@@ -73,7 +79,23 @@ export default function BookDetailScreen() {
       setBookType(data.bookType || 'physical');
       setProgressPct(data.progressPct > 0 ? data.progressPct.toString() : '');
     }
+    loadReviews();
   }, [id]);
+
+  const handleAddReview = () => {
+    const text = newReviewText.trim();
+    if (!text) return;
+    insertBookReview(parseInt(id), text);
+    setNewReviewText('');
+    loadReviews();
+  };
+
+  const handleDeleteReview = (reviewId) => {
+    Alert.alert('삭제', '이 메모를 삭제할까요?', [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => { deleteBookReview(reviewId); loadReviews(); } },
+    ]);
+  };
 
   const handleShare = async () => {
     if (!book) return;
@@ -330,16 +352,45 @@ export default function BookDetailScreen() {
           placeholderTextColor="#CAC4D0"
         />
 
-        <Text style={styles.sectionLabel}>독서 메모</Text>
-        <TextInput
-          style={[styles.input, styles.reviewInput]}
-          value={review}
-          onChangeText={setReview}
-          multiline
-          placeholder="감상이나 메모를 적어보세요..."
-          placeholderTextColor="#CAC4D0"
-          textAlignVertical="top"
-        />
+        <Text style={styles.sectionLabel}>독서 메모 / 하이라이트</Text>
+        {reviews.map((item) => (
+          <View key={item.id} style={styles.reviewItem}>
+            <Text style={styles.reviewSeq}>#{item.sequence}</Text>
+            <Text style={styles.reviewContent}>{item.content}</Text>
+            <TouchableOpacity onPress={() => handleDeleteReview(item.id)} style={styles.reviewDeleteBtn}>
+              <Text style={styles.reviewDeleteText}>삭제</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+        <View style={styles.reviewInputRow}>
+          <TextInput
+            style={[styles.input, styles.reviewInput, { flex: 1 }]}
+            value={newReviewText}
+            onChangeText={setNewReviewText}
+            multiline
+            placeholder="메모나 하이라이트를 입력하세요..."
+            placeholderTextColor="#CAC4D0"
+            textAlignVertical="top"
+          />
+          <TouchableOpacity style={styles.reviewAddBtn} onPress={handleAddReview}>
+            <Text style={styles.reviewAddText}>추가</Text>
+          </TouchableOpacity>
+        </View>
+
+        {book.status === 'completed' && (
+          <>
+            <Text style={styles.sectionLabel}>리뷰</Text>
+            <TextInput
+              style={[styles.input, styles.reviewTextarea]}
+              value={review}
+              onChangeText={setReview}
+              multiline
+              placeholder="완독 소감을 남겨보세요..."
+              placeholderTextColor="#CAC4D0"
+              textAlignVertical="top"
+            />
+          </>
+        )}
 
         <View style={styles.btnRow}>
           {book.status === 'want_to_read' && (
@@ -444,6 +495,29 @@ const styles = StyleSheet.create({
   progressInfo: { fontSize: 13, color: '#6750A4', fontWeight: '600' },
   pctInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pctSuffix: { fontSize: 18, color: '#49454F', fontWeight: '600' },
+  reviewItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F5F0FF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    gap: 8,
+  },
+  reviewSeq: { fontSize: 12, fontWeight: '700', color: '#6750A4', minWidth: 28 },
+  reviewContent: { flex: 1, fontSize: 14, color: '#1C1B1F', lineHeight: 20 },
+  reviewDeleteBtn: { paddingHorizontal: 4 },
+  reviewDeleteText: { fontSize: 12, color: '#B00020' },
+  reviewInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  reviewAddBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignSelf: 'flex-end',
+  },
+  reviewAddText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  reviewTextarea: { height: 120, marginBottom: 8 },
   readonlyBox: {
     borderWidth: 1,
     borderColor: '#E0D8F0',

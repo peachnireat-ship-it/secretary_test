@@ -35,6 +35,17 @@ try {
 } catch (_) {}
 
 db.execSync(`
+  CREATE TABLE IF NOT EXISTS book_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bookId INTEGER NOT NULL,
+    sequence INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    type TEXT DEFAULT 'memo',
+    createdAt INTEGER
+  );
+`);
+
+db.execSync(`
   CREATE TABLE IF NOT EXISTS user_stats (
     id INTEGER PRIMARY KEY DEFAULT 1,
     xp INTEGER DEFAULT 0,
@@ -65,6 +76,7 @@ export const XP_REWARDS = {
   DAILY_PAGES_100: 30,      // 하루 독서 합산 100페이지 달성
   DAILY_STREAK: 10,         // 연속 독서 (1일당)
   CHALLENGE_SUCCESS: 150,   // 챌린지 성공
+  MEMO_ADD: 10,             // 독서 메모 1개 추가
 };
 
 // 레벨 N → N+1 진급에 필요한 XP: 80 × N^1.5
@@ -101,7 +113,7 @@ export const getUserStats = () => {
 };
 
 export const addXp = (amount) => {
-  db.runSync('UPDATE user_stats SET xp = xp + ? WHERE id = 1', [amount]);
+  db.runSync('UPDATE user_stats SET xp = MAX(0, xp + ?) WHERE id = 1', [amount]);
   const row = db.getFirstSync('SELECT xp FROM user_stats WHERE id = 1');
   const newLevel = calcLevel(row?.xp ?? 0);
   db.runSync('UPDATE user_stats SET level = ? WHERE id = 1', [newLevel]);
@@ -247,4 +259,25 @@ export const getStats = () => {
     reading: reading?.count || 0,
     want: want?.count || 0,
   };
+};
+
+export const getBookReviews = (bookId) =>
+  db.getAllSync('SELECT * FROM book_reviews WHERE bookId = ? ORDER BY sequence ASC', [bookId]);
+
+export const insertBookReview = (bookId, content, type = 'memo') => {
+  const row = db.getFirstSync(
+    'SELECT COALESCE(MAX(sequence), 0) + 1 AS nextSeq FROM book_reviews WHERE bookId = ?',
+    [bookId]
+  );
+  const nextSeq = row?.nextSeq ?? 1;
+  db.runSync(
+    'INSERT INTO book_reviews (bookId, sequence, content, type, createdAt) VALUES (?, ?, ?, ?, ?)',
+    [bookId, nextSeq, content, type, Date.now()]
+  );
+  addXp(XP_REWARDS.MEMO_ADD);
+};
+
+export const deleteBookReview = (id) => {
+  db.runSync('DELETE FROM book_reviews WHERE id = ?', [id]);
+  addXp(-XP_REWARDS.MEMO_ADD);
 };
