@@ -280,8 +280,8 @@ export default function ChallengeScreen() {
   useFocusEffect(
     useCallback(() => {
       setBooks([
-        ...getBooksByStatus('reading'),
-        ...getBooksByStatus('want_to_read'),
+        ...getBooksByStatus('reading').filter((b) => b.goalDate),
+        ...getBooksByStatus('want_to_read').filter((b) => b.goalDate),
       ]);
       setSuccessBooks(getSuccessfulChallengeBooks());
     }, [])

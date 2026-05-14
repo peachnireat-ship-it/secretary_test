@@ -161,7 +161,7 @@ export default function BookDetailScreen() {
             currentPage: parseInt(currentPage) || 0,
             status: 'completed',
             endDate: Date.now(),
-            goalDate: goalTs,
+            goalDate: goalTs ?? book.goalDate,
             progressPct: parseInt(progressPct) || 0,
           });
           router.back();
