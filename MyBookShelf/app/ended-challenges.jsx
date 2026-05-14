@@ -117,12 +117,12 @@ export default function EndedChallengesScreen() {
     }, [])
   );
 
-  const successBooks = books.filter(
-    (b) => b.status === 'completed' && b.endDate && b.endDate <= b.goalDate
-  );
-  const failedBooks = books.filter(
-    (b) => !(b.status === 'completed' && b.endDate && b.endDate <= b.goalDate)
-  );
+  const isSuccess = (b) => {
+    if (!(b.status === 'completed' && b.endDate && b.goalDate)) return false;
+    return new Date(b.endDate).setHours(0, 0, 0, 0) <= new Date(b.goalDate).setHours(0, 0, 0, 0);
+  };
+  const successBooks = books.filter(isSuccess);
+  const failedBooks = books.filter((b) => !isSuccess(b));
 
   return (
     <ScrollView
@@ -130,12 +130,10 @@ export default function EndedChallengesScreen() {
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
     >
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Text style={styles.backBtnText}>{'← 뒤로'}</Text>
-        </TouchableOpacity>
+        <Text style={styles.screenTitle}>종료된 챌린지 목록</Text>
+        <Text style={styles.screenSub}>완독 목표일이 지난 책들입니다.</Text>
       </View>
-      <Text style={styles.screenTitle}>종료된 챌린지 목록</Text>
-      <Text style={styles.screenSub}>완독 목표일이 지난 책들입니다.</Text>
+      
 
       {books.length === 0 ? (
         <View style={styles.empty}>

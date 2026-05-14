@@ -100,11 +100,17 @@ export const getExpiredChallengeBooks = () =>
     [Date.now()]
   );
 
-export const getSuccessfulChallengeBooks = () =>
-  db.getAllSync(
-    'SELECT * FROM books WHERE status = ? AND goalDate IS NOT NULL AND endDate IS NOT NULL AND endDate <= goalDate ORDER BY endDate DESC',
+export const getSuccessfulChallengeBooks = () => {
+  const rows = db.getAllSync(
+    'SELECT * FROM books WHERE status = ? AND goalDate IS NOT NULL AND endDate IS NOT NULL ORDER BY endDate DESC',
     ['completed']
   );
+  return rows.filter((b) => {
+    const endDay = new Date(b.endDate).setHours(0, 0, 0, 0);
+    const goalDay = new Date(b.goalDate).setHours(0, 0, 0, 0);
+    return endDay <= goalDay;
+  });
+};
 
 export const getStats = () => {
   const total = db.getFirstSync('SELECT COUNT(*) as count FROM books');

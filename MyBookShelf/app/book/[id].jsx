@@ -106,7 +106,7 @@ export default function BookDetailScreen() {
       currentPage: parseInt(currentPage) || 0,
       startDate: startTs,
       endDate: autoComplete ? (endTs || Date.now()) : endTs,
-      goalDate: goalTs,
+      goalDate: goalTs ?? book.goalDate,
       bookType,
       progressPct: parseInt(progressPct) || 0,
       status: autoComplete ? 'completed' : book.status,
