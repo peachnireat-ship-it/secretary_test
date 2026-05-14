@@ -34,6 +34,60 @@ try {
   db.execSync(`ALTER TABLE books ADD COLUMN progressPct INTEGER DEFAULT 0`);
 } catch (_) {}
 
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS user_stats (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    xp INTEGER DEFAULT 0,
+    level INTEGER DEFAULT 1,
+    username TEXT DEFAULT ''
+  );
+`);
+db.execSync(`INSERT OR IGNORE INTO user_stats (id, xp, level) VALUES (1, 0, 1)`);
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN username TEXT DEFAULT ''`);
+} catch (_) {}
+
+// XP 보상 상수
+export const XP_REWARDS = {
+  BOOK_COMPLETE: 100,      // 완독
+  CHALLENGE_SUCCESS: 50,   // 챌린지 목표일 내 완독 보너스
+  DAILY_CHECKIN: 10,       // 하루 독서 인증
+};
+
+// 레벨 N에 필요한 누적 XP: N*(N-1)*25
+function xpForLevel(level) {
+  return level * (level - 1) * 25;
+}
+
+// 누적 XP로부터 현재 레벨 계산
+function calcLevel(xp) {
+  let lv = 1;
+  while (xpForLevel(lv + 1) <= xp) lv++;
+  return lv;
+}
+
+export const getUserStats = () => {
+  const row = db.getFirstSync('SELECT xp FROM user_stats WHERE id = 1');
+  const xp = row?.xp ?? 0;
+  const level = calcLevel(xp);
+  const currentLevelXp = xpForLevel(level);
+  const nextLevelXp = xpForLevel(level + 1);
+  return {
+    xp,
+    level,
+    xpInLevel: xp - currentLevelXp,
+    xpForNext: nextLevelXp - currentLevelXp,
+  };
+};
+
+export const addXp = (amount) => {
+  db.runSync('UPDATE user_stats SET xp = xp + ? WHERE id = 1', [amount]);
+  const row = db.getFirstSync('SELECT xp FROM user_stats WHERE id = 1');
+  const newLevel = calcLevel(row?.xp ?? 0);
+  db.runSync('UPDATE user_stats SET level = ? WHERE id = 1', [newLevel]);
+  return getUserStats();
+};
+
 export const getAllBooks = () =>
   db.getAllSync('SELECT * FROM books ORDER BY createdAt DESC');
 
@@ -113,6 +167,15 @@ export const getSuccessfulChallengeBooks = () => {
     const goalDay = new Date(b.goalDate).setHours(0, 0, 0, 0);
     return endDay <= goalDay;
   });
+};
+
+export const getUsername = () => {
+  const row = db.getFirstSync('SELECT username FROM user_stats WHERE id = 1');
+  return row?.username || '';
+};
+
+export const saveUsername = (name) => {
+  db.runSync('UPDATE user_stats SET username = ? WHERE id = 1', [name.trim()]);
 };
 
 export const getStats = () => {

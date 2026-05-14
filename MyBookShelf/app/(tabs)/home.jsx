@@ -2,7 +2,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getStats, getBooksByStatus, getUserStats } from '../../database/database';
+import { getStats, getBooksByStatus, getUserStats, getUsername } from '../../database/database';
 import BookCard from '../../components/BookCard';
 
 function StatCard({ icon, label, value, color }) {
@@ -19,6 +19,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [stats, setStats] = useState({ total: 0, completed: 0, reading: 0, want: 0 });
   const [userStats, setUserStats] = useState({ xp: 0, level: 1, xpInLevel: 0, xpForNext: 50 });
+  const [username, setUsername] = useState('');
   const [readingBooks, setReadingBooks] = useState([]);
   const [wishlistBooks, setWishlistBooks] = useState([]);
   const [completedBooks, setCompletedBooks] = useState([]);
@@ -27,6 +28,7 @@ export default function HomeScreen() {
     useCallback(() => {
       setStats(getStats());
       setUserStats(getUserStats());
+      setUsername(getUsername());
       setReadingBooks(getBooksByStatus('reading').slice(0, 3));
       setWishlistBooks(getBooksByStatus('want_to_read').slice(0, 3));
       setCompletedBooks(getBooksByStatus('completed').slice(0, 3));
@@ -42,7 +44,7 @@ export default function HomeScreen() {
         </View>
         <View style={styles.profileBox}>
           <View style={styles.profileNameRow}>
-            <Text style={styles.profileName}>독서가</Text>
+            <Text style={styles.profileName}>{username}</Text>
             <View style={styles.levelBadge}>
               <Text style={styles.levelText}>Lv.{userStats.level}</Text>
             </View>
