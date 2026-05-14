@@ -13,18 +13,6 @@ function fmtDate(ts) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
-const STATUS_LABEL = {
-  reading: '읽는 중',
-  want_to_read: '읽고 싶음',
-  completed: '완독',
-};
-
-const STATUS_COLOR = {
-  reading: '#1976D2',
-  want_to_read: '#6B6278',
-  completed: '#388E3C',
-};
-
 function ExpiredCard({ book, onPress, isSuccess }) {
   const overDays = (!isSuccess && book.goalDate)
     ? Math.ceil((Date.now() - book.goalDate) / 86400000)
@@ -49,9 +37,6 @@ function ExpiredCard({ book, onPress, isSuccess }) {
     ? Math.max(1, Math.round((new Date(book.endDate).setHours(0, 0, 0, 0) - new Date(startTs).setHours(0, 0, 0, 0)) / 86400000) + 1)
     : null;
 
-  const statusColor = STATUS_COLOR[book.status] || '#6B6278';
-  const statusLabel = STATUS_LABEL[book.status] || book.status;
-
   return (
     <TouchableOpacity style={[styles.card, isSuccess && styles.cardSuccess]} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.cardTop}>
@@ -60,9 +45,6 @@ function ExpiredCard({ book, onPress, isSuccess }) {
           {book.author ? <Text style={styles.bookAuthor} numberOfLines={1}>{book.author}</Text> : null}
         </View>
         <View style={{ alignItems: 'flex-end', gap: 4 }}>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
-            <Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusLabel}</Text>
-          </View>
           {isSuccess ? (
             <View style={styles.successBadge}>
               <Text style={styles.successBadgeText}>🎉 성공!</Text>
@@ -76,9 +58,9 @@ function ExpiredCard({ book, onPress, isSuccess }) {
       </View>
 
       <View style={styles.dateRow}>
-        <Text style={styles.dateLabel}>
+        <Text style={styles.totalDaysTxt}>총 {totalDays}일 챌린지 중 
           {isSuccess && completionDays !== null
-            ? `${completionDays}일 만에 완독`
+            ? ` ${completionDays}일 만에 완독`
             : `시작: ${fmtDate(startTs) ?? '?'}`}
         </Text>
         <Text style={styles.dateLabel}>
@@ -98,7 +80,7 @@ function ExpiredCard({ book, onPress, isSuccess }) {
           </View>
           <View style={styles.progressMeta}>
             <Text style={styles.checkinCount}>인증 {checkins.length}회</Text>
-            <Text style={styles.totalDaysTxt}>총 {totalDays}일 챌린지</Text>
+            
           </View>
         </View>
       )}
@@ -129,11 +111,6 @@ export default function EndedChallengesScreen() {
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
     >
-      <View style={styles.headerRow}>
-        <Text style={styles.screenTitle}>종료된 챌린지 목록</Text>
-        <Text style={styles.screenSub}>완독 목표일이 지난 책들입니다.</Text>
-      </View>
-      
 
       {books.length === 0 ? (
         <View style={styles.empty}>
@@ -198,13 +175,6 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
   bookTitle: { fontSize: 15, fontWeight: '700', color: '#1C1B1F' },
   bookAuthor: { fontSize: 12, color: '#6B6278', marginTop: 2 },
-
-  statusBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  statusBadgeText: { fontSize: 11, fontWeight: '700' },
 
   overBadge: {
     borderRadius: 8,
