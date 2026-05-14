@@ -46,17 +46,37 @@ db.execSync(`INSERT OR IGNORE INTO user_stats (id, xp, level) VALUES (1, 0, 1)`)
 try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN username TEXT DEFAULT ''`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN lastReadDay INTEGER DEFAULT 0`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN todayPages INTEGER DEFAULT 0`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN readStreak INTEGER DEFAULT 0`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN todayPagesXpGiven INTEGER DEFAULT 0`);
+} catch (_) {}
 
 // XP 보상 상수
 export const XP_REWARDS = {
-  BOOK_COMPLETE: 100,      // 완독
-  CHALLENGE_SUCCESS: 50,   // 챌린지 목표일 내 완독 보너스
-  DAILY_CHECKIN: 10,       // 하루 독서 인증
+  BOOK_COMPLETE: 100,       // 완독 1권
+  DAILY_PAGES_100: 30,      // 하루 독서 합산 100페이지 달성
+  DAILY_STREAK: 10,         // 연속 독서 (1일당)
+  CHALLENGE_SUCCESS: 150,   // 챌린지 성공
 };
 
-// 레벨 N에 필요한 누적 XP: N*(N-1)*25
+// 레벨 N → N+1 진급에 필요한 XP: 80 × N^1.5
+function xpRequiredForLevel(level) {
+  return Math.round(80 * Math.pow(level, 1.5));
+}
+
+// 레벨 N에 도달하기까지 필요한 누적 XP (레벨 1 = 0)
 function xpForLevel(level) {
-  return level * (level - 1) * 25;
+  let total = 0;
+  for (let i = 1; i < level; i++) total += xpRequiredForLevel(i);
+  return total;
 }
 
 // 누적 XP로부터 현재 레벨 계산
@@ -139,12 +159,50 @@ export const updateBook = (book) => {
 export const deleteBook = (id) =>
   db.runSync('DELETE FROM books WHERE id = ?', [id]);
 
+export const trackDailyReading = (pagesRead = 0) => {
+  const todayTs = new Date().setHours(0, 0, 0, 0);
+  const yesterdayTs = todayTs - 86400000;
+  const row = db.getFirstSync(
+    'SELECT lastReadDay, todayPages, readStreak, todayPagesXpGiven FROM user_stats WHERE id = 1'
+  );
+  const lastReadDay = row?.lastReadDay ?? 0;
+  let streak = row?.readStreak ?? 0;
+  let todayPages = lastReadDay === todayTs ? (row?.todayPages ?? 0) : 0;
+  let todayPagesXpGiven = lastReadDay === todayTs ? (row?.todayPagesXpGiven ?? 0) : 0;
+
+  if (lastReadDay !== todayTs) {
+    streak = lastReadDay === yesterdayTs ? streak + 1 : 1;
+    addXp(XP_REWARDS.DAILY_STREAK);
+  }
+
+  const newPages = todayPages + pagesRead;
+  if (!todayPagesXpGiven && newPages >= 100) {
+    addXp(XP_REWARDS.DAILY_PAGES_100);
+    todayPagesXpGiven = 1;
+  }
+
+  db.runSync(
+    'UPDATE user_stats SET lastReadDay = ?, todayPages = ?, readStreak = ?, todayPagesXpGiven = ? WHERE id = 1',
+    [todayTs, newPages, streak, todayPagesXpGiven]
+  );
+};
+
+export const onBookCompleted = (book) => {
+  addXp(XP_REWARDS.BOOK_COMPLETE);
+  if (book.goalDate && book.endDate) {
+    const endDay = new Date(book.endDate).setHours(0, 0, 0, 0);
+    const goalDay = new Date(book.goalDate).setHours(0, 0, 0, 0);
+    if (endDay <= goalDay) addXp(XP_REWARDS.CHALLENGE_SUCCESS);
+  }
+};
+
 export const addCheckin = (bookId, dayTs) => {
   const row = db.getFirstSync('SELECT checkins FROM books WHERE id = ?', [bookId]);
   const list = JSON.parse(row?.checkins || '[]');
   if (!list.includes(dayTs)) {
     list.push(dayTs);
     db.runSync('UPDATE books SET checkins = ? WHERE id = ?', [JSON.stringify(list), bookId]);
+    trackDailyReading(0);
   }
 };
 

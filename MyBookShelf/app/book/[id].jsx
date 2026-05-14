@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { getBookById, updateBook } from '../../database/database';
+import { getBookById, updateBook, trackDailyReading, onBookCompleted } from '../../database/database';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
 import BookShareCard from '../../components/BookShareCard';
@@ -99,18 +99,32 @@ export default function BookDetailScreen() {
       return;
     }
     const autoComplete = book.status !== 'completed' && effectiveProgress === 100;
+    const newCurrentPage = parseInt(currentPage) || 0;
+    const finalEndDate = autoComplete ? (endTs || Date.now()) : endTs;
     updateBook({
       ...book,
       rating,
       review,
-      currentPage: parseInt(currentPage) || 0,
+      currentPage: newCurrentPage,
       startDate: startTs,
-      endDate: autoComplete ? (endTs || Date.now()) : endTs,
+      endDate: finalEndDate,
       goalDate: goalTs ?? book.goalDate,
       bookType,
       progressPct: parseInt(progressPct) || 0,
       status: autoComplete ? 'completed' : book.status,
     });
+
+    if (book.status === 'reading' || autoComplete) {
+      const pageDelta = Math.max(0, newCurrentPage - (book.currentPage || 0));
+      const pctDelta = Math.max(0, (parseInt(progressPct) || 0) - (book.progressPct || 0));
+      if (pageDelta > 0 || pctDelta > 0 || autoComplete) {
+        trackDailyReading(book.bookType === 'physical' && book.totalPages > 0 ? pageDelta : 0);
+      }
+    }
+    if (autoComplete) {
+      onBookCompleted({ ...book, endDate: finalEndDate, goalDate: goalTs ?? book.goalDate });
+    }
+
     Alert.alert(
       '저장 완료',
       autoComplete ? '진척률 100%로 완독 처리되었습니다.' : '변경사항이 저장되었습니다.',
@@ -154,16 +168,19 @@ export default function BookDetailScreen() {
       {
         text: '완독',
         onPress: () => {
+          const finalEndDate = Date.now();
           updateBook({
             ...book,
             rating,
             review,
             currentPage: parseInt(currentPage) || 0,
             status: 'completed',
-            endDate: Date.now(),
+            endDate: finalEndDate,
             goalDate: goalTs ?? book.goalDate,
             progressPct: parseInt(progressPct) || 0,
           });
+          trackDailyReading(0);
+          onBookCompleted({ ...book, endDate: finalEndDate, goalDate: goalTs ?? book.goalDate });
           router.back();
         },
       },

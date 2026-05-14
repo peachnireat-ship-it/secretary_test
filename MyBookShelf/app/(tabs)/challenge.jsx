@@ -280,17 +280,7 @@ export default function ChallengeScreen() {
   useFocusEffect(
     useCallback(() => {
       const allBooks = getAllBooks();
-      console.log('=== [DB DEBUG] 전체 도서 목록 ===');
-      allBooks.forEach((b, i) => {
-        console.log(`[${i + 1}] id=${b.id} title="${b.title}" author="${b.author}" status=${b.status}`);
-        console.log(`     totalPages=${b.totalPages} currentPage=${b.currentPage} progressPct=${b.progressPct} rating=${b.rating}`);
-        console.log(`     startDate=${b.startDate ? new Date(b.startDate).toLocaleString() : null}`);
-        console.log(`     endDate=${b.endDate ? new Date(b.endDate).toLocaleString() : null}`);
-        console.log(`     goalDate=${b.goalDate ? new Date(b.goalDate).toLocaleString() : null}`);
-        console.log(`     bookType=${b.bookType} createdAt=${b.createdAt ? new Date(b.createdAt).toLocaleString() : null}`);
-        console.log(`     checkins=${b.checkins} review="${b.review}"`);
-      });
-      console.log(`=== 총 ${allBooks.length}권 ===`);
+      
       setBooks([
         ...getBooksByStatus('reading').filter((b) => b.goalDate),
         ...getBooksByStatus('want_to_read').filter((b) => b.goalDate),
