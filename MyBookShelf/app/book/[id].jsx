@@ -283,32 +283,35 @@ export default function BookDetailScreen() {
           placeholderTextColor="#CAC4D0"
         />
         <Text style={styles.sectionLabel}>독서 종료일</Text>
+        {book.status === 'completed' ? (
+          <View style={styles.readonlyBox}>
+            <Text style={styles.readonlyText}>{endDateStr || '미입력'}</Text>
+            <Text style={styles.readonlyTag}>완독일</Text>
+          </View>
+        ) : (
+          <TextInput
+            ref={endDateRef}
+            style={styles.input}
+            value={endDateStr}
+            onChangeText={(v) => setEndDateStr(formatDateInput(v))}
+            onFocus={() => scrollToInput(endDateRef)}
+            keyboardType="numeric"
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor="#CAC4D0"
+          />
+        )}
+
+        <Text style={styles.sectionLabel}>완독 목표일 🎯</Text>
         <TextInput
-          ref={endDateRef}
+          ref={goalDateRef}
           style={styles.input}
-          value={endDateStr}
-          onChangeText={(v) => setEndDateStr(formatDateInput(v))}
-          onFocus={() => scrollToInput(endDateRef)}
+          value={goalDateStr}
+          onChangeText={(v) => setGoalDateStr(formatDateInput(v))}
+          onFocus={() => scrollToInput(goalDateRef)}
           keyboardType="numeric"
           placeholder="YYYY-MM-DD"
           placeholderTextColor="#CAC4D0"
         />
-
-        {(book.status === 'reading' || book.status === 'want_to_read') && (
-          <>
-            <Text style={styles.sectionLabel}>완독 목표일 🎯</Text>
-            <TextInput
-              ref={goalDateRef}
-              style={styles.input}
-              value={goalDateStr}
-              onChangeText={(v) => setGoalDateStr(formatDateInput(v))}
-              onFocus={() => scrollToInput(goalDateRef)}
-              keyboardType="numeric"
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#CAC4D0"
-            />
-          </>
-        )}
 
         <Text style={styles.sectionLabel}>독서 메모</Text>
         <TextInput
@@ -424,4 +427,16 @@ const styles = StyleSheet.create({
   progressInfo: { fontSize: 13, color: '#6750A4', fontWeight: '600' },
   pctInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pctSuffix: { fontSize: 18, color: '#49454F', fontWeight: '600' },
+  readonlyBox: {
+    borderWidth: 1,
+    borderColor: '#E0D8F0',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#F5F0FF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  readonlyText: { fontSize: 16, color: '#49454F' },
+  readonlyTag: { fontSize: 11, color: '#9E8FB2', fontWeight: '600' },
 });
