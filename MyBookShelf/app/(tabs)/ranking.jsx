@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Keyboard } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Keyboard, Modal, FlatList, ActivityIndicator } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { getWeeklyScore, getSchool, saveSchool, getWeekKey, getSchoolLevel, saveSchoolLevel } from '../../database/database';
@@ -39,6 +39,21 @@ function getDaysLeftInWeek() {
   return day === 0 ? 0 : 7 - day;
 }
 
+async function searchSchools(query) {
+  if (!query.trim()) return [];
+  const url = `https://open.neis.go.kr/hub/schoolInfo?Type=json&SCHUL_NM=${encodeURIComponent(query.trim())}&pSize=20`;
+  const res = await fetch(url);
+  const json = await res.json();
+  const info = json.schoolInfo;
+  if (!info || !info[1]?.row) return [];
+  return info[1].row.map((s) => ({
+    name: s.SCHUL_NM,
+    location: s.LCTN_SC_NM,
+    address: s.ORG_RDNMA,
+    type: s.SCHUL_KND_SC_NM,
+  }));
+}
+
 export default function RankingScreen() {
   const [school, setSchool] = useState('');
   const [inputSchool, setInputSchool] = useState('');
@@ -49,6 +64,29 @@ export default function RankingScreen() {
   const [weekKey, setWeekKey] = useState('');
   const [schoolLevel, setSchoolLevel] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+
+  const handleSearch = async () => {
+    Keyboard.dismiss();
+    setSearching(true);
+    setSearchResults([]);
+    try {
+      const results = await searchSchools(searchQuery);
+      setSearchResults(results);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSelectSchool = (item) => {
+    setInputSchool(item.name);
+    setSearchModalVisible(false);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -90,6 +128,7 @@ export default function RankingScreen() {
   const showSetup = !school || editing;
 
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.headerBox}>
         <Text style={styles.headerTitle}>🏆 학교 대항전</Text>
@@ -103,15 +142,27 @@ export default function RankingScreen() {
           <Text style={styles.setupDesc}>
             학교 이름을 입력하면 대항전 순위에 참여할 수 있습니다
           </Text>
-          <TextInput
-            style={styles.schoolInput}
-            placeholder="학교 이름 입력"
-            placeholderTextColor="#9E8FB2"
-            value={inputSchool}
-            onChangeText={setInputSchool}
-            onSubmitEditing={handleSaveSchool}
-            returnKeyType="done"
-          />
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.schoolInput}
+              placeholder="학교 이름 입력"
+              placeholderTextColor="#9E8FB2"
+              value={inputSchool}
+              onChangeText={setInputSchool}
+              onSubmitEditing={handleSaveSchool}
+              returnKeyType="done"
+            />
+            <TouchableOpacity
+              style={styles.searchIconBtn}
+              onPress={() => {
+                setSearchQuery(inputSchool);
+                setSearchResults([]);
+                setSearchModalVisible(true);
+              }}
+            >
+              <Text style={styles.searchIconText}>🔍</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.levelLabel}>학교급 선택</Text>
           <View style={styles.levelRow}>
             {SCHOOL_LEVELS.map((lv) => (
@@ -190,6 +241,54 @@ export default function RankingScreen() {
         </>
       )}
     </ScrollView>
+
+    <Modal
+      visible={searchModalVisible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setSearchModalVisible(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>학교 검색</Text>
+          <TouchableOpacity onPress={() => setSearchModalVisible(false)}>
+            <Text style={styles.modalClose}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.modalSearchRow}>
+          <TextInput
+            style={styles.modalInput}
+            placeholder="학교 이름을 입력하세요"
+            placeholderTextColor="#9E8FB2"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            onSubmitEditing={handleSearch}
+            autoFocus
+          />
+          <TouchableOpacity style={styles.modalSearchBtn} onPress={handleSearch}>
+            <Text style={styles.modalSearchBtnText}>검색</Text>
+          </TouchableOpacity>
+        </View>
+        {searching && <ActivityIndicator color="#6750A4" style={{ marginTop: 24 }} />}
+        {!searching && searchResults.length === 0 && searchQuery.trim().length > 0 && (
+          <Text style={styles.noResult}>검색 결과가 없습니다</Text>
+        )}
+        <FlatList
+          data={searchResults}
+          keyExtractor={(item) => item.name + item.address}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectSchool(item)}>
+              <Text style={styles.resultName}>{item.name}</Text>
+              <Text style={styles.resultSub}>{item.type} · {item.location}</Text>
+              <Text style={styles.resultAddr} numberOfLines={1}>{item.address}</Text>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -225,7 +324,7 @@ const styles = StyleSheet.create({
   setupTitle: { fontSize: 16, fontWeight: '700', color: '#1C1B1F', marginBottom: 8 },
   setupDesc: { fontSize: 13, color: '#49454F', textAlign: 'center', marginBottom: 20 },
   schoolInput: {
-    width: '100%',
+    flex: 1,
     borderWidth: 1.5,
     borderColor: '#6750A4',
     borderRadius: 10,
@@ -233,7 +332,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     color: '#1C1B1F',
-    marginBottom: 12,
   },
   levelLabel: { fontSize: 12, fontWeight: '600', color: '#49454F', alignSelf: 'flex-start', marginBottom: 8 },
   levelRow: { flexDirection: 'row', gap: 8, marginBottom: 16, width: '100%' },
@@ -321,4 +419,55 @@ const styles = StyleSheet.create({
   rankSchoolUser: { color: '#6750A4', fontWeight: '700' },
   rankScore: { fontSize: 13, fontWeight: '700', color: '#49454F', marginLeft: 8 },
   rankScoreUser: { color: '#6750A4' },
+  inputRow: { flexDirection: 'row', width: '100%', alignItems: 'center', gap: 8, marginBottom: 12 },
+  searchIconBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchIconText: { fontSize: 16 },
+  modalContainer: { flex: 1, backgroundColor: '#fff' },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F0F8',
+  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: '#1C1B1F' },
+  modalClose: { fontSize: 18, color: '#49454F', padding: 4 },
+  modalSearchRow: { flexDirection: 'row', padding: 16, gap: 8 },
+  modalInput: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: '#6750A4',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1C1B1F',
+  },
+  modalSearchBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSearchBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  noResult: { textAlign: 'center', color: '#9E8FB2', marginTop: 32, fontSize: 14 },
+  resultItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F0F8',
+  },
+  resultName: { fontSize: 15, fontWeight: '700', color: '#1C1B1F', marginBottom: 2 },
+  resultSub: { fontSize: 12, color: '#6750A4', fontWeight: '600', marginBottom: 2 },
+  resultAddr: { fontSize: 12, color: '#49454F' },
 });
