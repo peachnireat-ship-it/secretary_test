@@ -12,7 +12,7 @@ export default function UsernameSetupScreen() {
     const trimmed = name.trim();
     if (!trimmed) return;
     saveUsername(trimmed);
-    router.replace('/(tabs)');
+    router.replace('/(tabs)/home');
   };
 
   return (
