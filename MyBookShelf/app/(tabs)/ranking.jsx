@@ -85,6 +85,9 @@ export default function RankingScreen() {
 
   const handleSelectSchool = (item) => {
     setInputSchool(item.name);
+    if (item.name.includes('초등학교')) setSelectedLevel('초등');
+    else if (item.name.includes('중학교')) setSelectedLevel('중학');
+    else if (item.name.includes('고등학교')) setSelectedLevel('고등');
     setSearchModalVisible(false);
   };
 
