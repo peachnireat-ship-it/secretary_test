@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, getWeekKey, getSchoolLevel } from '../../database/database';
@@ -132,6 +132,7 @@ function StatCard({ icon, label, value, color }) {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const scrollViewRef = useRef(null);
   const [stats, setStats] = useState({ total: 0, completed: 0, reading: 0, want: 0 });
   const [userStats, setUserStats] = useState({ xp: 0, level: 1, xpInLevel: 0, xpForNext: 50 });
   const [username, setUsername] = useState('');
@@ -145,6 +146,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
       setStats(getStats());
       setUsername(getUsername());
       setReadingBooks(getBooksByStatus('reading').slice(0, 3));
@@ -172,7 +174,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>안녕하세요 👋</Text>
