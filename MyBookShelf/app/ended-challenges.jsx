@@ -25,8 +25,8 @@ const STATUS_COLOR = {
   completed: '#388E3C',
 };
 
-function ExpiredCard({ book, onPress }) {
-  const overDays = book.goalDate
+function ExpiredCard({ book, onPress, isSuccess }) {
+  const overDays = (!isSuccess && book.goalDate)
     ? Math.ceil((Date.now() - book.goalDate) / 86400000)
     : null;
 
@@ -39,15 +39,21 @@ function ExpiredCard({ book, onPress }) {
     ? Math.max(Math.ceil((book.goalDate - startTs) / 86400000), 1)
     : null;
 
-  const progressPct = (book.goalDate && startTs && totalDays)
+  const progressPct = isSuccess
+    ? 100
+    : (book.goalDate && startTs && totalDays)
     ? Math.min(100, Math.round(((Date.now() - startTs) / (book.goalDate - startTs)) * 100))
+    : null;
+
+  const completionDays = (isSuccess && book.endDate && startTs)
+    ? Math.max(1, Math.round((new Date(book.endDate).setHours(0, 0, 0, 0) - new Date(startTs).setHours(0, 0, 0, 0)) / 86400000) + 1)
     : null;
 
   const statusColor = STATUS_COLOR[book.status] || '#6B6278';
   const statusLabel = STATUS_LABEL[book.status] || book.status;
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={[styles.card, isSuccess && styles.cardSuccess]} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.cardTop}>
         <View style={{ flex: 1, marginRight: 8 }}>
           <Text style={styles.bookTitle} numberOfLines={1}>{book.title}</Text>
@@ -57,27 +63,38 @@ function ExpiredCard({ book, onPress }) {
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
             <Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusLabel}</Text>
           </View>
-          {overDays !== null && (
+          {isSuccess ? (
+            <View style={styles.successBadge}>
+              <Text style={styles.successBadgeText}>🎉 성공!</Text>
+            </View>
+          ) : overDays !== null ? (
             <View style={styles.overBadge}>
               <Text style={styles.overBadgeText}>D+{overDays}</Text>
             </View>
-          )}
+          ) : null}
         </View>
       </View>
 
       <View style={styles.dateRow}>
         <Text style={styles.dateLabel}>
-          시작: {fmtDate(startTs) ?? '?'}
+          {isSuccess && completionDays !== null
+            ? `${completionDays}일 만에 완독`
+            : `시작: ${fmtDate(startTs) ?? '?'}`}
         </Text>
         <Text style={styles.dateLabel}>
-          목표: {fmtDate(book.goalDate) ?? '?'}
+          {isSuccess
+            ? `완독일: ${fmtDate(book.endDate) ?? '?'}`
+            : `목표: ${fmtDate(book.goalDate) ?? '?'}`}
         </Text>
       </View>
 
       {totalDays !== null && (
         <View style={{ marginTop: 10 }}>
           <View style={styles.progressBg}>
-            <View style={[styles.progressFill, { width: `${Math.min(100, progressPct ?? 0)}%` }]} />
+            <View style={[
+              styles.progressFill,
+              { width: `${Math.min(100, progressPct ?? 0)}%`, backgroundColor: isSuccess ? '#4CAF50' : PURPLE },
+            ]} />
           </View>
           <View style={styles.progressMeta}>
             <Text style={styles.checkinCount}>인증 {checkins.length}회</Text>
@@ -100,6 +117,13 @@ export default function EndedChallengesScreen() {
     }, [])
   );
 
+  const successBooks = books.filter(
+    (b) => b.status === 'completed' && b.endDate && b.endDate <= b.goalDate
+  );
+  const failedBooks = books.filter(
+    (b) => !(b.status === 'completed' && b.endDate && b.endDate <= b.goalDate)
+  );
+
   return (
     <ScrollView
       style={styles.container}
@@ -119,13 +143,33 @@ export default function EndedChallengesScreen() {
           <Text style={styles.emptyText}>종료된 챌린지가 없습니다</Text>
         </View>
       ) : (
-        books.map((book) => (
-          <ExpiredCard
-            key={book.id}
-            book={book}
-            onPress={() => router.push(`/book/${book.id}`)}
-          />
-        ))
+        <>
+          {successBooks.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>챌린지 성공 🎉</Text>
+              {successBooks.map((book) => (
+                <ExpiredCard
+                  key={book.id}
+                  book={book}
+                  isSuccess
+                  onPress={() => router.push(`/book/${book.id}`)}
+                />
+              ))}
+            </>
+          )}
+          {failedBooks.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>미완료 챌린지</Text>
+              {failedBooks.map((book) => (
+                <ExpiredCard
+                  key={book.id}
+                  book={book}
+                  onPress={() => router.push(`/book/${book.id}`)}
+                />
+              ))}
+            </>
+          )}
+        </>
       )}
     </ScrollView>
   );
@@ -196,4 +240,14 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 14, color: '#9E9E9E', textAlign: 'center' },
+
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1C1B1F', marginBottom: 12, marginTop: 4 },
+  cardSuccess: { borderLeftWidth: 3, borderLeftColor: '#4CAF50' },
+  successBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#E8F5E9',
+  },
+  successBadgeText: { fontSize: 11, fontWeight: '700', color: '#388E3C' },
 });
