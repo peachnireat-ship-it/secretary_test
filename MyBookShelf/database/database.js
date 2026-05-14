@@ -96,7 +96,10 @@ export const addCheckin = (bookId, dayTs) => {
 
 export const getExpiredChallengeBooks = () =>
   db.getAllSync(
-    'SELECT * FROM books WHERE goalDate IS NOT NULL AND goalDate < ? ORDER BY goalDate DESC',
+    `SELECT * FROM books
+     WHERE goalDate IS NOT NULL
+       AND (goalDate < ? OR (status = 'completed' AND endDate IS NOT NULL))
+     ORDER BY goalDate DESC`,
     [Date.now()]
   );
 
