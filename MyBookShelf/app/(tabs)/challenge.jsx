@@ -2,7 +2,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-nati
 import { useState, useCallback, Fragment } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getBooksByStatus, addCheckin } from '../../database/database';
+import { getBooksByStatus, addCheckin, getSuccessfulChallengeBooks } from '../../database/database';
 
 const STEPS = 7;
 const PURPLE = '#6750A4';
@@ -177,7 +177,7 @@ function DynamicSnakeTrack({ stepIdx, totalSteps, checkedInSteps }) {
   );
 }
 
-function ChallengeCard({ book, onPress }) {
+function ChallengeCard({ book, onPress, isSuccess }) {
   const [checkins, setCheckins] = useState(() => {
     try { return JSON.parse(book.checkins || '[]'); } catch { return []; }
   });
@@ -190,7 +190,7 @@ function ChallengeCard({ book, onPress }) {
     ? Math.max(Math.ceil((goalMidnight - startMidnight) / 86400000), 1)
     : null;
   const totalSteps = totalDays !== null ? totalDays : STEPS;
-  const stepIdx = calcStepIdx(book, totalSteps);
+  const stepIdx = isSuccess ? totalSteps - 1 : calcStepIdx(book, totalSteps);
   const useSnake = totalDays !== null && totalDays >= 6;
 
   const todayTs = new Date().setHours(0, 0, 0, 0);
@@ -216,25 +216,33 @@ function ChallengeCard({ book, onPress }) {
     ? Math.max(0, Math.round((todayTs - startMidnight) / 86400000)) + 1
     : null;
 
-  const startLabel = book.status === 'want_to_read'
+  const completionDays = (isSuccess && book.endDate && startMidnight)
+    ? Math.max(1, Math.round((new Date(book.endDate).setHours(0, 0, 0, 0) - startMidnight) / 86400000) + 1)
+    : null;
+
+  const startLabel = isSuccess
+    ? (completionDays !== null ? `${completionDays}일 만에 완독` : fmtDate(startTs) ?? '?')
+    : book.status === 'want_to_read'
     ? '시작 전'
     : elapsedDays !== null
     ? `${elapsedDays}일째 독서 중`
     : fmtDate(startTs) ?? '?';
 
-  const goalLabel = book.goalDate
+  const goalLabel = isSuccess
+    ? `완독일: ${fmtDate(book.endDate) ?? '?'}`
+    : book.goalDate
     ? fmtDate(book.goalDate) + ' 목표'
     : '목표일 미설정 — 책 상세에서 설정';
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={[styles.card, isSuccess && styles.cardSuccess]} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.cardTop}>
         <View style={{ flex: 1, marginRight: 8 }}>
           <Text style={styles.bookTitle} numberOfLines={1}>{book.title}</Text>
           {book.author ? <Text style={styles.bookAuthor} numberOfLines={1}>{book.author}</Text> : null}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {book.status === 'reading' && (
+          {!isSuccess && book.status === 'reading' && (
             <TouchableOpacity
               style={[styles.checkinBtn, alreadyCheckedIn && styles.checkinBtnDone]}
               onPress={handleCheckin}
@@ -245,7 +253,9 @@ function ChallengeCard({ book, onPress }) {
               </Text>
             </TouchableOpacity>
           )}
-          <DaysBadge goalTs={book.goalDate} />
+          {isSuccess
+            ? <View style={styles.successBadge}><Text style={styles.successBadgeText}>🎉 성공!</Text></View>
+            : <DaysBadge goalTs={book.goalDate} />}
         </View>
       </View>
 
@@ -265,6 +275,7 @@ export default function ChallengeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [books, setBooks] = useState([]);
+  const [successBooks, setSuccessBooks] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -272,6 +283,7 @@ export default function ChallengeScreen() {
         ...getBooksByStatus('reading'),
         ...getBooksByStatus('want_to_read'),
       ]);
+      setSuccessBooks(getSuccessfulChallengeBooks());
     }, [])
   );
 
@@ -292,19 +304,34 @@ export default function ChallengeScreen() {
       </View>
       <Text style={styles.screenSub}>목표일을 향해 한 칸씩 나아가세요!</Text>
 
-      {books.length === 0 ? (
+      {books.length === 0 && successBooks.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ fontSize: 48 }}>📚</Text>
           <Text style={styles.emptyText}>읽는 중이거나 읽고 싶은 책이 없습니다</Text>
         </View>
       ) : (
-        books.map((book) => (
-          <ChallengeCard
-            key={book.id}
-            book={book}
-            onPress={() => router.push(`/book/${book.id}`)}
-          />
-        ))
+        <>
+          {books.map((book) => (
+            <ChallengeCard
+              key={book.id}
+              book={book}
+              onPress={() => router.push(`/book/${book.id}`)}
+            />
+          ))}
+          {successBooks.length > 0 && (
+            <>
+              <Text style={styles.successSectionTitle}>챌린지 성공 🎉</Text>
+              {successBooks.map((book) => (
+                <ChallengeCard
+                  key={`success-${book.id}`}
+                  book={book}
+                  isSuccess
+                  onPress={() => router.push(`/book/${book.id}`)}
+                />
+              ))}
+            </>
+          )}
+        </>
       )}
     </ScrollView>
   );
@@ -386,4 +413,20 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 14, color: '#9E9E9E', textAlign: 'center' },
+
+  cardSuccess: { borderLeftWidth: 3, borderLeftColor: '#4CAF50' },
+  successBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#E8F5E9',
+  },
+  successBadgeText: { fontSize: 12, fontWeight: '700', color: '#388E3C' },
+  successSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#388E3C',
+    marginBottom: 12,
+    marginTop: 4,
+  },
 });

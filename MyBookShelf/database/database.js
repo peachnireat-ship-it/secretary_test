@@ -100,6 +100,12 @@ export const getExpiredChallengeBooks = () =>
     [Date.now()]
   );
 
+export const getSuccessfulChallengeBooks = () =>
+  db.getAllSync(
+    'SELECT * FROM books WHERE status = ? AND goalDate IS NOT NULL AND endDate IS NOT NULL AND endDate <= goalDate ORDER BY endDate DESC',
+    ['completed']
+  );
+
 export const getStats = () => {
   const total = db.getFirstSync('SELECT COUNT(*) as count FROM books');
   const completed = db.getFirstSync("SELECT COUNT(*) as count FROM books WHERE status = 'completed'");
