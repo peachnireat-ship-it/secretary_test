@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   profileBox: {
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
     gap: 4,
   },
   profileName: {
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   profileNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'space-between',
   },
   xpRow: {
     flexDirection: 'row',
