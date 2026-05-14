@@ -147,13 +147,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   profileBox: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     gap: 4,
   },
   profileName: {
     fontSize: 13,
     fontWeight: '600',
     color: '#1C1B1F',
+	alignItems: 'right'
   },
   levelBadge: {
     backgroundColor: '#6750A4',
