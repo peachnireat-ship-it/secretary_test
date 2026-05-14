@@ -98,20 +98,24 @@ export default function BookDetailScreen() {
       Alert.alert('날짜 오류', '완독 목표일은 시작일 이전으로 설정할 수 없습니다.');
       return;
     }
+    const autoComplete = book.status !== 'completed' && effectiveProgress === 100;
     updateBook({
       ...book,
       rating,
       review,
       currentPage: parseInt(currentPage) || 0,
       startDate: startTs,
-      endDate: endTs,
+      endDate: autoComplete ? (endTs || Date.now()) : endTs,
       goalDate: goalTs,
       bookType,
       progressPct: parseInt(progressPct) || 0,
+      status: autoComplete ? 'completed' : book.status,
     });
-    Alert.alert('저장 완료', '변경사항이 저장되었습니다.', [
-      { text: '확인', onPress: () => router.back() },
-    ]);
+    Alert.alert(
+      '저장 완료',
+      autoComplete ? '진척률 100%로 완독 처리되었습니다.' : '변경사항이 저장되었습니다.',
+      [{ text: '확인', onPress: () => router.back() }],
+    );
   };
 
   const handleMarkReading = () => {
