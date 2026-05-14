@@ -98,6 +98,38 @@ export function getWeekKey() {
   return `${utc.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
+// 이번 주 XP 2배 이벤트 일정 (주차 seed 기반 결정론적 랜덤)
+export function getWeeklyDoubleXpEvent() {
+  const key = getWeekKey();
+  const seed = parseInt(key.replace(/\D/g, ''), 10);
+
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diff);
+  monday.setHours(0, 0, 0, 0);
+
+  let s = seed;
+  const rand = () => { s = ((s * 1664525) + 1013904223) & 0x7fffffff; return s; };
+
+  const eventDay = rand() % 7;         // 0(월) ~ 6(일)
+  const eventHour = 8 + (rand() % 13); // 8시 ~ 20시 (2시간 구간이므로 최대 22시)
+
+  const eventDate = new Date(monday);
+  eventDate.setDate(monday.getDate() + eventDay);
+  eventDate.setHours(eventHour, 0, 0, 0);
+
+  const startTs = eventDate.getTime();
+  return { startTs, endTs: startTs + 2 * 60 * 60 * 1000 };
+}
+
+export function isDoubleXpActive() {
+  const { startTs, endTs } = getWeeklyDoubleXpEvent();
+  const now = Date.now();
+  return now >= startTs && now <= endTs;
+}
+
 // XP 보상 상수
 export const XP_REWARDS = {
   BOOK_COMPLETE: 100,       // 완독 1권
@@ -201,6 +233,7 @@ export const deleteBook = (id) =>
   db.runSync('DELETE FROM books WHERE id = ?', [id]);
 
 export const trackDailyReading = (pagesRead = 0) => {
+  const multiplier = isDoubleXpActive() ? 2 : 1;
   const todayTs = new Date().setHours(0, 0, 0, 0);
   const yesterdayTs = todayTs - 86400000;
   const row = db.getFirstSync(
@@ -213,12 +246,12 @@ export const trackDailyReading = (pagesRead = 0) => {
 
   if (lastReadDay !== todayTs) {
     streak = lastReadDay === yesterdayTs ? streak + 1 : 1;
-    addXp(XP_REWARDS.DAILY_STREAK);
+    addXp(XP_REWARDS.DAILY_STREAK * multiplier);
   }
 
   const newPages = todayPages + pagesRead;
   if (!todayPagesXpGiven && newPages >= 100) {
-    addXp(XP_REWARDS.DAILY_PAGES_100);
+    addXp(XP_REWARDS.DAILY_PAGES_100 * multiplier);
     todayPagesXpGiven = 1;
   }
 
@@ -226,6 +259,7 @@ export const trackDailyReading = (pagesRead = 0) => {
     'UPDATE user_stats SET lastReadDay = ?, todayPages = ?, readStreak = ?, todayPagesXpGiven = ? WHERE id = 1',
     [todayTs, newPages, streak, todayPagesXpGiven]
   );
+  return multiplier;
 };
 
 export const onBookCompleted = (book) => {

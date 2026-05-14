@@ -2,7 +2,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useState, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, getWeekKey, getSchoolLevel } from '../../database/database';
+import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent } from '../../database/database';
 import BookCard from '../../components/BookCard';
 
 const MISSION_POOL = [
@@ -69,6 +69,49 @@ function getDailyMessage(level) {
   if (!pool) return null;
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
   return pool[dayOfYear % pool.length];
+}
+
+const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
+
+function DoubleXpBanner({ event }) {
+  if (!event) return null;
+  const now = Date.now();
+  const { startTs, endTs } = event;
+  if (now > endTs) return null;
+
+  const startDate = new Date(startTs);
+  const endHour = new Date(endTs).getHours();
+  const dayLabel = DAY_LABELS[startDate.getDay() === 0 ? 6 : startDate.getDay() - 1];
+  const startHour = startDate.getHours();
+  const timeLabel = `${startHour}:00 ~ ${endHour}:00`;
+
+  const isActive = now >= startTs;
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  const eventDayStart = new Date(startTs).setHours(0, 0, 0, 0);
+  const isToday = todayStart === eventDayStart;
+
+  if (isActive) {
+    return (
+      <View style={styles.doubleXpBannerActive}>
+        <Text style={styles.doubleXpActiveBadge}>LIVE</Text>
+        <View style={styles.doubleXpBannerBody}>
+          <Text style={styles.doubleXpActiveTitle}>⚡ XP 2배 이벤트 진행 중!</Text>
+          <Text style={styles.doubleXpActiveSub}>지금 독서 기록 시 경험치 2배 ({endHour}:00까지)</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.doubleXpBanner}>
+      <Text style={styles.doubleXpBannerTitle}>
+        {isToday ? '⚡ 오늘 XP 2배 이벤트 예정' : `📅 이번 주 XP 2배 이벤트`}
+      </Text>
+      <Text style={styles.doubleXpBannerSub}>
+        {isToday ? timeLabel : `${dayLabel}요일 ${timeLabel}`} 독서 기록 시 경험치 2배!
+      </Text>
+    </View>
+  );
 }
 
 function EncouragementBanner({ level }) {
@@ -143,6 +186,7 @@ export default function HomeScreen() {
   const [weeklyProgress, setWeeklyProgress] = useState({ completed: 0, memos: 0, added: 0, streak: 0 });
   const [claimedMissions, setClaimedMissions] = useState([]);
   const [schoolLevel, setSchoolLevel] = useState('');
+  const [doubleXpEvent, setDoubleXpEvent] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -170,6 +214,7 @@ export default function HomeScreen() {
 
       setUserStats(getUserStats());
       setSchoolLevel(getSchoolLevel());
+      setDoubleXpEvent(getWeeklyDoubleXpEvent());
     }, [])
   );
 
@@ -196,6 +241,7 @@ export default function HomeScreen() {
         </View>
       </View>
 	
+      <DoubleXpBanner event={doubleXpEvent} />
       <EncouragementBanner level={schoolLevel} />
 	  <TouchableOpacity style={styles.addButton} onPress={() => router.push('/add-book')}>
         <Ionicons name="add-circle-outline" size={10} color="#fff" />
@@ -461,6 +507,57 @@ const styles = StyleSheet.create({
   },
   missionXpTextDone: {
     color: '#4CAF50',
+  },
+  doubleXpBannerActive: {
+    backgroundColor: '#E65100',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  doubleXpActiveBadge: {
+    backgroundColor: '#fff',
+    color: '#E65100',
+    fontSize: 10,
+    fontWeight: '800',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  doubleXpBannerBody: {
+    flex: 1,
+  },
+  doubleXpActiveTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  doubleXpActiveSub: {
+    fontSize: 12,
+    color: '#FFCCBC',
+    marginTop: 2,
+  },
+  doubleXpBanner: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF9800',
+  },
+  doubleXpBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#E65100',
+  },
+  doubleXpBannerSub: {
+    fontSize: 12,
+    color: '#F57F17',
+    marginTop: 2,
   },
   encourageCard: {
     backgroundColor: '#EDE7F6',

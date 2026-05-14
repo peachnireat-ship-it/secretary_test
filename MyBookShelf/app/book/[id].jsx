@@ -145,11 +145,13 @@ export default function BookDetailScreen() {
 
     const prevLevel = getUserStats().level;
 
+    let doubleXpApplied = false;
     if (book.status === 'reading' || autoComplete) {
       const pageDelta = Math.max(0, newCurrentPage - (book.currentPage || 0));
       const pctDelta = Math.max(0, (parseInt(progressPct) || 0) - (book.progressPct || 0));
       if (pageDelta > 0 || pctDelta > 0 || autoComplete) {
-        trackDailyReading(book.bookType === 'physical' && book.totalPages > 0 ? pageDelta : 0);
+        const multiplier = trackDailyReading(book.bookType === 'physical' && book.totalPages > 0 ? pageDelta : 0);
+        doubleXpApplied = multiplier === 2;
       }
     }
     if (autoComplete) {
@@ -165,9 +167,10 @@ export default function BookDetailScreen() {
     if (newLevel > prevLevel) {
       setLevelUpModal({ visible: true, level: newLevel, navigateBack: true });
     } else {
+      const baseMsg = autoComplete ? '진척률 100%로 완독 처리되었습니다.' : '변경사항이 저장되었습니다.';
       Alert.alert(
         '저장 완료',
-        autoComplete ? '진척률 100%로 완독 처리되었습니다.' : '변경사항이 저장되었습니다.',
+        doubleXpApplied ? `${baseMsg}\n⚡ XP 2배 이벤트 적용됨!` : baseMsg,
         [{ text: '확인', onPress: () => router.back() }],
       );
     }
