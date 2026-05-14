@@ -77,13 +77,21 @@ function DoubleXpBanner({ event }) {
   if (!event) return null;
   const now = Date.now();
   const { startTs, endTs } = event;
-  if (now > endTs) return null;
 
   const startDate = new Date(startTs);
   const endHour = new Date(endTs).getHours();
   const dayLabel = DAY_LABELS[startDate.getDay() === 0 ? 6 : startDate.getDay() - 1];
   const startHour = startDate.getHours();
   const timeLabel = `${startHour}:00 ~ ${endHour}:00`;
+
+  if (now > endTs) {
+    return (
+      <View style={styles.doubleXpBannerEnded}>
+        <Text style={styles.doubleXpEndedTitle}>이번 주 XP 2배 이벤트 종료</Text>
+        <Text style={styles.doubleXpEndedSub}>{dayLabel}요일 {timeLabel} · 다음 주 이벤트를 기대해 주세요!</Text>
+      </View>
+    );
+  }
 
   const isActive = now >= startTs;
   const todayStart = new Date().setHours(0, 0, 0, 0);
@@ -557,6 +565,25 @@ const styles = StyleSheet.create({
   doubleXpBannerSub: {
     fontSize: 12,
     color: '#F57F17',
+    marginTop: 2,
+  },
+  doubleXpBannerEnded: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#BDBDBD',
+  },
+  doubleXpEndedTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#757575',
+  },
+  doubleXpEndedSub: {
+    fontSize: 12,
+    color: '#9E9E9E',
     marginTop: 2,
   },
   encourageCard: {
