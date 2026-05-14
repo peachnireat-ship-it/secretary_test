@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Keyboard, Modal, FlatList, ActivityIndicator } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { getWeeklyScore, getSchool, saveSchool, getWeekKey, getSchoolLevel, saveSchoolLevel } from '../../database/database';
+import { getWeeklyScore, getSchool, saveSchool, getWeekKey, getSchoolLevel, saveSchoolLevel, getWeeklyDoubleXpEvent } from '../../database/database';
 
 const SCHOOL_POOL = [
   '서울과학고등학교', '경기과학고등학교', '광주과학고등학교',
@@ -13,6 +13,56 @@ const SCHOOL_POOL = [
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 const SCHOOL_LEVELS = ['초등', '중학', '고등', '성인'];
+const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
+
+function DoubleXpBanner({ event }) {
+  if (!event) return null;
+  const now = Date.now();
+  const { startTs, endTs } = event;
+
+  const startDate = new Date(startTs);
+  const endHour = new Date(endTs).getHours();
+  const dayLabel = DAY_LABELS[startDate.getDay() === 0 ? 6 : startDate.getDay() - 1];
+  const startHour = startDate.getHours();
+  const timeLabel = `${startHour}:00 ~ ${endHour}:00`;
+
+  if (now > endTs) {
+    return (
+      <View style={styles.doubleXpBannerEnded}>
+        <Text style={styles.doubleXpEndedTitle}>이번 주 XP 2배 이벤트 종료</Text>
+        <Text style={styles.doubleXpEndedSub}>{dayLabel}요일 {timeLabel} · 다음 주 이벤트를 기대해 주세요!</Text>
+      </View>
+    );
+  }
+
+  const isActive = now >= startTs;
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  const eventDayStart = new Date(startTs).setHours(0, 0, 0, 0);
+  const isToday = todayStart === eventDayStart;
+
+  if (isActive) {
+    return (
+      <View style={styles.doubleXpBannerActive}>
+        <Text style={styles.doubleXpActiveBadge}>LIVE</Text>
+        <View style={styles.doubleXpBannerBody}>
+          <Text style={styles.doubleXpActiveTitle}>⚡ XP 2배 이벤트 진행 중!</Text>
+          <Text style={styles.doubleXpActiveSub}>지금 독서 기록 시 경험치 2배 ({endHour}:00까지)</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.doubleXpBanner}>
+      <Text style={styles.doubleXpBannerTitle}>
+        {isToday ? '⚡ 오늘 XP 2배 이벤트 예정' : `📅 이번 주 XP 2배 이벤트`}
+      </Text>
+      <Text style={styles.doubleXpBannerSub}>
+        {isToday ? timeLabel : `${dayLabel}요일 ${timeLabel}`} 독서 기록 시 경험치 2배!
+      </Text>
+    </View>
+  );
+}
 
 function seededScore(seed) {
   let s = seed & 0x7fffffff;
@@ -64,6 +114,7 @@ export default function RankingScreen() {
   const [weekKey, setWeekKey] = useState('');
   const [schoolLevel, setSchoolLevel] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
+  const [doubleXpEvent, setDoubleXpEvent] = useState(null);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -108,6 +159,7 @@ export default function RankingScreen() {
         setLeaderboard(board);
         setUserRank(board.find((e) => e.isUser)?.rank ?? null);
       }
+      setDoubleXpEvent(getWeeklyDoubleXpEvent());
     }, [])
   );
 
@@ -210,6 +262,8 @@ export default function RankingScreen() {
               <Text style={styles.myScoreValue}>{userScore}pt</Text>
             </View>
           </View>
+
+          <DoubleXpBanner event={doubleXpEvent} />
 
           <View style={styles.scoreGuide}>
             <Text style={styles.scoreGuideTitle}>점수 산정 기준</Text>
@@ -473,4 +527,48 @@ const styles = StyleSheet.create({
   resultName: { fontSize: 15, fontWeight: '700', color: '#1C1B1F', marginBottom: 2 },
   resultSub: { fontSize: 12, color: '#6750A4', fontWeight: '600', marginBottom: 2 },
   resultAddr: { fontSize: 12, color: '#49454F' },
+  doubleXpBannerActive: {
+    backgroundColor: '#E65100',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  doubleXpActiveBadge: {
+    backgroundColor: '#fff',
+    color: '#E65100',
+    fontSize: 10,
+    fontWeight: '800',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  doubleXpBannerBody: { flex: 1 },
+  doubleXpActiveTitle: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  doubleXpActiveSub: { fontSize: 12, color: '#FFCCBC', marginTop: 2 },
+  doubleXpBanner: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF9800',
+  },
+  doubleXpBannerTitle: { fontSize: 13, fontWeight: '700', color: '#E65100' },
+  doubleXpBannerSub: { fontSize: 12, color: '#F57F17', marginTop: 2 },
+  doubleXpBannerEnded: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#BDBDBD',
+  },
+  doubleXpEndedTitle: { fontSize: 13, fontWeight: '700', color: '#757575' },
+  doubleXpEndedSub: { fontSize: 12, color: '#9E9E9E', marginTop: 2 },
 });
