@@ -2,7 +2,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getStats, getBooksByStatus } from '../../database/database';
+import { getStats, getBooksByStatus, getUserStats } from '../../database/database';
 import BookCard from '../../components/BookCard';
 
 function StatCard({ icon, label, value, color }) {
@@ -18,6 +18,7 @@ function StatCard({ icon, label, value, color }) {
 export default function HomeScreen() {
   const router = useRouter();
   const [stats, setStats] = useState({ total: 0, completed: 0, reading: 0, want: 0 });
+  const [userStats, setUserStats] = useState({ xp: 0, level: 1, xpInLevel: 0, xpForNext: 50 });
   const [readingBooks, setReadingBooks] = useState([]);
   const [wishlistBooks, setWishlistBooks] = useState([]);
   const [completedBooks, setCompletedBooks] = useState([]);
@@ -25,6 +26,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       setStats(getStats());
+      setUserStats(getUserStats());
       setReadingBooks(getBooksByStatus('reading').slice(0, 3));
       setWishlistBooks(getBooksByStatus('want_to_read').slice(0, 3));
       setCompletedBooks(getBooksByStatus('completed').slice(0, 3));
@@ -34,8 +36,24 @@ export default function HomeScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.greeting}>안녕하세요 👋</Text>
-        <Text style={styles.subtitle}>오늘도 독서를 즐겨보세요</Text>
+        <View>
+          <Text style={styles.greeting}>안녕하세요 👋</Text>
+          <Text style={styles.subtitle}>오늘도 독서를 즐겨보세요</Text>
+        </View>
+        <View style={styles.profileBox}>
+          <View style={styles.profileNameRow}>
+            <Text style={styles.profileName}>독서가</Text>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelText}>Lv.{userStats.level}</Text>
+            </View>
+          </View>
+          <View style={styles.xpRow}>
+            <View style={styles.xpBarBg}>
+              <View style={[styles.xpBarFill, { width: `${Math.min(100, Math.round((userStats.xpInLevel / userStats.xpForNext) * 100))}%` }]} />
+            </View>
+            <Text style={styles.xpText}>{userStats.xpInLevel} / {userStats.xpForNext} XP</Text>
+          </View>
+        </View>
       </View>
 	
 	  <TouchableOpacity style={styles.addButton} onPress={() => router.push('/add-book')}>
@@ -111,6 +129,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
   content: { padding: 16, paddingBottom: 32 },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 20,
   },
   greeting: {
@@ -122,6 +143,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#49454F',
     marginTop: 4,
+  },
+  profileBox: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  profileName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1C1B1F',
+  },
+  levelBadge: {
+    backgroundColor: '#6750A4',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  levelText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  profileNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  xpRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  xpText: {
+    fontSize: 11,
+    color: '#9E8FB2',
+    fontWeight: '600',
+  },
+  xpBarBg: {
+    width: 70,
+    height: 4,
+    backgroundColor: '#E8DEF8',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  xpBarFill: {
+    height: '100%',
+    backgroundColor: '#6750A4',
+    borderRadius: 2,
   },
   statsRow: {
     flexDirection: 'row',
