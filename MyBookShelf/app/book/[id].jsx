@@ -7,10 +7,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview } from '../../database/database';
+import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats } from '../../database/database';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
 import BookShareCard from '../../components/BookShareCard';
+import LevelUpModal from '../../components/LevelUpModal';
 
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -32,6 +33,7 @@ export default function BookDetailScreen() {
   const [goalDateStr, setGoalDateStr] = useState('');
   const [bookType, setBookType] = useState('physical');
   const [progressPct, setProgressPct] = useState('');
+  const [levelUpModal, setLevelUpModal] = useState({ visible: false, level: 1, navigateBack: false });
 
   const tsToDateStr = (ts) => {
     if (!ts) return '';
@@ -85,9 +87,14 @@ export default function BookDetailScreen() {
   const handleAddReview = () => {
     const text = newReviewText.trim();
     if (!text) return;
+    const prevLevel = getUserStats().level;
     insertBookReview(parseInt(id), text);
     setNewReviewText('');
     loadReviews();
+    const newLevel = getUserStats().level;
+    if (newLevel > prevLevel) {
+      setLevelUpModal({ visible: true, level: newLevel, navigateBack: false });
+    }
   };
 
   const handleDeleteReview = (reviewId) => {
@@ -136,6 +143,8 @@ export default function BookDetailScreen() {
       status: autoComplete ? 'completed' : book.status,
     });
 
+    const prevLevel = getUserStats().level;
+
     if (book.status === 'reading' || autoComplete) {
       const pageDelta = Math.max(0, newCurrentPage - (book.currentPage || 0));
       const pctDelta = Math.max(0, (parseInt(progressPct) || 0) - (book.progressPct || 0));
@@ -147,11 +156,21 @@ export default function BookDetailScreen() {
       onBookCompleted({ ...book, endDate: finalEndDate, goalDate: goalTs ?? book.goalDate });
     }
 
-    Alert.alert(
-      '저장 완료',
-      autoComplete ? '진척률 100%로 완독 처리되었습니다.' : '변경사항이 저장되었습니다.',
-      [{ text: '확인', onPress: () => router.back() }],
-    );
+    const isCompleted = book.status === 'completed' || autoComplete;
+    if (isCompleted && review.trim() && !book.review) {
+      addXp(XP_REWARDS.BOOK_REVIEW);
+    }
+
+    const newLevel = getUserStats().level;
+    if (newLevel > prevLevel) {
+      setLevelUpModal({ visible: true, level: newLevel, navigateBack: true });
+    } else {
+      Alert.alert(
+        '저장 완료',
+        autoComplete ? '진척률 100%로 완독 처리되었습니다.' : '변경사항이 저장되었습니다.',
+        [{ text: '확인', onPress: () => router.back() }],
+      );
+    }
   };
 
   const handleMarkReading = () => {
@@ -201,9 +220,15 @@ export default function BookDetailScreen() {
             goalDate: goalTs ?? book.goalDate,
             progressPct: parseInt(progressPct) || 0,
           });
+          const prevLevel = getUserStats().level;
           trackDailyReading(0);
           onBookCompleted({ ...book, endDate: finalEndDate, goalDate: goalTs ?? book.goalDate });
-          router.back();
+          const newLevel = getUserStats().level;
+          if (newLevel > prevLevel) {
+            setLevelUpModal({ visible: true, level: newLevel, navigateBack: true });
+          } else {
+            router.back();
+          }
         },
       },
     ]);
@@ -223,6 +248,14 @@ export default function BookDetailScreen() {
 
   return (
     <>
+    <LevelUpModal
+      visible={levelUpModal.visible}
+      level={levelUpModal.level}
+      onClose={() => {
+        setLevelUpModal({ visible: false, level: 1, navigateBack: false });
+        if (levelUpModal.navigateBack) router.back();
+      }}
+    />
     <View style={{ position: 'absolute', top: -9999, left: 0 }} pointerEvents="none">
       <View ref={cardRef} collapsable={false}>
         <BookShareCard

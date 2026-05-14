@@ -57,6 +57,15 @@ db.execSync(`INSERT OR IGNORE INTO user_stats (id, xp, level) VALUES (1, 0, 1)`)
 try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN username TEXT DEFAULT ''`);
 } catch (_) {}
+
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS completed_missions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    missionId TEXT NOT NULL,
+    weekKey TEXT NOT NULL,
+    UNIQUE(missionId, weekKey)
+  );
+`);
 try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN lastReadDay INTEGER DEFAULT 0`);
 } catch (_) {}
@@ -69,6 +78,25 @@ try {
 try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN todayPagesXpGiven INTEGER DEFAULT 0`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN school TEXT DEFAULT ''`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN schoolLevel TEXT DEFAULT ''`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE completed_missions ADD COLUMN xp INTEGER DEFAULT 0`);
+} catch (_) {}
+
+export function getWeekKey() {
+  const d = new Date();
+  const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = utc.getUTCDay() || 7;
+  utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((utc - yearStart) / 86400000) + 1) / 7);
+  return `${utc.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
 
 // XP 보상 상수
 export const XP_REWARDS = {
@@ -77,6 +105,7 @@ export const XP_REWARDS = {
   DAILY_STREAK: 10,         // 연속 독서 (1일당)
   CHALLENGE_SUCCESS: 150,   // 챌린지 성공
   MEMO_ADD: 10,             // 독서 메모 1개 추가
+  BOOK_REVIEW: 50,          // 완독 도서 리뷰 최초 등록
 };
 
 // 레벨 N → N+1 진급에 필요한 XP: 80 × N^1.5
@@ -261,6 +290,53 @@ export const getStats = () => {
   };
 };
 
+export const getWeeklyProgress = () => {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() + diff);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekStartTs = weekStart.getTime();
+
+  const completed = db.getFirstSync(
+    `SELECT COUNT(*) as count FROM books WHERE status = 'completed' AND endDate >= ?`,
+    [weekStartTs]
+  )?.count ?? 0;
+  const memos = db.getFirstSync(
+    `SELECT COUNT(*) as count FROM book_reviews WHERE createdAt >= ?`,
+    [weekStartTs]
+  )?.count ?? 0;
+  const added = db.getFirstSync(
+    `SELECT COUNT(*) as count FROM books WHERE createdAt >= ?`,
+    [weekStartTs]
+  )?.count ?? 0;
+  const streak = db.getFirstSync(
+    `SELECT readStreak FROM user_stats WHERE id = 1`
+  )?.readStreak ?? 0;
+
+  return { completed, memos, added, streak };
+};
+
+export const isMissionClaimed = (missionId, weekKey) =>
+  !!db.getFirstSync(
+    `SELECT id FROM completed_missions WHERE missionId = ? AND weekKey = ?`,
+    [missionId, weekKey]
+  );
+
+export const claimMissionReward = (missionId, weekKey, xpAmount) => {
+  try {
+    db.runSync(
+      `INSERT INTO completed_missions (missionId, weekKey, xp) VALUES (?, ?, ?)`,
+      [missionId, weekKey, xpAmount]
+    );
+    addXp(xpAmount);
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
+
 export const getBookReviews = (bookId) =>
   db.getAllSync('SELECT * FROM book_reviews WHERE bookId = ? ORDER BY sequence ASC', [bookId]);
 
@@ -280,4 +356,38 @@ export const insertBookReview = (bookId, content, type = 'memo') => {
 export const deleteBookReview = (id) => {
   db.runSync('DELETE FROM book_reviews WHERE id = ?', [id]);
   addXp(-XP_REWARDS.MEMO_ADD);
+};
+
+export const getSchool = () => {
+  const row = db.getFirstSync('SELECT school FROM user_stats WHERE id = 1');
+  return row?.school || '';
+};
+
+export const saveSchool = (name) => {
+  db.runSync('UPDATE user_stats SET school = ? WHERE id = 1', [name.trim()]);
+};
+
+export const getSchoolLevel = () => {
+  const row = db.getFirstSync('SELECT schoolLevel FROM user_stats WHERE id = 1');
+  return row?.schoolLevel || '';
+};
+
+export const saveSchoolLevel = (level) => {
+  db.runSync('UPDATE user_stats SET schoolLevel = ? WHERE id = 1', [level]);
+};
+
+export const getWeeklyScore = () => {
+  const progress = getWeeklyProgress();
+  const key = getWeekKey();
+  const missionXp = db.getFirstSync(
+    `SELECT COALESCE(SUM(xp), 0) as total FROM completed_missions WHERE weekKey = ?`,
+    [key]
+  )?.total ?? 0;
+  return (
+    progress.completed * 100 +
+    progress.memos * 10 +
+    progress.added * 20 +
+    progress.streak * 15 +
+    missionXp
+  );
 };

@@ -2,8 +2,123 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getStats, getBooksByStatus, getUserStats, getUsername } from '../../database/database';
+import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, getWeekKey, getSchoolLevel } from '../../database/database';
 import BookCard from '../../components/BookCard';
+
+const MISSION_POOL = [
+  { id: 'complete_1', label: '책 1권 완독하기', icon: 'trophy-outline', type: 'complete', target: 1, xp: 80 },
+  { id: 'complete_2', label: '책 2권 완독하기', icon: 'trophy-outline', type: 'complete', target: 2, xp: 160 },
+  { id: 'memo_3', label: '메모 3개 작성하기', icon: 'create-outline', type: 'memo', target: 3, xp: 50 },
+  { id: 'memo_5', label: '메모 5개 작성하기', icon: 'create-outline', type: 'memo', target: 5, xp: 80 },
+  { id: 'add_1', label: '새 책 1권 추가하기', icon: 'add-circle-outline', type: 'add', target: 1, xp: 30 },
+  { id: 'add_2', label: '새 책 2권 추가하기', icon: 'add-circle-outline', type: 'add', target: 2, xp: 60 },
+  { id: 'streak_3', label: '3일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 3, xp: 60 },
+  { id: 'streak_5', label: '5일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 5, xp: 100 },
+];
+
+function seededShuffle(arr, seed) {
+  const result = [...arr];
+  let s = seed;
+  for (let i = result.length - 1; i > 0; i--) {
+    s = ((s * 1664525) + 1013904223) & 0x7fffffff;
+    const j = s % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function getWeeklyMissions() {
+  const key = getWeekKey();
+  const seed = parseInt(key.replace('-W', ''), 10);
+  return seededShuffle(MISSION_POOL, seed).slice(0, 3);
+}
+
+const ENCOURAGEMENT = {
+  '초등': [
+    '📚 책 읽기는 상상력의 날개를 달아줘요!',
+    '🌟 오늘도 새로운 세계로 떠나볼까요?',
+    '🐣 책 한 장 한 장이 나를 성장시켜요!',
+    '🌈 매일 조금씩 읽으면 세상이 넓어져요!',
+    '💫 독서는 가장 재미있는 모험이에요!',
+  ],
+  '중학': [
+    '📖 꾸준한 독서가 실력의 차이를 만들어요',
+    '🔥 오늘의 독서가 내일의 나를 만든다',
+    '💪 책을 읽을수록 생각이 깊어져요',
+    '⚡ 10분 독서로 하루를 시작해보세요',
+    '🎯 목표를 가지고 읽으면 더 많이 얻어요',
+  ],
+  '고등': [
+    '🏆 독서는 최강의 자기 개발 전략입니다',
+    '📊 오늘 1페이지가 내일의 경쟁력이 됩니다',
+    '🚀 지금의 집중이 미래를 바꿉니다',
+    '⭐ 상위권의 공통점? 꾸준한 독서입니다',
+    '💡 읽는 만큼 성장하고, 성장한 만큼 앞서갑니다',
+  ],
+  '성인': [
+    '📚 독서는 평생의 가장 좋은 투자입니다',
+    '🌿 책 한 권이 인생의 방향을 바꿀 수 있습니다',
+    '✨ 성장에는 나이가 없습니다. 오늘도 한 페이지',
+    '🧠 독서는 뇌를 젊게 유지하는 최고의 방법',
+    '💼 지식은 쌓일수록 빛이 납니다',
+  ],
+};
+
+function getDailyMessage(level) {
+  const pool = ENCOURAGEMENT[level];
+  if (!pool) return null;
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+  return pool[dayOfYear % pool.length];
+}
+
+function EncouragementBanner({ level }) {
+  const msg = getDailyMessage(level);
+  if (!msg) return null;
+  return (
+    <View style={styles.encourageCard}>
+      <Text style={styles.encourageText}>{msg}</Text>
+    </View>
+  );
+}
+
+function getMissionProgress(mission, progress) {
+  if (mission.type === 'complete') return progress.completed;
+  if (mission.type === 'memo') return progress.memos;
+  if (mission.type === 'add') return progress.added;
+  if (mission.type === 'streak') return progress.streak;
+  return 0;
+}
+
+function WeeklyMissionCard({ missions, progress, claimed }) {
+  return (
+    <View style={styles.missionCard}>
+      <Text style={styles.missionTitle}>🎯 주간 미션</Text>
+      {missions.map((mission) => {
+        const current = Math.min(getMissionProgress(mission, progress), mission.target);
+        const pct = Math.min(100, Math.round((current / mission.target) * 100));
+        const done = current >= mission.target;
+        const isClaimed = claimed.includes(mission.id);
+        return (
+          <View key={mission.id} style={styles.missionItem}>
+            <Ionicons name={mission.icon} size={20} color={done ? '#4CAF50' : '#6750A4'} style={styles.missionIcon} />
+            <View style={styles.missionInfo}>
+              <Text style={[styles.missionLabel, done && styles.missionLabelDone]}>{mission.label}</Text>
+              <View style={styles.missionBarBg}>
+                <View style={[styles.missionBarFill, { width: `${pct}%` }, done && styles.missionBarFillDone]} />
+              </View>
+              <Text style={styles.missionProgressText}>{done ? '완료!' : `${current} / ${mission.target}`}</Text>
+            </View>
+            <View style={[styles.missionXpTag, done && styles.missionXpTagDone]}>
+              <Text style={[styles.missionXpText, done && styles.missionXpTextDone]}>
+                {isClaimed ? '✓ 수령' : `+${mission.xp} XP`}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 function StatCard({ icon, label, value, color }) {
   return (
@@ -23,15 +138,36 @@ export default function HomeScreen() {
   const [readingBooks, setReadingBooks] = useState([]);
   const [wishlistBooks, setWishlistBooks] = useState([]);
   const [completedBooks, setCompletedBooks] = useState([]);
+  const [weeklyMissions, setWeeklyMissions] = useState([]);
+  const [weeklyProgress, setWeeklyProgress] = useState({ completed: 0, memos: 0, added: 0, streak: 0 });
+  const [claimedMissions, setClaimedMissions] = useState([]);
+  const [schoolLevel, setSchoolLevel] = useState('');
 
   useFocusEffect(
     useCallback(() => {
       setStats(getStats());
-      setUserStats(getUserStats());
       setUsername(getUsername());
       setReadingBooks(getBooksByStatus('reading').slice(0, 3));
       setWishlistBooks(getBooksByStatus('want_to_read').slice(0, 3));
       setCompletedBooks(getBooksByStatus('completed').slice(0, 3));
+
+      const missions = getWeeklyMissions();
+      setWeeklyMissions(missions);
+      const progress = getWeeklyProgress();
+      setWeeklyProgress(progress);
+      const weekKey = getWeekKey();
+      const claimed = missions.filter((m) => isMissionClaimed(m.id, weekKey)).map((m) => m.id);
+      missions.forEach((m) => {
+        const current = getMissionProgress(m, progress);
+        if (current >= m.target && !claimed.includes(m.id)) {
+          claimMissionReward(m.id, weekKey, m.xp);
+          claimed.push(m.id);
+        }
+      });
+      setClaimedMissions([...claimed]);
+
+      setUserStats(getUserStats());
+      setSchoolLevel(getSchoolLevel());
     }, [])
   );
 
@@ -58,6 +194,7 @@ export default function HomeScreen() {
         </View>
       </View>
 	
+      <EncouragementBanner level={schoolLevel} />
 	  <TouchableOpacity style={styles.addButton} onPress={() => router.push('/add-book')}>
         <Ionicons name="add-circle-outline" size={10} color="#fff" />
         <Text style={styles.addButtonText}>책 추가하기</Text>
@@ -69,6 +206,8 @@ export default function HomeScreen() {
         <StatCard icon="reader-outline" label="읽는 중" value={stats.reading} color="#2196F3" />
         <StatCard icon="bookmark-outline" label="읽고 싶음" value={stats.want} color="#FF9800" />
       </View>
+
+      <WeeklyMissionCard missions={weeklyMissions} progress={weeklyProgress} claimed={claimedMissions} />
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>읽는 중인 책</Text>
@@ -246,6 +385,95 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: '#9E9E9E',
+  },
+  missionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  missionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1B1F',
+    marginBottom: 12,
+  },
+  missionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  missionIcon: {
+    marginRight: 10,
+  },
+  missionInfo: {
+    flex: 1,
+  },
+  missionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1C1B1F',
+    marginBottom: 4,
+  },
+  missionLabelDone: {
+    color: '#4CAF50',
+  },
+  missionBarBg: {
+    height: 4,
+    backgroundColor: '#E8DEF8',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 2,
+  },
+  missionBarFill: {
+    height: '100%',
+    backgroundColor: '#6750A4',
+    borderRadius: 2,
+  },
+  missionBarFillDone: {
+    backgroundColor: '#4CAF50',
+  },
+  missionProgressText: {
+    fontSize: 10,
+    color: '#9E9E9E',
+  },
+  missionXpTag: {
+    backgroundColor: '#EDE7F6',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginLeft: 8,
+  },
+  missionXpTagDone: {
+    backgroundColor: '#E8F5E9',
+  },
+  missionXpText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6750A4',
+  },
+  missionXpTextDone: {
+    color: '#4CAF50',
+  },
+  encourageCard: {
+    backgroundColor: '#EDE7F6',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#6750A4',
+  },
+  encourageText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4A3880',
+    lineHeight: 20,
   },
   addButton: {
     flexDirection: 'row',

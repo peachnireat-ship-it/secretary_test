@@ -48,6 +48,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="ranking"
+        options={{
+          title: '대항전',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="podium-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
