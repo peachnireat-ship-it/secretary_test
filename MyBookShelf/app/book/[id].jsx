@@ -60,7 +60,9 @@ export default function BookDetailScreen() {
 
   const dateStrToTs = (str) => {
     if (!str.trim()) return null;
-    const d = new Date(str);
+    const parts = str.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
     return isNaN(d.getTime()) ? null : d.getTime();
   };
 

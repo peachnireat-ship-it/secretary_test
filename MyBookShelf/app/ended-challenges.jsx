@@ -15,7 +15,7 @@ function fmtDate(ts) {
 
 function ExpiredCard({ book, onPress, isSuccess }) {
   const overDays = (!isSuccess && book.goalDate)
-    ? Math.ceil((Date.now() - book.goalDate) / 86400000)
+    ? Math.ceil((new Date().setHours(0, 0, 0, 0) - new Date(book.goalDate).setHours(0, 0, 0, 0)) / 86400000)
     : null;
 
   const checkins = (() => {
@@ -95,44 +95,7 @@ export default function EndedChallengesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const data = getExpiredChallengeBooks();
-      const testBook = data.find(b => b.title === 'test');
-      if (testBook) {
-        const now = Date.now();
-        const goalDate = testBook.goalDate;
-        const startTs = testBook.startDate || testBook.createdAt;
-        const overDaysRaw = goalDate ? (now - goalDate) / 86400000 : null;
-        const overDays = goalDate ? Math.ceil(overDaysRaw) : null;
-        const goalDateObj = goalDate ? new Date(goalDate) : null;
-        const goalLocalMidnight = goalDate ? new Date(goalDate).setHours(0, 0, 0, 0) : null;
-        const todayLocalMidnight = new Date().setHours(0, 0, 0, 0);
-
-        console.log('=== [test] 독서 기록 상세 ===');
-        console.log('id:', testBook.id);
-        console.log('title:', testBook.title);
-        console.log('status:', testBook.status);
-        console.log('goalDate (raw ts):', goalDate);
-        console.log('goalDate (UTC ISO):', goalDateObj ? goalDateObj.toISOString() : null);
-        console.log('goalDate (Local):', goalDateObj ? goalDateObj.toLocaleString('ko-KR') : null);
-        console.log('startDate (raw ts):', startTs);
-        console.log('startDate (Local):', startTs ? new Date(startTs).toLocaleString('ko-KR') : null);
-        console.log('endDate (raw ts):', testBook.endDate);
-        console.log('endDate (Local):', testBook.endDate ? new Date(testBook.endDate).toLocaleString('ko-KR') : null);
-        console.log('createdAt (raw ts):', testBook.createdAt);
-        console.log('--- D-day 계산 ---');
-        console.log('Date.now():', now, '→', new Date(now).toLocaleString('ko-KR'));
-        console.log('goalDate가 UTC 자정 기준임:', goalDateObj ? goalDateObj.getHours() === 0 && goalDateObj.getMinutes() === 0 && goalDateObj.getSeconds() === 0 : 'N/A');
-        console.log('(Date.now() - goalDate)ms:', goalDate ? now - goalDate : null);
-        console.log('overDays (현재 계산):', overDays, '← Math.ceil(', overDaysRaw?.toFixed(4), ')');
-        console.log('goalDate 로컬 자정:', goalLocalMidnight, '→', goalLocalMidnight ? new Date(goalLocalMidnight).toLocaleString('ko-KR') : null);
-        console.log('오늘 로컬 자정:', todayLocalMidnight, '→', new Date(todayLocalMidnight).toLocaleString('ko-KR'));
-        console.log('overDays (수정 계산):', goalLocalMidnight ? Math.ceil((todayLocalMidnight - goalLocalMidnight) / 86400000) : null);
-        console.log('checkins:', testBook.checkins);
-        console.log('=============================');
-      } else {
-        console.log('[ended-challenges] "test" 제목 도서를 찾을 수 없음. 전체 목록:', data.map(b => b.title));
-      }
-      setBooks(data);
+      setBooks(getExpiredChallengeBooks());
     }, [])
   );
 
