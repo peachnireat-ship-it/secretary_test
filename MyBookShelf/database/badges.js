@@ -34,6 +34,7 @@ export const BADGE_DEFS = [
   { id: 'bookworm',       emoji: '🐛', name: '독서벌레',      desc: '완독 5권 이상',        type: 'activity', threshold: 5 },
   { id: 'streak_king',    emoji: '🔥', name: '연속 독서왕',   desc: '연속 독서 7일 이상',   type: 'activity', threshold: 7 },
   { id: 'speed_reader',   emoji: '⚡', name: '챌린지 클리어러', desc: '챌린지 성공 3번 이상', type: 'activity', threshold: 3 },
+  { id: 'steady_reader',  emoji: '🗓️', name: '꾸준한 독서가',  desc: '독서 시작 후 30일 이상 + 누적 500페이지 이상', type: 'activity', threshold: 30 },
 ];
 
 function getTimeActivityCount(startHour, endHour) {
@@ -77,6 +78,15 @@ function getBadgeProgress(badge) {
         new Date(b.endDate).setHours(0, 0, 0, 0) <= new Date(b.goalDate).setHours(0, 0, 0, 0)
       ).length;
       return { current: successes, max: badge.threshold };
+    }
+    case 'steady_reader': {
+      const row = db.getFirstSync('SELECT MIN(startDate) as first FROM books WHERE startDate IS NOT NULL');
+      if (!row?.first) return { current: 0, max: 500 };
+      const totalPages = db.getFirstSync('SELECT SUM(currentPage) as total FROM books WHERE currentPage IS NOT NULL')?.total ?? 0;
+      // 페이지 조건 미달이면 페이지 진행도를 먼저 표시
+      if (totalPages < 500) return { current: Math.min(totalPages, 500), max: 500 };
+      const daysSince = Math.floor((Date.now() - row.first) / (1000 * 60 * 60 * 24));
+      return { current: Math.min(daysSince, badge.threshold), max: badge.threshold };
     }
     default: {
       if (badge.type === 'genre' && badge.genre) {
