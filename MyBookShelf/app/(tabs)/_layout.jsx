@@ -40,6 +40,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="badges"
+        options={{
+          title: '뱃지',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="medal-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="challenge"
         options={{
           title: '챌린지',
