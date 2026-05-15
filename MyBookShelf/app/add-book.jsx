@@ -5,6 +5,7 @@ import {
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { insertBook } from '../database/database';
+import { GENRES } from '../database/badges';
 
 const STATUS_OPTIONS = [
   { key: 'want_to_read', label: '읽고 싶음' },
@@ -18,6 +19,7 @@ export default function AddBookScreen() {
   const [author, setAuthor] = useState('');
   const [totalPages, setTotalPages] = useState('');
   const [status, setStatus] = useState('want_to_read');
+  const [genre, setGenre] = useState('');
   const [review, setReview] = useState('');
 
   const handleSave = () => {
@@ -30,6 +32,7 @@ export default function AddBookScreen() {
       author: author.trim(),
       totalPages: parseInt(totalPages) || 0,
       status,
+      genre,
       review: review.trim(),
     });
     router.back();
@@ -81,6 +84,19 @@ export default function AddBookScreen() {
           textAlignVertical="top"
         />
 
+        <Text style={styles.label}>장르</Text>
+        <View style={styles.genreGroup}>
+          {GENRES.map((g) => (
+            <TouchableOpacity
+              key={g}
+              style={[styles.genreBtn, genre === g && styles.genreBtnActive]}
+              onPress={() => setGenre(genre === g ? '' : g)}
+            >
+              <Text style={[styles.genreBtnText, genre === g && styles.genreBtnTextActive]}>{g}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <Text style={styles.label}>읽기 상태</Text>
         <View style={styles.statusGroup}>
           {STATUS_OPTIONS.map((option) => (
@@ -120,6 +136,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
 
+  genreGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  genreBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#CAC4D0',
+    borderRadius: 16,
+    backgroundColor: '#fff',
+  },
+  genreBtnActive: { backgroundColor: '#6750A4', borderColor: '#6750A4' },
+  genreBtnText: { fontSize: 13, color: '#49454F' },
+  genreBtnTextActive: { color: '#fff', fontWeight: '600' },
   statusGroup: { flexDirection: 'row', gap: 8 },
   statusBtn: {
     flex: 1,

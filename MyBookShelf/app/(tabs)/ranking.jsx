@@ -29,7 +29,7 @@ function DoubleXpBanner({ event }) {
   if (now > endTs) {
     return (
       <View style={styles.doubleXpBannerEnded}>
-        <Text style={styles.doubleXpEndedTitle}>이번 주 XP 2배 이벤트 종료</Text>
+        <Text style={styles.doubleXpEndedTitle}>이번 주 경험치 2배 이벤트 종료</Text>
         <Text style={styles.doubleXpEndedSub}>{dayLabel}요일 {timeLabel} · 다음 주 이벤트를 기대해 주세요!</Text>
       </View>
     );
@@ -45,7 +45,7 @@ function DoubleXpBanner({ event }) {
       <View style={styles.doubleXpBannerActive}>
         <Text style={styles.doubleXpActiveBadge}>LIVE</Text>
         <View style={styles.doubleXpBannerBody}>
-          <Text style={styles.doubleXpActiveTitle}>⚡ XP 2배 이벤트 진행 중!</Text>
+          <Text style={styles.doubleXpActiveTitle}>⚡ 경험치 2배 이벤트 진행 중!</Text>
           <Text style={styles.doubleXpActiveSub}>지금 독서 기록 시 경험치 2배 ({endHour}:00까지)</Text>
         </View>
       </View>
@@ -55,7 +55,7 @@ function DoubleXpBanner({ event }) {
   return (
     <View style={styles.doubleXpBanner}>
       <Text style={styles.doubleXpBannerTitle}>
-        {isToday ? '⚡ 오늘 XP 2배 이벤트 예정' : `📅 이번 주 XP 2배 이벤트`}
+        {isToday ? '⚡ 오늘 경험치 2배 이벤트 예정' : `📅 이번 주 경험치 2배 이벤트`}
       </Text>
       <Text style={styles.doubleXpBannerSub}>
         {isToday ? timeLabel : `${dayLabel}요일 ${timeLabel}`} 독서 기록 시 경험치 2배!
