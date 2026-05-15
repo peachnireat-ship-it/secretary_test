@@ -255,21 +255,23 @@ export default function HomeScreen() {
           <Text style={styles.subtitle}>오늘도 독서를 즐겨보세요</Text>
         </View>
         <View style={styles.profileBox}>
-          <View style={styles.profileNameRow}>
-            <Text style={styles.profileName}>{username}</Text>
-            <View style={styles.levelBadge}>
-              <Text style={styles.levelText}>Lv.{userStats.level}</Text>
+          <View style={styles.profileContent}>
+            <View style={styles.profileNameRow}>
+              <Text style={styles.profileName}>{username}</Text>
+              <View style={styles.levelBadge}>
+                <Text style={styles.levelText}>Lv.{userStats.level}</Text>
+              </View>
             </View>
-            <TouchableOpacity onPress={() => router.push('/profile-edit')} style={styles.settingsBtn}>
-              <Ionicons name="settings-outline" size={16} color="#9E9E9E" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.xpRow}>
-            <View style={styles.xpBarBg}>
-              <View style={[styles.xpBarFill, { width: `${Math.min(100, Math.round((userStats.xpInLevel / userStats.xpForNext) * 100))}%` }]} />
+            <View style={styles.xpRow}>
+              <View style={styles.xpBarBg}>
+                <View style={[styles.xpBarFill, { width: `${Math.min(100, Math.round((userStats.xpInLevel / userStats.xpForNext) * 100))}%` }]} />
+              </View>
+              <Text style={styles.xpText}>{userStats.xpInLevel} / {userStats.xpForNext} XP</Text>
             </View>
-            <Text style={styles.xpText}>{userStats.xpInLevel} / {userStats.xpForNext} XP</Text>
           </View>
+          <TouchableOpacity onPress={() => router.push('/profile-edit')} style={styles.settingsBtn}>
+            <Ionicons name="settings-outline" size={16} color="#9E9E9E" />
+          </TouchableOpacity>
         </View>
       </View>
 	
@@ -384,14 +386,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   profileBox: {
-    alignItems: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  profileContent: {
+    flex: 1,
     gap: 4,
   },
   profileName: {
     fontSize: 13,
     fontWeight: '600',
     color: '#1C1B1F',
-	alignItems: 'right'
   },
   levelBadge: {
     backgroundColor: '#6750A4',
@@ -408,10 +414,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 6,
   },
   settingsBtn: {
-    padding: 2,
+    padding: 4,
   },
   xpRow: {
     flexDirection: 'row',
@@ -424,7 +429,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   xpBarBg: {
-    width: 70,
+    flex: 1,
     height: 4,
     backgroundColor: '#E8DEF8',
     borderRadius: 2,
