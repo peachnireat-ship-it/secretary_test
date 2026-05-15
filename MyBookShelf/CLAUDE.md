@@ -66,6 +66,7 @@ XP_REWARDS = {
 ## 개발 시 유의사항
 
 - **작업 경로**: 별도 명령이 있기 전까지 모든 작업은 `C:\Users\user\MyBookShelf` 경로 내에서만 수행할 것
+- `/clear`, `/compact` 명령 이후에도 특별한 요청이 없으면 MyBookShelf 프로젝트 하위 파일·폴더 대상으로만 작업할 것
 - DB 컬럼 추가는 `ALTER TABLE … ADD COLUMN`을 `try/catch`로 감싸서 중복 실행 안전하게 처리
 - `status` 값: `'want_to_read'` | `'reading'` | `'completed'`
 - 날짜/시간은 Unix timestamp(ms) 정수로 저장
