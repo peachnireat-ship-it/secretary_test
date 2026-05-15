@@ -262,10 +262,10 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.xpRow}>
+            <Text style={styles.xpText}>{userStats.xpInLevel} / {userStats.xpForNext} XP</Text>
             <View style={styles.xpBarBg}>
               <View style={[styles.xpBarFill, { width: `${Math.min(100, Math.round((userStats.xpInLevel / userStats.xpForNext) * 100))}%` }]} />
             </View>
-            <Text style={styles.xpText}>{userStats.xpInLevel} / {userStats.xpForNext} XP</Text>
           </View>
         </View>
         <TouchableOpacity onPress={() => router.push('/profile-edit')} style={styles.settingsBtn}>
