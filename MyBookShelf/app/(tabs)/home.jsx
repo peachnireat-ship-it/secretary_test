@@ -250,29 +250,27 @@ export default function HomeScreen() {
   return (
     <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerLeft}>
           <Text style={styles.greeting}>안녕하세요 👋</Text>
           <Text style={styles.subtitle}>오늘도 독서를 즐겨보세요</Text>
         </View>
         <View style={styles.profileBox}>
-          <View style={styles.profileContent}>
-            <View style={styles.profileNameRow}>
-              <Text style={styles.profileName}>{username}</Text>
-              <View style={styles.levelBadge}>
-                <Text style={styles.levelText}>Lv.{userStats.level}</Text>
-              </View>
-            </View>
-            <View style={styles.xpRow}>
-              <View style={styles.xpBarBg}>
-                <View style={[styles.xpBarFill, { width: `${Math.min(100, Math.round((userStats.xpInLevel / userStats.xpForNext) * 100))}%` }]} />
-              </View>
-              <Text style={styles.xpText}>{userStats.xpInLevel} / {userStats.xpForNext} XP</Text>
+          <View style={styles.profileNameRow}>
+            <Text style={styles.profileName}>{username}</Text>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelText}>Lv.{userStats.level}</Text>
             </View>
           </View>
-          <TouchableOpacity onPress={() => router.push('/profile-edit')} style={styles.settingsBtn}>
-            <Ionicons name="settings-outline" size={16} color="#9E9E9E" />
-          </TouchableOpacity>
+          <View style={styles.xpRow}>
+            <View style={styles.xpBarBg}>
+              <View style={[styles.xpBarFill, { width: `${Math.min(100, Math.round((userStats.xpInLevel / userStats.xpForNext) * 100))}%` }]} />
+            </View>
+            <Text style={styles.xpText}>{userStats.xpInLevel} / {userStats.xpForNext} XP</Text>
+          </View>
         </View>
+        <TouchableOpacity onPress={() => router.push('/profile-edit')} style={styles.settingsBtn}>
+          <Ionicons name="settings-outline" size={16} color="#9E9E9E" />
+        </TouchableOpacity>
       </View>
 	
       <View style={styles.tabSelector}>
@@ -371,9 +369,12 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32 },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 20,
+  },
+  headerLeft: {
+    flex: 1,
   },
   greeting: {
     fontSize: 24,
@@ -386,13 +387,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   profileBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  profileContent: {
-    flex: 1,
     gap: 4,
+    width: 130,
   },
   profileName: {
     fontSize: 13,
@@ -413,7 +409,7 @@ const styles = StyleSheet.create({
   profileNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 6,
   },
   settingsBtn: {
     padding: 4,
