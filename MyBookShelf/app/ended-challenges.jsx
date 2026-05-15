@@ -14,8 +14,10 @@ function fmtDate(ts) {
 }
 
 function ExpiredCard({ book, onPress, isSuccess }) {
-  const overDays = (!isSuccess && book.goalDate)
-    ? Math.ceil((new Date().setHours(0, 0, 0, 0) - new Date(book.goalDate).setHours(0, 0, 0, 0)) / 86400000)
+  const todayMidnight = new Date().setHours(0, 0, 0, 0);
+  const goalMidnight = book.goalDate ? new Date(book.goalDate).setHours(0, 0, 0, 0) : null;
+  const overDays = (!isSuccess && goalMidnight && todayMidnight >= goalMidnight)
+    ? Math.ceil((todayMidnight - goalMidnight) / 86400000)
     : null;
 
   const checkins = (() => {
