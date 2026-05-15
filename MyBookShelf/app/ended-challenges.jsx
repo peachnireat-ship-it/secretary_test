@@ -95,41 +95,7 @@ export default function EndedChallengesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const data = getExpiredChallengeBooks();
-      const todayMidnight = new Date().setHours(0, 0, 0, 0);
-
-      const failed = data.filter((b) => {
-        if (!(b.status === 'completed' && b.endDate && b.goalDate)) return true;
-        return new Date(b.endDate).setHours(0, 0, 0, 0) > new Date(b.goalDate).setHours(0, 0, 0, 0);
-      });
-
-      console.log(`=== 미완료 챌린지 (${failed.length}권) ===`);
-      failed.forEach((b, i) => {
-        const startTs = b.startDate || b.createdAt;
-        const goalMidnight = b.goalDate ? new Date(b.goalDate).setHours(0, 0, 0, 0) : null;
-        const overDays = goalMidnight ? Math.ceil((todayMidnight - goalMidnight) / 86400000) : null;
-        const totalDays = goalMidnight && startTs
-          ? Math.max(Math.ceil((b.goalDate - startTs) / 86400000), 1)
-          : null;
-        let checkins = [];
-        try { checkins = JSON.parse(b.checkins || '[]'); } catch {}
-
-        console.log(`--- [${i + 1}] ${b.title} ---`);
-        console.log('  id:', b.id);
-        console.log('  status:', b.status);
-        console.log('  goalDate (raw):', b.goalDate, '→', b.goalDate ? new Date(b.goalDate).toLocaleString('ko-KR') : null);
-        console.log('  startDate (raw):', startTs, '→', startTs ? new Date(startTs).toLocaleString('ko-KR') : null);
-        console.log('  endDate (raw):', b.endDate, '→', b.endDate ? new Date(b.endDate).toLocaleString('ko-KR') : null);
-        console.log('  createdAt (raw):', b.createdAt, '→', b.createdAt ? new Date(b.createdAt).toLocaleString('ko-KR') : null);
-        console.log('  totalDays:', totalDays);
-        console.log('  overDays (D+N):', overDays);
-        console.log('  checkins:', checkins.length, '회', checkins);
-        console.log('  currentPage:', b.currentPage, '/ totalPages:', b.totalPages);
-        console.log('  progressPct:', b.progressPct);
-      });
-      console.log('=====================================');
-
-      setBooks(data);
+      setBooks(getExpiredChallengeBooks());
     }, [])
   );
 
