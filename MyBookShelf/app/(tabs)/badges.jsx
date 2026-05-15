@@ -55,12 +55,23 @@ export default function BadgesScreen() {
     }, [])
   );
 
-  const unlocked = badges.filter(b => b.unlocked).length;
+  const myBadges = badges.filter(b => b.unlocked);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.header}>
-        🏅 나의 뱃지 ({unlocked}/{badges.length})
+      <Text style={styles.sectionHeader}>🏅 나의 뱃지 ({myBadges.length})</Text>
+      {myBadges.length === 0 ? (
+        <Text style={styles.emptyText}>아직 달성한 뱃지가 없어요!</Text>
+      ) : (
+        <View style={styles.badgeGrid}>
+          {myBadges.map((badge) => (
+            <BadgeCard key={badge.id} badge={badge} />
+          ))}
+        </View>
+      )}
+
+      <Text style={[styles.sectionHeader, styles.sectionHeaderGap]}>
+        📋 전체 뱃지 ({myBadges.length}/{badges.length})
       </Text>
       <View style={styles.badgeGrid}>
         {badges.map((badge) => (
@@ -74,11 +85,20 @@ export default function BadgesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
   content: { padding: 16, paddingBottom: 32 },
-  header: {
+  sectionHeader: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1C1B1F',
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  sectionHeaderGap: {
+    marginTop: 28,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#9E9E9E',
+    textAlign: 'center',
+    paddingVertical: 20,
   },
   badgeGrid: {
     flexDirection: 'row',
