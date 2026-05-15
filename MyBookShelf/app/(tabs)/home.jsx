@@ -1,9 +1,9 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { useState, useCallback, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent } from '../../database/database';
-import { getBadgesWithStatus } from '../../database/badges';
+import { getBadgesWithStatus, checkAndUnlockBadges } from '../../database/badges';
 import BookCard from '../../components/BookCard';
 
 const MISSION_POOL = [
@@ -215,6 +215,18 @@ export default function HomeScreen() {
   const [doubleXpEvent, setDoubleXpEvent] = useState(null);
   const [activeTab, setActiveTab] = useState('home');
   const [badges, setBadges] = useState([]);
+  const [newBadges, setNewBadges] = useState([]);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (newBadges.length === 0) return;
+    toastAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
+      Animated.delay(2800),
+      Animated.timing(toastAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start(() => setNewBadges([]));
+  }, [newBadges]);
 
   useFocusEffect(
     useCallback(() => {
@@ -243,11 +255,14 @@ export default function HomeScreen() {
       setUserStats(getUserStats());
       setSchoolLevel(getSchoolLevel());
       setDoubleXpEvent(getWeeklyDoubleXpEvent());
+      const unlocked = checkAndUnlockBadges();
+      if (unlocked.length > 0) setNewBadges(unlocked);
       setBadges(getBadgesWithStatus());
     }, [])
   );
 
   return (
+    <View style={styles.root}>
     <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -361,10 +376,23 @@ export default function HomeScreen() {
         </View>
       )}
     </ScrollView>
+    {newBadges.length > 0 && (
+      <Animated.View style={[styles.badgeToast, {
+        opacity: toastAnim,
+        transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [60, 0] }) }],
+      }]}>
+        <Text style={styles.badgeToastTitle}>🏅 새 뱃지 획득!</Text>
+        {newBadges.map(b => (
+          <Text key={b.id} style={styles.badgeToastItem}>{b.emoji} {b.name}</Text>
+        ))}
+      </Animated.View>
+    )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   container: { flex: 1, backgroundColor: '#F5F5F5' },
   content: { padding: 16, paddingBottom: 32 },
   header: {
@@ -727,6 +755,32 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#9E9E9E',
     fontWeight: '600',
+  },
+  badgeToast: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    right: 16,
+    backgroundColor: '#6750A4',
+    borderRadius: 16,
+    padding: 16,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+  },
+  badgeToastTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 6,
+  },
+  badgeToastItem: {
+    fontSize: 13,
+    color: '#EDE7F6',
+    fontWeight: '600',
+    marginTop: 2,
   },
   encourageCard: {
     backgroundColor: '#EDE7F6',
