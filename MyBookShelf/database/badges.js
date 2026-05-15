@@ -34,7 +34,7 @@ export const BADGE_DEFS = [
   { id: 'bookworm',       emoji: '🐛', name: '독서벌레',      desc: '완독 5권 이상',        type: 'activity', threshold: 5 },
   { id: 'streak_king',    emoji: '🔥', name: '연속 독서왕',   desc: '연속 독서 7일 이상',   type: 'activity', threshold: 7 },
   { id: 'speed_reader',   emoji: '⚡', name: '챌린지 클리어러', desc: '챌린지 성공 3번 이상', type: 'activity', threshold: 3 },
-  { id: 'steady_reader',  emoji: '🗓️', name: '꾸준한 독서가',  desc: '독서 시작 후 30일 이상 + 누적 500페이지 이상', type: 'activity', threshold: 30 },
+  { id: 'steady_reader',  emoji: '🗓️', name: '꾸준한 독서가',  desc: '연령별 목표 달성 (어린이 15일+200p / 청소년 20일+350p / 성인 30일+500p)', type: 'activity', threshold: 30 },
 ];
 
 function getTimeActivityCount(startHour, endHour) {
@@ -80,13 +80,18 @@ function getBadgeProgress(badge) {
       return { current: successes, max: badge.threshold };
     }
     case 'steady_reader': {
+      const age = db.getFirstSync('SELECT age FROM user_stats WHERE id=1')?.age ?? 0;
+      // 연령별 조건: 어린이(~12): 15일+200p, 청소년(13~18): 20일+350p, 성인(19~): 30일+500p
+      let dayGoal, pageGoal;
+      if (age > 0 && age <= 12)       { dayGoal = 15; pageGoal = 200; }
+      else if (age > 0 && age <= 18)  { dayGoal = 20; pageGoal = 350; }
+      else                             { dayGoal = 30; pageGoal = 500; }
       const row = db.getFirstSync('SELECT MIN(startDate) as first FROM books WHERE startDate IS NOT NULL');
-      if (!row?.first) return { current: 0, max: 500 };
+      if (!row?.first) return { current: 0, max: pageGoal };
       const totalPages = db.getFirstSync('SELECT SUM(currentPage) as total FROM books WHERE currentPage IS NOT NULL')?.total ?? 0;
-      // 페이지 조건 미달이면 페이지 진행도를 먼저 표시
-      if (totalPages < 500) return { current: Math.min(totalPages, 500), max: 500 };
+      if (totalPages < pageGoal) return { current: Math.min(totalPages, pageGoal), max: pageGoal };
       const daysSince = Math.floor((Date.now() - row.first) / (1000 * 60 * 60 * 24));
-      return { current: Math.min(daysSince, badge.threshold), max: badge.threshold };
+      return { current: Math.min(daysSince, dayGoal), max: dayGoal };
     }
     default: {
       if (badge.type === 'genre' && badge.genre) {

@@ -33,6 +33,9 @@ try {
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN progressPct INTEGER DEFAULT 0`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN genre TEXT DEFAULT ''`);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS book_reviews (
@@ -66,6 +69,14 @@ db.execSync(`
     UNIQUE(missionId, weekKey)
   );
 `);
+
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS user_badges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    badgeId TEXT NOT NULL UNIQUE,
+    unlockedAt INTEGER NOT NULL
+  );
+`);
 try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN lastReadDay INTEGER DEFAULT 0`);
 } catch (_) {}
@@ -83,6 +94,9 @@ try {
 } catch (_) {}
 try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN schoolLevel TEXT DEFAULT ''`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN age INTEGER DEFAULT 0`);
 } catch (_) {}
 try {
   db.execSync(`ALTER TABLE completed_missions ADD COLUMN xp INTEGER DEFAULT 0`);
@@ -192,8 +206,8 @@ export const getBookById = (id) =>
 
 export const insertBook = (book) => {
   db.runSync(
-    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, createdAt, bookType)
-     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?, ?)`,
+    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, createdAt, bookType, genre)
+     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?)`,
     [
       book.title,
       book.author || '',
@@ -203,6 +217,7 @@ export const insertBook = (book) => {
       book.status === 'reading' ? Date.now() : null,
       Date.now(),
       book.bookType || 'physical',
+      book.genre || '',
     ]
   );
 };
@@ -210,7 +225,7 @@ export const insertBook = (book) => {
 export const updateBook = (book) => {
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
-     status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?, bookType = ?, progressPct = ? WHERE id = ?`,
+     status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?, bookType = ?, progressPct = ?, genre = ? WHERE id = ?`,
     [
       book.title,
       book.author || '',
@@ -224,6 +239,7 @@ export const updateBook = (book) => {
       book.goalDate || null,
       book.bookType || 'physical',
       book.progressPct || 0,
+      book.genre || '',
       book.id,
     ]
   );
@@ -408,6 +424,14 @@ export const getSchoolLevel = () => {
 
 export const saveSchoolLevel = (level) => {
   db.runSync('UPDATE user_stats SET schoolLevel = ? WHERE id = 1', [level]);
+};
+
+export const getAge = () => {
+  return db.getFirstSync('SELECT age FROM user_stats WHERE id = 1')?.age ?? 0;
+};
+
+export const saveAge = (age) => {
+  db.runSync('UPDATE user_stats SET age = ? WHERE id = 1', [age]);
 };
 
 export const getWeeklyScore = () => {

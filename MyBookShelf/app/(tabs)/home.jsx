@@ -260,6 +260,9 @@ export default function HomeScreen() {
             <View style={styles.levelBadge}>
               <Text style={styles.levelText}>Lv.{userStats.level}</Text>
             </View>
+            <TouchableOpacity onPress={() => router.push('/profile-edit')} style={styles.settingsBtn}>
+              <Ionicons name="settings-outline" size={16} color="#9E9E9E" />
+            </TouchableOpacity>
           </View>
           <View style={styles.xpRow}>
             <View style={styles.xpBarBg}>
@@ -405,6 +408,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 6,
+  },
+  settingsBtn: {
+    padding: 2,
   },
   xpRow: {
     flexDirection: 'row',
