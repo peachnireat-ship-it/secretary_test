@@ -68,7 +68,7 @@ function ExpiredCard({ book, onPress, isSuccess }) {
         <Text style={styles.dateLabel}>
           {isSuccess
             ? `완독일: ${fmtDate(book.endDate) ?? '?'}`
-            : `목표: ${fmtDate(book.goalDate) ?? '?'}`}
+            : `완독 목표일: ${fmtDate(book.goalDate) ?? '?'}`}
         </Text>
       </View>
 
