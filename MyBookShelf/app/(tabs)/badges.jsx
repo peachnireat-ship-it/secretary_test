@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { getBadgesWithStatus } from '../../database/badges';
+import { getBadgesWithStatus, checkAndUnlockBadges } from '../../database/badges';
 
 function BadgeCard({ badge }) {
   const pct = Math.min(100, Math.round((badge.progress.current / badge.progress.max) * 100));
@@ -51,6 +51,7 @@ export default function BadgesScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      checkAndUnlockBadges();
       setBadges(getBadgesWithStatus());
     }, [])
   );
