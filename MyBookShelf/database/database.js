@@ -340,6 +340,22 @@ export const getStats = () => {
   };
 };
 
+export const getMonthlyReadingStats = () => {
+  const now = new Date();
+  const result = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+    const row = db.getFirstSync(
+      `SELECT COUNT(*) as count FROM books WHERE status = 'completed' AND endDate >= ? AND endDate <= ?`,
+      [start, end]
+    );
+    result.push({ label: `${d.getMonth() + 1}월`, count: row?.count ?? 0 });
+  }
+  return result;
+};
+
 export const getWeeklyProgress = () => {
   const now = new Date();
   const day = now.getDay();
