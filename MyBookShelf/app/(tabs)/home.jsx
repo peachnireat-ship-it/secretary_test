@@ -3,7 +3,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent } from '../../database/database';
-import { getBadgesWithStatus, checkAndUnlockBadges } from '../../database/badges';
+import { checkAndUnlockBadges } from '../../database/badges';
 import BookCard from '../../components/BookCard';
 
 const MISSION_POOL = [
@@ -172,22 +172,6 @@ function WeeklyMissionCard({ missions, progress, claimed }) {
   );
 }
 
-function BadgeCard({ badge }) {
-  const pct = Math.min(100, Math.round((badge.progress.current / badge.progress.max) * 100));
-  return (
-    <View style={[styles.badgeCard, badge.unlocked && styles.badgeCardUnlocked]}>
-      <Text style={[styles.badgeEmoji, !badge.unlocked && styles.badgeEmojiLocked]}>{badge.emoji}</Text>
-      <Text style={[styles.badgeName, !badge.unlocked && styles.badgeNameLocked]}>{badge.name}</Text>
-      <Text style={styles.badgeDesc}>{badge.desc}</Text>
-      <View style={styles.badgeBarBg}>
-        <View style={[styles.badgeBarFill, { width: `${pct}%` }, badge.unlocked && styles.badgeBarFillDone]} />
-      </View>
-      <Text style={styles.badgeProgressText}>
-        {badge.unlocked ? '✓ 달성!' : `${badge.progress.current} / ${badge.progress.max}`}
-      </Text>
-    </View>
-  );
-}
 
 function StatCard({ icon, label, value, color }) {
   return (
@@ -213,8 +197,6 @@ export default function HomeScreen() {
   const [claimedMissions, setClaimedMissions] = useState([]);
   const [schoolLevel, setSchoolLevel] = useState('');
   const [doubleXpEvent, setDoubleXpEvent] = useState(null);
-  const [activeTab, setActiveTab] = useState('home');
-  const [badges, setBadges] = useState([]);
   const [newBadges, setNewBadges] = useState([]);
   const toastAnim = useRef(new Animated.Value(0)).current;
 
@@ -257,7 +239,6 @@ export default function HomeScreen() {
       setDoubleXpEvent(getWeeklyDoubleXpEvent());
       const unlocked = checkAndUnlockBadges();
       if (unlocked.length > 0) setNewBadges(unlocked);
-      setBadges(getBadgesWithStatus());
     }, [])
   );
 
@@ -288,93 +269,63 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 	
-      <View style={styles.tabSelector}>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'home' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('home')}
-        >
-          <Text style={[styles.tabBtnText, activeTab === 'home' && styles.tabBtnTextActive]}>홈</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'badge' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('badge')}
-        >
-          <Text style={[styles.tabBtnText, activeTab === 'badge' && styles.tabBtnTextActive]}>뱃지</Text>
-        </TouchableOpacity>
+      <DoubleXpBanner event={doubleXpEvent} />
+      <EncouragementBanner level={schoolLevel} />
+      <TouchableOpacity style={styles.addButton} onPress={() => router.push('/add-book')}>
+        <Ionicons name="add-circle-outline" size={10} color="#fff" />
+        <Text style={styles.addButtonText}>책 추가하기</Text>
+      </TouchableOpacity>
+
+      <View style={styles.statsRow}>
+        <StatCard icon="book-outline" label="전체" value={stats.total} color="#6750A4" />
+        <StatCard icon="checkmark-circle-outline" label="완독" value={stats.completed} color="#4CAF50" />
+        <StatCard icon="reader-outline" label="읽는 중" value={stats.reading} color="#2196F3" />
+        <StatCard icon="bookmark-outline" label="읽고 싶음" value={stats.want} color="#FF9800" />
       </View>
 
-      {activeTab === 'home' ? (
-        <>
-          <DoubleXpBanner event={doubleXpEvent} />
-          <EncouragementBanner level={schoolLevel} />
-          <TouchableOpacity style={styles.addButton} onPress={() => router.push('/add-book')}>
-            <Ionicons name="add-circle-outline" size={10} color="#fff" />
-            <Text style={styles.addButtonText}>책 추가하기</Text>
-          </TouchableOpacity>
+      <WeeklyMissionCard missions={weeklyMissions} progress={weeklyProgress} claimed={claimedMissions} />
 
-          <View style={styles.statsRow}>
-            <StatCard icon="book-outline" label="전체" value={stats.total} color="#6750A4" />
-            <StatCard icon="checkmark-circle-outline" label="완독" value={stats.completed} color="#4CAF50" />
-            <StatCard icon="reader-outline" label="읽는 중" value={stats.reading} color="#2196F3" />
-            <StatCard icon="bookmark-outline" label="읽고 싶음" value={stats.want} color="#FF9800" />
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>읽는 중인 책</Text>
+        {readingBooks.length > 0 ? (
+          readingBooks.map((book) => (
+            <BookCard key={book.id} book={book} onPress={() => router.push(`/book/${book.id}`)} />
+          ))
+        ) : (
+          <View style={styles.emptyBox}>
+            <Ionicons name="book-outline" size={36} color="#C4C4C4" />
+            <Text style={styles.emptyText}>읽는 중인 책이 없습니다</Text>
           </View>
+        )}
+      </View>
 
-          <WeeklyMissionCard missions={weeklyMissions} progress={weeklyProgress} claimed={claimedMissions} />
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>읽고 싶은 책</Text>
+        {wishlistBooks.length > 0 ? (
+          wishlistBooks.map((book) => (
+            <BookCard key={book.id} book={book} onPress={() => router.push(`/book/${book.id}`)} />
+          ))
+        ) : (
+          <View style={styles.emptyBox}>
+            <Ionicons name="bookmark-outline" size={36} color="#C4C4C4" />
+            <Text style={styles.emptyText}>위시리스트가 비어 있습니다</Text>
+          </View>
+        )}
+      </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>읽는 중인 책</Text>
-            {readingBooks.length > 0 ? (
-              readingBooks.map((book) => (
-                <BookCard key={book.id} book={book} onPress={() => router.push(`/book/${book.id}`)} />
-              ))
-            ) : (
-              <View style={styles.emptyBox}>
-                <Ionicons name="book-outline" size={36} color="#C4C4C4" />
-                <Text style={styles.emptyText}>읽는 중인 책이 없습니다</Text>
-              </View>
-            )}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>완독한 책</Text>
+        {completedBooks.length > 0 ? (
+          completedBooks.map((book) => (
+            <BookCard key={book.id} book={book} onPress={() => router.push(`/book/${book.id}`)} />
+          ))
+        ) : (
+          <View style={styles.emptyBox}>
+            <Ionicons name="checkmark-circle-outline" size={36} color="#C4C4C4" />
+            <Text style={styles.emptyText}>완독한 책이 없습니다</Text>
           </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>읽고 싶은 책</Text>
-            {wishlistBooks.length > 0 ? (
-              wishlistBooks.map((book) => (
-                <BookCard key={book.id} book={book} onPress={() => router.push(`/book/${book.id}`)} />
-              ))
-            ) : (
-              <View style={styles.emptyBox}>
-                <Ionicons name="bookmark-outline" size={36} color="#C4C4C4" />
-                <Text style={styles.emptyText}>위시리스트가 비어 있습니다</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>완독한 책</Text>
-            {completedBooks.length > 0 ? (
-              completedBooks.map((book) => (
-                <BookCard key={book.id} book={book} onPress={() => router.push(`/book/${book.id}`)} />
-              ))
-            ) : (
-              <View style={styles.emptyBox}>
-                <Ionicons name="checkmark-circle-outline" size={36} color="#C4C4C4" />
-                <Text style={styles.emptyText}>완독한 책이 없습니다</Text>
-              </View>
-            )}
-          </View>
-        </>
-      ) : (
-        <View style={styles.badgeSection}>
-          <Text style={styles.sectionTitle}>
-            🏅 나의 뱃지 ({badges.filter(b => b.unlocked).length}/{badges.length})
-          </Text>
-          <View style={styles.badgeGrid}>
-            {badges.map((badge) => (
-              <BadgeCard key={badge.id} badge={badge} />
-            ))}
-          </View>
-        </View>
-      )}
+        )}
+      </View>
     </ScrollView>
     {newBadges.length > 0 && (
       <Animated.View style={[styles.badgeToast, {
@@ -660,101 +611,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9E9E9E',
     marginTop: 2,
-  },
-  tabSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#EDE7F6',
-    borderRadius: 10,
-    padding: 3,
-    marginBottom: 16,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  tabBtnActive: {
-    backgroundColor: '#6750A4',
-  },
-  tabBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6750A4',
-  },
-  tabBtnTextActive: {
-    color: '#fff',
-  },
-  badgeSection: {
-    marginBottom: 24,
-  },
-  badgeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  badgeCard: {
-    width: '47%',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-  },
-  badgeCardUnlocked: {
-    borderColor: '#6750A4',
-    backgroundColor: '#F3EFFE',
-  },
-  badgeEmoji: {
-    fontSize: 32,
-    marginBottom: 6,
-  },
-  badgeEmojiLocked: {
-    opacity: 0.35,
-  },
-  badgeName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1C1B1F',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  badgeNameLocked: {
-    color: '#9E9E9E',
-  },
-  badgeDesc: {
-    fontSize: 11,
-    color: '#9E9E9E',
-    textAlign: 'center',
-    marginBottom: 8,
-    lineHeight: 15,
-  },
-  badgeBarBg: {
-    width: '100%',
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  badgeBarFill: {
-    height: '100%',
-    backgroundColor: '#9E9E9E',
-    borderRadius: 2,
-  },
-  badgeBarFillDone: {
-    backgroundColor: '#6750A4',
-  },
-  badgeProgressText: {
-    fontSize: 10,
-    color: '#9E9E9E',
-    fontWeight: '600',
   },
   badgeToast: {
     position: 'absolute',
