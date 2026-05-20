@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { getFiveStarBooks } from '../../database/database';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const SHELF_PADDING = 16;
+const SHELF_PADDING = 34; // bookcase marginHorizontal(12) + CASE_THICKNESS(20) + shelfRow paddingHorizontal(2)
 const BOOK_GAP = 5;
 const BOOKS_PER_SHELF = 4;
 const BOOK_WIDTH = Math.floor((SCREEN_WIDTH - SHELF_PADDING * 2 - BOOK_GAP * (BOOKS_PER_SHELF - 1)) / BOOKS_PER_SHELF);
