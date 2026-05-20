@@ -43,9 +43,6 @@ const HEIGHT_VARIANTS = [0, 8, 4, 12, 2, 7, 1, 10, 5, 3];
 function BookSpine({ book, index, onPress }) {
   const colors = bookColor(index);
   const bookH = BOOK_HEIGHT - HEIGHT_VARIANTS[index % HEIGHT_VARIANTS.length];
-  // 회전 텍스트 레이아웃: 가로↔세로 교환하여 척추 높이 전체를 제목 길이로 활용
-  const textW = BOOK_WIDTH - BINDING_WIDTH - PAGE_EDGE_WIDTH;
-  const textH = bookH - 17; // 금색 밴드(4+4) + 별점 행(9)
   return (
     <TouchableOpacity
       style={[styles.bookSpine, { width: BOOK_WIDTH, height: bookH, backgroundColor: colors.bg }]}
@@ -63,26 +60,14 @@ function BookSpine({ book, index, onPress }) {
       <View style={styles.spineCenter}>
         <View style={[styles.goldBand, { backgroundColor: colors.accent }]} />
         <View style={styles.spineTitleWrap}>
-          <View
-            style={[
-              styles.rotatedLabel,
-              {
-                width: textH,
-                height: textW,
-                left: -(textH - textW) / 2,
-                top: (textH - textW) / 2,
-              },
-            ]}
-          >
-            <Text style={[styles.spineTitle, { color: colors.fg }]} numberOfLines={2}>
-              {book.title}
+          <Text style={[styles.spineTitle, { color: colors.fg }]} numberOfLines={5}>
+            {book.title}
+          </Text>
+          {book.author ? (
+            <Text style={[styles.spineAuthor, { color: colors.fg }]} numberOfLines={2}>
+              {book.author}
             </Text>
-            {book.author ? (
-              <Text style={[styles.spineAuthor, { color: colors.fg }]} numberOfLines={1}>
-                {book.author}
-              </Text>
-            ) : null}
-          </View>
+          ) : null}
         </View>
         <View style={styles.spineStarRow}>
           {[1, 2, 3, 4, 5].map((s) => (
@@ -412,27 +397,24 @@ const styles = StyleSheet.create({
   spineTitleWrap: {
     flex: 1,
     overflow: 'hidden',
-  },
-  rotatedLabel: {
-    position: 'absolute',
-    transform: [{ rotate: '-90deg' }],
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
   },
   spineTitle: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 14,
-    letterSpacing: 0.3,
+    lineHeight: 12,
+    letterSpacing: 0,
   },
   spineAuthor: {
-    fontSize: 8,
+    fontSize: 7,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 3,
     opacity: 0.72,
-    lineHeight: 11,
+    lineHeight: 10,
   },
   spineStarRow: {
     flexDirection: 'row',
