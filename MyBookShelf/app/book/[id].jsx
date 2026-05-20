@@ -290,10 +290,10 @@ export default function BookDetailScreen() {
         <Text style={styles.sectionLabel}>별점</Text>
         <StarRating
           rating={rating}
-          onRate={book.status === 'completed' || effectiveProgress >= 50 ? setRating : null}
+          onRate={book.status === 'completed' || effectiveProgress >= 50 || rating > 0 ? setRating : null}
           size={32}
         />
-        {book.status !== 'completed' && effectiveProgress < 50 && (
+        {book.status !== 'completed' && effectiveProgress < 50 && rating === 0 && (
           <Text style={styles.ratingHint}>진척률 50% 이상부터 별점을 남길 수 있습니다.</Text>
         )}
 
