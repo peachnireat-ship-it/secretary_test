@@ -7,7 +7,7 @@ export default function StarRating({ rating, onRate, size = 20 }) {
       {[1, 2, 3, 4, 5].map((star) => (
         <TouchableOpacity
           key={star}
-          onPress={() => onRate && onRate(star)}
+          onPress={() => onRate && onRate(star === rating ? 0 : star)}
           disabled={!onRate}
           activeOpacity={0.7}
         >
