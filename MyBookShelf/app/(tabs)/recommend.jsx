@@ -313,8 +313,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#E8E0F0',
   },
   chipActive:    { backgroundColor: '#6750A4', borderColor: '#6750A4' },
-  chipText:      { fontSize: 13, color: '#49454F' },
-  chipTextActive:{ fontSize: 13, color: '#fff', fontWeight: 'bold' },
+  chipText:      { fontSize: 13, color: '#49454F', lineHeight: 20, includeFontPadding: false },
+  chipTextActive:{ fontSize: 13, color: '#fff', fontWeight: 'bold', lineHeight: 20, includeFontPadding: false },
 
   center:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   loadingText: { fontSize: 14, color: '#9E9E9E' },
