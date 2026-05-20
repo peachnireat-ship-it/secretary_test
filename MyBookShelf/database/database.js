@@ -216,11 +216,13 @@ export const addXp = (amount) => {
   return getUserStats();
 };
 
+const STATUS_ORDER = "CASE status WHEN 'want_to_read' THEN 1 WHEN 'reading' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END";
+
 export const getAllBooks = () =>
-  db.getAllSync('SELECT * FROM books ORDER BY createdAt DESC');
+  db.getAllSync(`SELECT * FROM books ORDER BY ${STATUS_ORDER}, createdAt DESC`);
 
 export const getBooksByStatus = (status) =>
-  db.getAllSync('SELECT * FROM books WHERE status = ? ORDER BY createdAt DESC', [status]);
+  db.getAllSync(`SELECT * FROM books WHERE status = ? ORDER BY ${STATUS_ORDER}, createdAt DESC`, [status]);
 
 export const getFiveStarBooks = () =>
   db.getAllSync('SELECT * FROM books WHERE rating = 5 ORDER BY endDate DESC, createdAt DESC');
