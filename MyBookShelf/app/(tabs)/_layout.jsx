@@ -1,28 +1,60 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, ScrollView,
-  StyleSheet, Pressable, SafeAreaView,
+  StyleSheet, Pressable, SafeAreaView, Switch,
 } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { getPref, setPref } from '../../database/database';
 
-const MENUS = [
-  { name: 'home',         title: '홈',          icon: 'home-outline' },
-  { name: 'index',        title: '내 서재',      icon: 'library-outline' },
-  { name: 'statistics',   title: '통계',         icon: 'bar-chart-outline' },
-  { name: 'badges',       title: '뱃지',         icon: 'medal-outline' },
-  { name: 'challenge',    title: '챌린지',       icon: 'trophy-outline' },
-  { name: 'ranking',      title: '대항전',       icon: 'podium-outline' },
-  { name: 'hall-of-fame', title: '명예의 전당',  icon: 'star-outline' },
+const ALL_TABS = [
+  { name: 'home',         title: '홈',         icon: 'home-outline',      fixed: true },
+  { name: 'index',        title: '내 서재',     icon: 'library-outline' },
+  { name: 'statistics',   title: '통계',        icon: 'bar-chart-outline' },
+  { name: 'badges',       title: '뱃지',        icon: 'medal-outline' },
+  { name: 'challenge',    title: '챌린지',      icon: 'trophy-outline' },
+  { name: 'ranking',      title: '대항전',      icon: 'podium-outline' },
+  { name: 'hall-of-fame', title: '명예의 전당', icon: 'star-outline' },
 ];
+
+const DEFAULT_VISIBLE = ['home', 'index'];
+const PREF_KEY = 'visible_tabs';
 
 export default function TabLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [visibleTabs, setVisibleTabs] = useState(DEFAULT_VISIBLE);
   const router = useRouter();
 
-  const navigate = (name) => {
+  useEffect(() => {
+    const saved = getPref(PREF_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (!parsed.includes('home')) parsed.unshift('home');
+        setVisibleTabs(parsed);
+      } catch (_) {}
+    }
+  }, []);
+
+  const closeDrawer = () => {
     setMenuOpen(false);
+    setEditMode(false);
+  };
+
+  const navigate = (name) => {
+    closeDrawer();
     router.navigate(name === 'index' ? '/(tabs)/' : `/(tabs)/${name}`);
+  };
+
+  const toggleTab = (name) => {
+    setVisibleTabs((prev) => {
+      const next = prev.includes(name)
+        ? prev.filter((n) => n !== name)
+        : [...prev, name];
+      setPref(PREF_KEY, JSON.stringify(next));
+      return next;
+    });
   };
 
   return (
@@ -41,98 +73,109 @@ export default function TabLayout() {
           ),
         }}
       >
-        <Tabs.Screen
-          name="home"
-          options={{
-            title: '홈',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: '내 서재',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="library-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="statistics"
-          options={{
-            title: '통계',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="bar-chart-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="badges"
-          options={{
-            title: '뱃지',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="medal-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="challenge"
-          options={{
-            title: '챌린지',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="trophy-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="ranking"
-          options={{
-            title: '대항전',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="podium-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="hall-of-fame"
-          options={{
-            title: '명예의 전당',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="star-outline" size={size} color={color} />
-            ),
-          }}
-        />
+        {ALL_TABS.map((tab) => (
+          <Tabs.Screen
+            key={tab.name}
+            name={tab.name}
+            options={{
+              title: tab.title,
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name={tab.icon} size={size} color={color} />
+              ),
+              tabBarButton: visibleTabs.includes(tab.name) ? undefined : () => null,
+              tabBarItemStyle: visibleTabs.includes(tab.name)
+                ? undefined
+                : { display: 'none', width: 0 },
+            }}
+          />
+        ))}
       </Tabs>
 
       <Modal
         visible={menuOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setMenuOpen(false)}
+        onRequestClose={closeDrawer}
       >
-        <Pressable style={styles.overlay} onPress={() => setMenuOpen(false)}>
+        <Pressable style={styles.overlay} onPress={closeDrawer}>
           <Pressable style={styles.drawer} onPress={() => {}}>
             <SafeAreaView style={{ flex: 1 }}>
               <View style={styles.drawerHeader}>
-                <Text style={styles.drawerTitle}>전체 메뉴</Text>
-                <TouchableOpacity onPress={() => setMenuOpen(false)}>
-                  <Ionicons name="close" size={24} color="#333" />
-                </TouchableOpacity>
-              </View>
-              <ScrollView>
-                {MENUS.map((menu) => (
+                <Text style={styles.drawerTitle}>
+                  {editMode ? '탭 메뉴 편집' : '전체 메뉴'}
+                </Text>
+                <View style={styles.drawerHeaderActions}>
                   <TouchableOpacity
-                    key={menu.name}
-                    style={styles.menuItem}
-                    onPress={() => navigate(menu.name)}
+                    onPress={() => setEditMode((v) => !v)}
+                    style={styles.editToggleBtn}
                   >
-                    <Ionicons name={menu.icon} size={22} color="#6750A4" style={styles.menuIcon} />
-                    <Text style={styles.menuText}>{menu.title}</Text>
+                    <Ionicons
+                      name={editMode ? 'checkmark-done-outline' : 'settings-outline'}
+                      size={20}
+                      color={editMode ? '#6750A4' : '#888'}
+                    />
+                    <Text style={[styles.editToggleText, editMode && styles.editToggleActive]}>
+                      {editMode ? '완료' : '탭 편집'}
+                    </Text>
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
+                  <TouchableOpacity onPress={closeDrawer} style={styles.closeBtn}>
+                    <Ionicons name="close" size={24} color="#333" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {editMode ? (
+                <>
+                  <Text style={styles.editHint}>탭 바에 표시할 메뉴를 선택하세요.</Text>
+                  <ScrollView>
+                    {ALL_TABS.map((tab) => (
+                      <View key={tab.name} style={styles.editItem}>
+                        <Ionicons
+                          name={tab.icon}
+                          size={22}
+                          color="#6750A4"
+                          style={styles.menuIcon}
+                        />
+                        <Text style={styles.menuText}>{tab.title}</Text>
+                        {tab.fixed ? (
+                          <View style={styles.lockBadge}>
+                            <Ionicons name="lock-closed-outline" size={14} color="#999" />
+                            <Text style={styles.lockText}>고정</Text>
+                          </View>
+                        ) : (
+                          <Switch
+                            value={visibleTabs.includes(tab.name)}
+                            onValueChange={() => toggleTab(tab.name)}
+                            thumbColor={visibleTabs.includes(tab.name) ? '#6750A4' : '#ccc'}
+                            trackColor={{ false: '#e0e0e0', true: '#D0BCFF' }}
+                          />
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              ) : (
+                <ScrollView>
+                  {ALL_TABS.map((menu) => (
+                    <TouchableOpacity
+                      key={menu.name}
+                      style={styles.menuItem}
+                      onPress={() => navigate(menu.name)}
+                    >
+                      <Ionicons
+                        name={menu.icon}
+                        size={22}
+                        color="#6750A4"
+                        style={styles.menuIcon}
+                      />
+                      <Text style={styles.menuText}>{menu.title}</Text>
+                      {visibleTabs.includes(menu.name) && (
+                        <Ionicons name="radio-button-on" size={14} color="#6750A4" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
             </SafeAreaView>
           </Pressable>
         </Pressable>
@@ -152,7 +195,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   drawer: {
-    width: '50%',
+    width: '60%',
     backgroundColor: '#fff',
     paddingTop: 48,
     paddingHorizontal: 20,
@@ -166,8 +209,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-    paddingBottom: 16,
+    marginBottom: 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#E8E0F0',
   },
@@ -176,10 +219,43 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#6750A4',
   },
+  drawerHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  editToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  editToggleText: {
+    fontSize: 12,
+    color: '#888',
+  },
+  editToggleActive: {
+    color: '#6750A4',
+    fontWeight: 'bold',
+  },
+  closeBtn: {
+    padding: 2,
+  },
+  editHint: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 10,
+  },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3EEF8',
+  },
+  editItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
     borderBottomWidth: 1,
     borderBottomColor: '#F3EEF8',
   },
@@ -189,5 +265,15 @@ const styles = StyleSheet.create({
   menuText: {
     fontSize: 15,
     color: '#333',
+    flex: 1,
+  },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  lockText: {
+    fontSize: 12,
+    color: '#999',
   },
 });

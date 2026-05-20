@@ -103,6 +103,25 @@ try {
   db.execSync(`ALTER TABLE completed_missions ADD COLUMN xp INTEGER DEFAULT 0`);
 } catch (_) {}
 
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS user_prefs (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+`);
+
+export function getPref(key, defaultValue = null) {
+  const row = db.getFirstSync('SELECT value FROM user_prefs WHERE key = ?', [key]);
+  return row ? row.value : defaultValue;
+}
+
+export function setPref(key, value) {
+  db.runSync(
+    'INSERT OR REPLACE INTO user_prefs (key, value) VALUES (?, ?)',
+    [key, String(value)],
+  );
+}
+
 export function getWeekKey() {
   const d = new Date();
   const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -202,6 +221,9 @@ export const getAllBooks = () =>
 
 export const getBooksByStatus = (status) =>
   db.getAllSync('SELECT * FROM books WHERE status = ? ORDER BY createdAt DESC', [status]);
+
+export const getFiveStarBooks = () =>
+  db.getAllSync('SELECT * FROM books WHERE rating = 5 ORDER BY endDate DESC, createdAt DESC');
 
 export const getBookById = (id) =>
   db.getFirstSync('SELECT * FROM books WHERE id = ?', [id]);
