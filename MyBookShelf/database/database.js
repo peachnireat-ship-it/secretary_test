@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { emitXpGain } from './xpEvents';
 
 const db = SQLite.openDatabaseSync('mybookshelf.db');
 
@@ -192,6 +193,7 @@ export const addXp = (amount) => {
   const row = db.getFirstSync('SELECT xp FROM user_stats WHERE id = 1');
   const newLevel = calcLevel(row?.xp ?? 0);
   db.runSync('UPDATE user_stats SET level = ? WHERE id = 1', [newLevel]);
+  if (amount > 0) emitXpGain(amount);
   return getUserStats();
 };
 
