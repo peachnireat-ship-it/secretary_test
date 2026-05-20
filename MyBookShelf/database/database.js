@@ -496,3 +496,61 @@ export const getWeeklyScore = () => {
     missionXp
   );
 };
+
+export const getGenreCompletedStats = () =>
+  db.getAllSync(
+    `SELECT COALESCE(NULLIF(genre, ''), '기타') as label, COUNT(*) as count
+     FROM books WHERE status = 'completed'
+     GROUP BY COALESCE(NULLIF(genre, ''), '기타')
+     ORDER BY count DESC`
+  );
+
+export const getDayOfWeekStats = () => {
+  const books = db.getAllSync(
+    `SELECT checkins FROM books WHERE checkins IS NOT NULL AND checkins != '[]'`
+  );
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  books.forEach(b => {
+    try {
+      JSON.parse(b.checkins || '[]').forEach(ts => {
+        counts[new Date(ts).getDay()]++;
+      });
+    } catch (_) {}
+  });
+  return ['월', '화', '수', '목', '금', '토', '일'].map((label, i) => ({
+    label,
+    count: counts[(i + 1) % 7],
+  }));
+};
+
+export const getRatingDistribution = () => {
+  const rows = db.getAllSync(
+    `SELECT ROUND(rating) as star, COUNT(*) as count
+     FROM books WHERE status = 'completed' AND rating > 0
+     GROUP BY ROUND(rating) ORDER BY star`
+  );
+  const map = {};
+  rows.forEach(r => { map[r.star] = r.count; });
+  return [1, 2, 3, 4, 5].map(s => ({ label: `${s}점`, count: map[s] || 0 }));
+};
+
+export const getCompletionTimeStats = () => {
+  const rows = db.getAllSync(
+    `SELECT startDate, endDate FROM books
+     WHERE status = 'completed' AND startDate IS NOT NULL AND endDate IS NOT NULL AND endDate > startDate`
+  );
+  const buckets = [
+    { label: '~1주', max: 7 },
+    { label: '~2주', max: 14 },
+    { label: '~1달', max: 30 },
+    { label: '~3달', max: 90 },
+    { label: '3달+', max: Infinity },
+  ];
+  const counts = new Array(buckets.length).fill(0);
+  rows.forEach(r => {
+    const days = Math.round((r.endDate - r.startDate) / 86400000);
+    const idx = buckets.findIndex(b => days <= b.max);
+    if (idx >= 0) counts[idx]++;
+  });
+  return buckets.map((b, i) => ({ label: b.label, count: counts[i] }));
+};

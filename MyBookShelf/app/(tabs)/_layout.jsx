@@ -14,7 +14,8 @@ const ALL_TABS = [
   { name: 'badges',       title: '뱃지',        icon: 'medal-outline' },
   { name: 'challenge',    title: '챌린지',      icon: 'trophy-outline' },
   { name: 'ranking',      title: '대항전',      icon: 'podium-outline' },
-  { name: 'hall-of-fame', title: '명예의 전당', icon: 'star-outline' },
+  { name: 'hall-of-fame',     title: '명예의 전당', icon: 'star-outline' },
+  { name: 'reading-pattern', title: '패턴 분석',   icon: 'analytics-outline' },
 ];
 
 const DEFAULT_VISIBLE = ['home', 'index'];
