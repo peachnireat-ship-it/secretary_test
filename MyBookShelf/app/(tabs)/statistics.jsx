@@ -44,8 +44,8 @@ function MonthlyLineChart({ data }) {
   const plotW = Math.max(chartWidth - PAD_L - PAD_R, 0);
   const plotH = CHART_H - PAD_T - PAD_B;
 
-  const maxVal = Math.max(...data.map(d => d.count), 1);
-  const gridVals = [...new Set([0, Math.round(maxVal / 2), maxVal])];
+  const maxVal = Math.max(...data.map(d => d.count), 10);
+  const gridVals = Array.from({ length: maxVal + 1 }, (_, i) => i);
 
   const pts = data.map((d, i) => ({
     x: PAD_L + (i / (data.length - 1)) * plotW,
