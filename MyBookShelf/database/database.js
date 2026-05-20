@@ -558,7 +558,7 @@ export const getDayOfWeekStats = () => {
 export const getRatingDistribution = () => {
   const rows = db.getAllSync(
     `SELECT ROUND(rating) as star, COUNT(*) as count
-     FROM books WHERE status = 'completed' AND rating > 0
+     FROM books WHERE rating > 0
      GROUP BY ROUND(rating) ORDER BY star`
   );
   const map = {};
