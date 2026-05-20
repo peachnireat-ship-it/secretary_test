@@ -7,78 +7,84 @@ import { getFiveStarBooks } from '../../database/database';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SHELF_PADDING = 16;
-const BOOK_GAP = 6;
+const BOOK_GAP = 5;
 const BOOKS_PER_SHELF = 4;
 const BOOK_WIDTH = Math.floor((SCREEN_WIDTH - SHELF_PADDING * 2 - BOOK_GAP * (BOOKS_PER_SHELF - 1)) / BOOKS_PER_SHELF);
-const BOOK_HEIGHT = Math.round(BOOK_WIDTH * 1.55);
+const BOOK_HEIGHT = Math.round(BOOK_WIDTH * 1.65);
 
+// 클래식 하드커버 배색 — 어두운 진한 색 + 금색 악센트
 const SPINE_COLORS = [
-  ['#6750A4', '#fff'],
-  ['#B5838D', '#fff'],
-  ['#2D6A4F', '#fff'],
-  ['#1565C0', '#fff'],
-  ['#BF6900', '#fff'],
-  ['#6D4C41', '#fff'],
-  ['#37474F', '#fff'],
-  ['#AD1457', '#fff'],
-  ['#283593', '#fff'],
-  ['#558B2F', '#fff'],
+  { bg: '#1A3A5C', fg: '#F5E6C8', binding: '#0F2238', accent: '#C9A84C' },
+  { bg: '#6B1E2A', fg: '#F5E6C8', binding: '#4A1018', accent: '#D4A854' },
+  { bg: '#1E4A20', fg: '#F5E6C8', binding: '#102812', accent: '#B8A860' },
+  { bg: '#4A2C0E', fg: '#F5E6C8', binding: '#2E1A08', accent: '#C8A040' },
+  { bg: '#2A1A4A', fg: '#F5E6C8', binding: '#1A0E2E', accent: '#B090D0' },
+  { bg: '#1A3A2C', fg: '#F5E6C8', binding: '#0E221A', accent: '#90C8A0' },
+  { bg: '#4A1A10', fg: '#F5E6C8', binding: '#2E0E08', accent: '#D4A854' },
+  { bg: '#0E2A3A', fg: '#F5E6C8', binding: '#081820', accent: '#60A8C8' },
+  { bg: '#3A2A1A', fg: '#F5E6C8', binding: '#221A10', accent: '#C8A840' },
+  { bg: '#1A2A3A', fg: '#F5E6C8', binding: '#0E1A24', accent: '#C8B870' },
 ];
 
 function bookColor(index) {
   return SPINE_COLORS[index % SPINE_COLORS.length];
 }
 
+function lighten(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, ((n >> 16) & 0xff) + 60);
+  const g = Math.min(255, ((n >> 8) & 0xff) + 60);
+  const b = Math.min(255, (n & 0xff) + 60);
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+const HEIGHT_VARIANTS = [0, 8, 4, 12, 2, 7, 1, 10, 5, 3];
+
 function BookSpine({ book, index, onPress }) {
-  const [bg, fg] = bookColor(index);
+  const colors = bookColor(index);
   const bookH = BOOK_HEIGHT - HEIGHT_VARIANTS[index % HEIGHT_VARIANTS.length];
   return (
     <TouchableOpacity
-      style={[styles.bookSpine, { width: BOOK_WIDTH, height: bookH, backgroundColor: bg }]}
+      style={[styles.bookSpine, { width: BOOK_WIDTH, height: bookH, backgroundColor: colors.bg }]}
       onPress={onPress}
       activeOpacity={0.75}
     >
-      <View style={[styles.spineBinding, { backgroundColor: darken(bg) }]} />
-      <View style={styles.spineTitleWrap}>
-        <Text style={[styles.spineTitle, { color: fg }]} numberOfLines={4}>
-          {book.title}
-        </Text>
-        {book.author ? (
-          <Text style={[styles.spineAuthor, { color: fg }]} numberOfLines={1}>
-            {book.author}
+      {/* 클로스 바인딩 — 왼쪽 가죽/천 재질 띠 */}
+      <View style={[styles.spineBinding, { backgroundColor: colors.binding }]}>
+        <View style={styles.bindingRib} />
+        <View style={styles.bindingRib} />
+        <View style={styles.bindingRib} />
+      </View>
+
+      {/* 척추 본문 — 금색 밴드 + 제목/저자 + 별점 */}
+      <View style={styles.spineCenter}>
+        <View style={[styles.goldBand, { backgroundColor: colors.accent }]} />
+        <View style={styles.spineTitleWrap}>
+          <Text style={[styles.spineTitle, { color: colors.fg }]} numberOfLines={5}>
+            {book.title}
           </Text>
-        ) : null}
+          {book.author ? (
+            <Text style={[styles.spineAuthor, { color: colors.fg }]} numberOfLines={1}>
+              {book.author}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.spineStarRow}>
+          {[1, 2, 3, 4, 5].map((s) => (
+            <Ionicons key={s} name="star" size={5} color="#FFD700" />
+          ))}
+        </View>
+        <View style={[styles.goldBand, { backgroundColor: colors.accent }]} />
       </View>
+
+      {/* 페이지 단면 — 오른쪽 크림색 */}
       <View style={styles.spinePageEdge} />
-      <View style={[styles.spineTopEdge, { backgroundColor: lighten(bg) }]} />
-      <View style={[styles.spineDecoBandTop, { backgroundColor: darken(bg) }]} />
-      <View style={[styles.spineDecoBandBottom, { backgroundColor: darken(bg) }]} />
-      <View style={styles.spineStars}>
-        {[1, 2, 3, 4, 5].map((s) => (
-          <Ionicons key={s} name="star" size={6} color="#FFD700" />
-        ))}
-      </View>
+
+      {/* 상단 광택 라인 */}
+      <View style={[styles.spineTopEdge, { backgroundColor: lighten(colors.bg) }]} />
     </TouchableOpacity>
   );
 }
-
-function darken(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = Math.max(0, ((n >> 16) & 0xff) - 40);
-  const g = Math.max(0, ((n >> 8) & 0xff) - 40);
-  const b = Math.max(0, (n & 0xff) - 40);
-  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
-}
-
-function lighten(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = Math.min(255, ((n >> 16) & 0xff) + 50);
-  const g = Math.min(255, ((n >> 8) & 0xff) + 50);
-  const b = Math.min(255, (n & 0xff) + 50);
-  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
-}
-
-const HEIGHT_VARIANTS = [0, 7, 3, 9, 2, 6, 1, 8];
 
 function Shelf({ books, startIndex, onPressBook }) {
   const fillers = BOOKS_PER_SHELF - books.length;
@@ -97,8 +103,15 @@ function Shelf({ books, startIndex, onPressBook }) {
           <View key={`filler-${i}`} style={[styles.fillerBook, { width: BOOK_WIDTH, height: BOOK_HEIGHT }]} />
         ))}
       </View>
-      <View style={styles.shelfBoardHighlight} />
-      <View style={styles.shelfBoard} />
+      {/* 선반 판자 앞면 하이라이트 */}
+      <View style={styles.shelfEdge} />
+      {/* 선반 판자 본체 (나무 결) */}
+      <View style={styles.shelfBoard}>
+        <View style={styles.shelfGrainLine} />
+        <View style={[styles.shelfGrainLine, { top: 8 }]} />
+        <View style={[styles.shelfGrainLine, { top: 14, opacity: 0.06 }]} />
+      </View>
+      {/* 선반 아래 그림자 */}
       <View style={styles.shelfShadow} />
     </View>
   );
@@ -122,7 +135,7 @@ export default function HallOfFameScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="star" size={22} color="#FFD700" />
+        <Ionicons name="star" size={22} color="#C9A84C" />
         <Text style={styles.headerTitle}>명예의 전당</Text>
         <View style={styles.headerBadge}>
           <Text style={styles.headerBadgeText}>{books.length}</Text>
@@ -143,9 +156,16 @@ export default function HallOfFameScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.bookcase}>
+            {/* 나무 결 세로 선 */}
+            <View style={styles.woodGrain1} />
+            <View style={styles.woodGrain2} />
+            <View style={styles.woodGrain3} />
+            {/* 프레임 — 상/좌/우/하 패널 */}
             <View style={styles.bookcaseTop} />
             <View style={styles.bookcaseLeft} />
             <View style={styles.bookcaseRight} />
+            {/* 뒷벽 — 책 뒤로 보이는 안쪽 판 */}
+            <View style={styles.bookcaseBackPanel} />
             <View style={styles.bookcaseInner}>
               {shelves.map((shelf, idx) => (
                 <Shelf
@@ -164,15 +184,15 @@ export default function HallOfFameScreen() {
   );
 }
 
-const CASE_THICKNESS = 14;
-const BOARD_HEIGHT = 18;
-const BINDING_WIDTH = 8;
-const PAGE_EDGE_WIDTH = 4;
+const CASE_THICKNESS = 20;
+const BOARD_HEIGHT = 20;
+const BINDING_WIDTH = 10;
+const PAGE_EDGE_WIDTH = 5;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F0E8',
+    backgroundColor: '#EEE8DC',
   },
   header: {
     flexDirection: 'row',
@@ -185,17 +205,17 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#3E2A1A',
+    color: '#2C1A0E',
     flex: 1,
   },
   headerBadge: {
-    backgroundColor: '#6750A4',
+    backgroundColor: '#5C3A1E',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 2,
   },
   headerBadgeText: {
-    color: '#fff',
+    color: '#F5E6C8',
     fontSize: 13,
     fontWeight: 'bold',
   },
@@ -209,17 +229,43 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 32 },
 
+  // ── 책장 (월넛 원목) ───────────────────────────────
   bookcase: {
-    marginHorizontal: 16,
-    backgroundColor: '#8B5E3C',
-    borderRadius: 6,
+    marginHorizontal: 12,
+    backgroundColor: '#7A4E28',
+    borderRadius: 4,
     padding: CASE_THICKNESS,
     paddingBottom: CASE_THICKNESS + 4,
-    elevation: 6,
-    shadowColor: '#3E2A1A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+    elevation: 12,
+    shadowColor: '#1A0800',
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.55,
+    shadowRadius: 12,
+    overflow: 'hidden',
+  },
+  woodGrain1: {
+    position: 'absolute',
+    top: 0,
+    left: '28%',
+    bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(0,0,0,0.09)',
+  },
+  woodGrain2: {
+    position: 'absolute',
+    top: 0,
+    left: '58%',
+    bottom: 0,
+    width: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
+  woodGrain3: {
+    position: 'absolute',
+    top: 0,
+    left: '80%',
+    bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
   bookcaseLeft: {
     position: 'absolute',
@@ -227,9 +273,9 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: CASE_THICKNESS,
-    backgroundColor: '#6B4423',
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 6,
+    backgroundColor: '#5C3A1E', // 그림자 쪽 — 어둡게
+    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4,
   },
   bookcaseRight: {
     position: 'absolute',
@@ -237,9 +283,9 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: CASE_THICKNESS,
-    backgroundColor: '#6B4423',
-    borderTopRightRadius: 6,
-    borderBottomRightRadius: 6,
+    backgroundColor: '#9A6040', // 빛 쪽 — 밝게
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
   },
   bookcaseTop: {
     position: 'absolute',
@@ -247,9 +293,9 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     height: CASE_THICKNESS,
-    backgroundColor: '#7A5030',
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
+    backgroundColor: '#A07050', // 상판 — 가장 밝음
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
   },
   bookcaseBottom: {
     position: 'absolute',
@@ -257,124 +303,147 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: CASE_THICKNESS + 4,
-    backgroundColor: '#6B4423',
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6,
+    backgroundColor: '#4A2810', // 하판 — 가장 어둠
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  bookcaseBackPanel: {
+    position: 'absolute',
+    left: CASE_THICKNESS,
+    right: CASE_THICKNESS,
+    top: CASE_THICKNESS,
+    bottom: CASE_THICKNESS + 4,
+    backgroundColor: '#6A3C20', // 안쪽 뒷벽
   },
   bookcaseInner: {
     gap: 0,
   },
 
+  // ── 선반 ──────────────────────────────────────────
   shelfWrapper: {
-    marginBottom: 2,
+    marginBottom: 0,
   },
   shelfRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: BOOK_GAP,
     paddingHorizontal: 2,
-    backgroundColor: '#C4956A',
     paddingTop: 10,
     paddingBottom: 0,
   },
-  shelfBoardHighlight: {
-    height: 4,
-    backgroundColor: '#B8895D',
+  shelfEdge: {
+    height: 3,
+    backgroundColor: '#C8986A', // 선반 앞면 하이라이트
   },
   shelfBoard: {
     height: BOARD_HEIGHT,
-    backgroundColor: '#9A6B44',
+    backgroundColor: '#8B5E30',
     elevation: 4,
-    shadowColor: '#3E2A1A',
+    shadowColor: '#1A0800',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.5,
     shadowRadius: 4,
+    overflow: 'hidden',
+  },
+  shelfGrainLine: {
+    position: 'absolute',
+    top: 4,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.12)',
   },
   shelfShadow: {
-    height: 6,
-    backgroundColor: '#5C3D1E',
-    opacity: 0.45,
-    marginBottom: 10,
+    height: 9,
+    backgroundColor: 'rgba(20,8,0,0.38)',
+    marginBottom: 8,
   },
 
+  // ── 책 척추 ────────────────────────────────────────
   bookSpine: {
-    borderRadius: 2,
+    borderRadius: 1,
     overflow: 'hidden',
     flexDirection: 'row',
-    elevation: 5,
+    elevation: 6,
     shadowColor: '#000',
-    shadowOffset: { width: -2, height: 3 },
-    shadowOpacity: 0.45,
-    shadowRadius: 3,
+    shadowOffset: { width: -3, height: 5 },
+    shadowOpacity: 0.6,
+    shadowRadius: 4,
   },
+  // 왼쪽 클로스/가죽 바인딩 띠
   spineBinding: {
     width: BINDING_WIDTH,
     height: '100%',
-    opacity: 0.85,
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    paddingVertical: 18,
   },
+  bindingRib: {
+    width: 6,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 1,
+  },
+  // 중앙 — 금색 밴드 + 제목 + 별점
+  spineCenter: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  goldBand: {
+    height: 4,
+    width: '100%',
+  },
+  spineTitleWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+    paddingVertical: 4,
+  },
+  spineTitle: {
+    fontSize: 9,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 12,
+    letterSpacing: 0.3,
+  },
+  spineAuthor: {
+    fontSize: 7,
+    textAlign: 'center',
+    marginTop: 4,
+    opacity: 0.72,
+    lineHeight: 9,
+  },
+  spineStarRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 1,
+    paddingBottom: 4,
+  },
+  // 오른쪽 — 종이 단면
   spinePageEdge: {
     width: PAGE_EDGE_WIDTH,
     height: '100%',
-    backgroundColor: '#EDE8DC',
+    backgroundColor: '#EDE5D0',
+    borderLeftWidth: 0.5,
+    borderLeftColor: 'rgba(0,0,0,0.18)',
   },
+  // 상단 광택 하이라이트
   spineTopEdge: {
     position: 'absolute',
     top: 0,
     left: BINDING_WIDTH,
     right: PAGE_EDGE_WIDTH,
     height: 3,
-    opacity: 0.35,
+    opacity: 0.38,
   },
-  spineDecoBandTop: {
-    position: 'absolute',
-    top: 12,
-    left: BINDING_WIDTH,
-    right: PAGE_EDGE_WIDTH,
-    height: 2,
-    opacity: 0.5,
-  },
-  spineDecoBandBottom: {
-    position: 'absolute',
-    bottom: 18,
-    left: BINDING_WIDTH,
-    right: PAGE_EDGE_WIDTH,
-    height: 2,
-    opacity: 0.5,
-  },
-  spineTitleWrap: {
-    flex: 1,
-    paddingTop: 20,
-    paddingBottom: 28,
-    paddingHorizontal: 3,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  spineTitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 13,
-  },
-  spineAuthor: {
-    fontSize: 8,
-    textAlign: 'center',
-    marginTop: 3,
-    opacity: 0.8,
-    lineHeight: 10,
-  },
-  spineStars: {
-    position: 'absolute',
-    bottom: 5,
-    left: BINDING_WIDTH,
-    right: PAGE_EDGE_WIDTH,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 1,
-  },
+
   fillerBook: {
     backgroundColor: 'transparent',
   },
 
+  // ── 빈 상태 ────────────────────────────────────────
   emptyWrap: {
     flex: 1,
     justifyContent: 'center',
