@@ -37,6 +37,12 @@ try {
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN genre TEXT DEFAULT ''`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN updatedAt INTEGER`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN goalSetAt INTEGER`);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS book_reviews (
@@ -251,9 +257,15 @@ export const insertBook = (book) => {
 };
 
 export const updateBook = (book) => {
+  const now = Date.now();
+  const current = db.getFirstSync('SELECT goalDate, goalSetAt FROM books WHERE id = ?', [book.id]);
+  const newGoalSetAt = (book.goalDate && book.goalDate !== current?.goalDate)
+    ? now
+    : (current?.goalSetAt || null);
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
-     status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?, bookType = ?, progressPct = ?, genre = ? WHERE id = ?`,
+     status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?,
+     bookType = ?, progressPct = ?, genre = ?, updatedAt = ?, goalSetAt = ? WHERE id = ?`,
     [
       book.title,
       book.author || '',
@@ -268,6 +280,8 @@ export const updateBook = (book) => {
       book.bookType || 'physical',
       book.progressPct || 0,
       book.genre || '',
+      now,
+      newGoalSetAt,
       book.id,
     ]
   );
@@ -495,6 +509,36 @@ export const getWeeklyScore = () => {
     progress.streak * 15 +
     missionXp
   );
+};
+
+export const getTimeOfDayStats = () => {
+  const buckets = [
+    { label: '새벽\n0-5시',   min: 0,  max: 5  },
+    { label: '아침\n6-9시',   min: 6,  max: 9  },
+    { label: '낮\n10-13시',  min: 10, max: 13 },
+    { label: '오후\n14-17시', min: 14, max: 17 },
+    { label: '저녁\n18-21시', min: 18, max: 21 },
+    { label: '밤\n22-23시',  min: 22, max: 23 },
+  ];
+  const counts = new Array(buckets.length).fill(0);
+
+  const addHour = (ts) => {
+    if (!ts) return;
+    const hour = new Date(ts).getHours();
+    const idx = buckets.findIndex(bk => hour >= bk.min && hour <= bk.max);
+    if (idx >= 0) counts[idx]++;
+  };
+
+  const rows = db.getAllSync(
+    `SELECT createdAt, updatedAt, goalSetAt FROM books`
+  );
+  rows.forEach(r => {
+    addHour(r.createdAt);
+    addHour(r.updatedAt);
+    addHour(r.goalSetAt);
+  });
+
+  return buckets.map((bk, i) => ({ label: bk.label, count: counts[i] }));
 };
 
 export const getPageCountDistribution = () => {

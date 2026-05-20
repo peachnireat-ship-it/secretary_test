@@ -7,13 +7,14 @@ import {
   getRatingDistribution,
   getCompletionTimeStats,
   getPageCountDistribution,
+  getTimeOfDayStats,
 } from '../../database/database';
 
 function EmptyNotice() {
   return <Text style={styles.emptyText}>데이터가 없습니다.</Text>;
 }
 
-function VertBarChart({ data, color = '#6750A4', height = 150 }) {
+function VertBarChart({ data, color = '#6750A4', height = 150, labelLines = 1 }) {
   const [chartWidth, setChartWidth] = useState(0);
   if (!data || data.every(d => d.count === 0)) return <EmptyNotice />;
 
@@ -45,7 +46,7 @@ function VertBarChart({ data, color = '#6750A4', height = 150 }) {
                     }}
                   />
                 </View>
-                <Text style={styles.barLabel} numberOfLines={1}>{d.label}</Text>
+                <Text style={styles.barLabel} numberOfLines={labelLines}>{d.label}</Text>
               </View>
             );
           })}
@@ -92,6 +93,7 @@ export default function ReadingPatternScreen() {
   const [ratingStats, setRatingStats] = useState([]);
   const [completionStats, setCompletionStats] = useState([]);
   const [pageCountStats, setPageCountStats] = useState([]);
+  const [timeOfDayStats, setTimeOfDayStats] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -100,6 +102,7 @@ export default function ReadingPatternScreen() {
       setRatingStats(getRatingDistribution());
       setCompletionStats(getCompletionTimeStats());
       setPageCountStats(getPageCountDistribution());
+      setTimeOfDayStats(getTimeOfDayStats());
     }, [])
   );
 
@@ -128,6 +131,11 @@ export default function ReadingPatternScreen() {
       <View style={[styles.card, styles.mt]}>
         <Text style={styles.cardTitle}>완독 도서 페이지 수 분포</Text>
         <VertBarChart data={pageCountStats} color="#EF5350" />
+      </View>
+
+      <View style={[styles.card, styles.mt]}>
+        <Text style={styles.cardTitle}>시간대별 독서 활동</Text>
+        <VertBarChart data={timeOfDayStats} color="#29B6F6" height={160} labelLines={2} />
       </View>
     </ScrollView>
   );
@@ -170,7 +178,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#757575',
     textAlign: 'center',
-    height: 28,
+    minHeight: 28,
     paddingTop: 2,
   },
   horzRow: {
