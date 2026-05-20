@@ -231,17 +231,19 @@ export const getBookById = (id) =>
   db.getFirstSync('SELECT * FROM books WHERE id = ?', [id]);
 
 export const insertBook = (book) => {
+  const now = Date.now();
   db.runSync(
-    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, createdAt, bookType, genre)
-     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?)`,
+    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, endDate, createdAt, bookType, genre)
+     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?, ?)`,
     [
       book.title,
       book.author || '',
       book.totalPages || 0,
       book.status || 'want_to_read',
       book.review || '',
-      book.status === 'reading' ? Date.now() : null,
-      Date.now(),
+      book.status === 'reading' ? now : null,
+      book.status === 'completed' ? now : null,
+      now,
       book.bookType || 'physical',
       book.genre || '',
     ]
@@ -375,7 +377,7 @@ export const getMonthlyReadingStats = () => {
     const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
     const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
     const row = db.getFirstSync(
-      `SELECT COUNT(*) as count FROM books WHERE status = 'completed' AND endDate >= ? AND endDate <= ?`,
+      `SELECT COUNT(*) as count FROM books WHERE status = 'completed' AND COALESCE(endDate, createdAt) >= ? AND COALESCE(endDate, createdAt) <= ?`,
       [start, end]
     );
     result.push({ label: `${d.getMonth() + 1}월`, count: row?.count ?? 0 });
