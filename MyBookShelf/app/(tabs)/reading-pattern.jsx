@@ -6,6 +6,7 @@ import {
   getDayOfWeekStats,
   getRatingDistribution,
   getCompletionTimeStats,
+  getPageCountDistribution,
 } from '../../database/database';
 
 function EmptyNotice() {
@@ -90,6 +91,7 @@ export default function ReadingPatternScreen() {
   const [dayStats, setDayStats] = useState([]);
   const [ratingStats, setRatingStats] = useState([]);
   const [completionStats, setCompletionStats] = useState([]);
+  const [pageCountStats, setPageCountStats] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -97,6 +99,7 @@ export default function ReadingPatternScreen() {
       setDayStats(getDayOfWeekStats());
       setRatingStats(getRatingDistribution());
       setCompletionStats(getCompletionTimeStats());
+      setPageCountStats(getPageCountDistribution());
     }, [])
   );
 
@@ -120,6 +123,11 @@ export default function ReadingPatternScreen() {
       <View style={[styles.card, styles.mt]}>
         <Text style={styles.cardTitle}>완독 소요 기간 분포</Text>
         <VertBarChart data={completionStats} color="#26A69A" />
+      </View>
+
+      <View style={[styles.card, styles.mt]}>
+        <Text style={styles.cardTitle}>완독 도서 페이지 수 분포</Text>
+        <VertBarChart data={pageCountStats} color="#EF5350" />
       </View>
     </ScrollView>
   );

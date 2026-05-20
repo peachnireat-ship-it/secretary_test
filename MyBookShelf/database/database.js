@@ -497,6 +497,25 @@ export const getWeeklyScore = () => {
   );
 };
 
+export const getPageCountDistribution = () => {
+  const rows = db.getAllSync(
+    `SELECT totalPages FROM books WHERE status = 'completed' AND totalPages > 0`
+  );
+  const buckets = [
+    { label: '~100p', max: 100 },
+    { label: '~200p', max: 200 },
+    { label: '~300p', max: 300 },
+    { label: '~500p', max: 500 },
+    { label: '500p+', max: Infinity },
+  ];
+  const counts = new Array(buckets.length).fill(0);
+  rows.forEach(r => {
+    const idx = buckets.findIndex(b => r.totalPages <= b.max);
+    if (idx >= 0) counts[idx]++;
+  });
+  return buckets.map((b, i) => ({ label: b.label, count: counts[i] }));
+};
+
 export const getGenreCompletedStats = () =>
   db.getAllSync(
     `SELECT COALESCE(NULLIF(genre, ''), '기타') as label, COUNT(*) as count
@@ -506,17 +525,30 @@ export const getGenreCompletedStats = () =>
   );
 
 export const getDayOfWeekStats = () => {
-  const books = db.getAllSync(
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+
+  // 체크인 기록 우선 반영
+  const checkinBooks = db.getAllSync(
     `SELECT checkins FROM books WHERE checkins IS NOT NULL AND checkins != '[]'`
   );
-  const counts = [0, 0, 0, 0, 0, 0, 0];
-  books.forEach(b => {
+  checkinBooks.forEach(b => {
     try {
       JSON.parse(b.checkins || '[]').forEach(ts => {
         counts[new Date(ts).getDay()]++;
       });
     } catch (_) {}
   });
+
+  // 체크인 없이 완독된 도서는 완독일(endDate)을 독서 활동으로 집계
+  const completedNonCheckin = db.getAllSync(
+    `SELECT endDate FROM books
+     WHERE status = 'completed' AND endDate IS NOT NULL
+       AND (checkins IS NULL OR checkins = '[]')`
+  );
+  completedNonCheckin.forEach(b => {
+    counts[new Date(b.endDate).getDay()]++;
+  });
+
   return ['월', '화', '수', '목', '금', '토', '일'].map((label, i) => ({
     label,
     count: counts[(i + 1) % 7],
@@ -536,8 +568,10 @@ export const getRatingDistribution = () => {
 
 export const getCompletionTimeStats = () => {
   const rows = db.getAllSync(
-    `SELECT startDate, endDate FROM books
-     WHERE status = 'completed' AND startDate IS NOT NULL AND endDate IS NOT NULL AND endDate > startDate`
+    `SELECT COALESCE(startDate, createdAt) AS startDate, endDate FROM books
+     WHERE status = 'completed' AND endDate IS NOT NULL
+       AND COALESCE(startDate, createdAt) IS NOT NULL
+       AND endDate > COALESCE(startDate, createdAt)`
   );
   const buckets = [
     { label: '~1주', max: 7 },
