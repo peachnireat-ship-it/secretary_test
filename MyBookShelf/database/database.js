@@ -577,12 +577,13 @@ export const getDayOfWeekStats = () => {
   };
 
   const rows = db.getAllSync(
-    `SELECT createdAt, updatedAt, goalSetAt FROM books`
+    `SELECT createdAt, updatedAt, goalSetAt, checkins FROM books`
   );
   rows.forEach(r => {
     addDay(r.createdAt);
     addDay(r.updatedAt);
     addDay(r.goalSetAt);
+    JSON.parse(r.checkins || '[]').forEach(ts => addDay(ts));
   });
 
   return ['월', '화', '수', '목', '금', '토', '일'].map((label, i) => ({
