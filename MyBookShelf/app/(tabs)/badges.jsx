@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { getBadgesWithStatus, checkAndUnlockBadges } from '../../database/badges';
+import { getBadgesWithStatus, checkAndUnlockBadges, getWeeklyCompletionBadges } from '../../database/badges';
 
 function BadgeCard({ badge }) {
   const pct = Math.min(100, Math.round((badge.progress.current / badge.progress.max) * 100));
@@ -48,27 +48,46 @@ function BadgeCard({ badge }) {
 
 export default function BadgesScreen() {
   const [badges, setBadges] = useState([]);
+  const [weeklyBadges, setWeeklyBadges] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
       checkAndUnlockBadges();
       setBadges(getBadgesWithStatus());
+      setWeeklyBadges(getWeeklyCompletionBadges());
     }, [])
   );
 
   const myBadges = badges.filter(b => b.unlocked);
+  const totalMy = myBadges.length + weeklyBadges.length;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionHeader}>🏅 나의 뱃지 ({myBadges.length})</Text>
-      {myBadges.length === 0 ? (
+      <Text style={styles.sectionHeader}>🏅 나의 뱃지 ({totalMy})</Text>
+      {totalMy === 0 ? (
         <Text style={styles.emptyText}>아직 달성한 뱃지가 없어요!</Text>
       ) : (
         <View style={styles.badgeGrid}>
+          {weeklyBadges.map((badge) => (
+            <BadgeCard key={badge.id} badge={badge} />
+          ))}
           {myBadges.map((badge) => (
             <BadgeCard key={badge.id} badge={badge} />
           ))}
         </View>
+      )}
+
+      {weeklyBadges.length > 0 && (
+        <>
+          <Text style={[styles.sectionHeader, styles.sectionHeaderGap]}>
+            🏆 주간 미션 완료 뱃지 ({weeklyBadges.length})
+          </Text>
+          <View style={styles.badgeGrid}>
+            {weeklyBadges.map((badge) => (
+              <BadgeCard key={badge.id} badge={badge} />
+            ))}
+          </View>
+        </>
       )}
 
       <Text style={[styles.sectionHeader, styles.sectionHeaderGap]}>

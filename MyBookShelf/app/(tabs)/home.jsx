@@ -3,7 +3,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent } from '../../database/database';
-import { checkAndUnlockBadges } from '../../database/badges';
+import { checkAndUnlockBadges, checkAndUnlockWeeklyAllMissionsBadge } from '../../database/badges';
 import BookCard from '../../components/BookCard';
 
 const MISSION_POOL = [
@@ -237,8 +237,10 @@ export default function HomeScreen() {
       setUserStats(getUserStats());
       setSchoolLevel(getSchoolLevel());
       setDoubleXpEvent(getWeeklyDoubleXpEvent());
+      const weeklyBadge = checkAndUnlockWeeklyAllMissionsBadge(weekKey, missions);
       const unlocked = checkAndUnlockBadges();
-      if (unlocked.length > 0) setNewBadges(unlocked);
+      const allNew = [...(weeklyBadge ? [weeklyBadge] : []), ...unlocked];
+      if (allNew.length > 0) setNewBadges(allNew);
     }, [])
   );
 

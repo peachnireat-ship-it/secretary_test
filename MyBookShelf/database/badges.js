@@ -106,6 +106,62 @@ function getBadgeProgress(badge) {
   }
 }
 
+// "2026-W21" → "5월 3주차"
+function weekKeyToLabel(weekKey) {
+  const [yearStr, weekStr] = weekKey.split('-W');
+  const year = parseInt(yearStr, 10);
+  const week = parseInt(weekStr, 10);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const monday = new Date(Date.UTC(year, 0, 4 - (jan4Day - 1) + (week - 1) * 7));
+  const month = monday.getUTCMonth() + 1;
+  const weekOfMonth = Math.ceil(monday.getUTCDate() / 7);
+  return `${month}월 ${weekOfMonth}주차`;
+}
+
+// 해당 주 미션 3개 모두 완료 시 호출 — 이미 받았으면 null, 신규 획득 시 뱃지 객체 반환
+export function checkAndUnlockWeeklyAllMissionsBadge(weekKey, missions) {
+  const badgeId = `weekly_complete_${weekKey}`;
+  const already = db.getFirstSync('SELECT id FROM user_badges WHERE badgeId = ?', [badgeId]);
+  if (already) return null;
+
+  const allClaimed = missions.every(m =>
+    !!db.getFirstSync(
+      'SELECT id FROM completed_missions WHERE missionId = ? AND weekKey = ?',
+      [m.id, weekKey]
+    )
+  );
+  if (!allClaimed) return null;
+
+  try {
+    db.runSync('INSERT INTO user_badges (badgeId, unlockedAt) VALUES (?, ?)', [badgeId, Date.now()]);
+    const label = weekKeyToLabel(weekKey);
+    return { id: badgeId, emoji: '🏆', name: `${label} 미션 왕`, desc: `${label} 주간 미션 3개를 모두 달성했습니다!`, type: 'weekly' };
+  } catch (_) {
+    return null;
+  }
+}
+
+export function getWeeklyCompletionBadges() {
+  const rows = db.getAllSync(
+    "SELECT badgeId, unlockedAt FROM user_badges WHERE badgeId LIKE 'weekly_complete_%' ORDER BY unlockedAt DESC"
+  );
+  return rows.map(row => {
+    const weekKey = row.badgeId.replace('weekly_complete_', '');
+    const label = weekKeyToLabel(weekKey);
+    return {
+      id: row.badgeId,
+      emoji: '🏆',
+      name: `${label} 미션 왕`,
+      desc: `${label} 주간 미션 3개를 모두 달성했습니다!`,
+      type: 'weekly',
+      unlocked: true,
+      unlockedAt: row.unlockedAt,
+      progress: { current: 1, max: 1 },
+    };
+  });
+}
+
 export function checkAndUnlockBadges() {
   const newlyUnlocked = [];
   for (const badge of BADGE_DEFS) {
