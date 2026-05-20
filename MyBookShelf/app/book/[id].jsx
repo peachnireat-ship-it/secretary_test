@@ -288,7 +288,14 @@ export default function BookDetailScreen() {
         </View>
 
         <Text style={styles.sectionLabel}>별점</Text>
-        <StarRating rating={rating} onRate={setRating} size={32} />
+        <StarRating
+          rating={rating}
+          onRate={book.status === 'completed' || effectiveProgress >= 50 ? setRating : null}
+          size={32}
+        />
+        {book.status !== 'completed' && effectiveProgress < 50 && (
+          <Text style={styles.ratingHint}>진척률 50% 이상부터 별점을 남길 수 있습니다.</Text>
+        )}
 
         <Text style={styles.sectionLabel}>책 형태</Text>
         <View style={styles.typeRow}>
@@ -533,6 +540,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   progressInfo: { fontSize: 13, color: '#6750A4', fontWeight: '600' },
+  ratingHint: { fontSize: 12, color: '#9E8FB2', marginTop: 6 },
   pctInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pctSuffix: { fontSize: 18, color: '#49454F', fontWeight: '600' },
   reviewItem: {
