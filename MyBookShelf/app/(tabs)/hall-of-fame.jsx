@@ -56,7 +56,7 @@ function BookSpine({ book, index, onPress }) {
         <View style={styles.bindingRib} />
       </View>
 
-      {/* 척추 본문 — 금색 밴드 + 제목/저자 + 별점 */}
+      {/* 척추 본문 — 금색 밴드 + 제목/저자 */}
       <View style={styles.spineCenter}>
         <View style={[styles.goldBand, { backgroundColor: colors.accent }]} />
         <View style={styles.spineTitleWrap}>
@@ -68,11 +68,6 @@ function BookSpine({ book, index, onPress }) {
               {book.author}
             </Text>
           ) : null}
-        </View>
-        <View style={styles.spineStarRow}>
-          {[1, 2, 3, 4, 5].map((s) => (
-            <Ionicons key={s} name="star" size={5} color="#FFD700" />
-          ))}
         </View>
         <View style={[styles.goldBand, { backgroundColor: colors.accent }]} />
       </View>
@@ -141,7 +136,7 @@ export default function HallOfFameScreen() {
           <Text style={styles.headerBadgeText}>{books.length}</Text>
         </View>
       </View>
-      <Text style={styles.headerSub}>별점 5점을 부여한 나의 인생 도서들</Text>
+      <Text style={styles.headerSub}>별점 5점에 빛나는 나의 인생책들✨</Text>
 
       {books.length === 0 ? (
         <View style={styles.emptyWrap}>
@@ -384,7 +379,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.22)',
     borderRadius: 1,
   },
-  // 중앙 — 금색 밴드 + 제목 + 별점
+  // 중앙 — 금색 밴드 + 제목
   spineCenter: {
     flex: 1,
     flexDirection: 'column',
@@ -415,12 +410,6 @@ const styles = StyleSheet.create({
     marginTop: 3,
     opacity: 0.72,
     lineHeight: 10,
-  },
-  spineStarRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 1,
-    paddingBottom: 4,
   },
   // 오른쪽 — 종이 단면
   spinePageEdge: {
