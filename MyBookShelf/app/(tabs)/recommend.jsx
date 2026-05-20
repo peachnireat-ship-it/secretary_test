@@ -171,7 +171,7 @@ export default function RecommendScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView style={styles.bookScroll} contentContainerStyle={styles.scroll}>
           {/* 오늘의 추천 (첫 번째 책) */}
           {featured && (
             <>
@@ -305,7 +305,8 @@ const styles = StyleSheet.create({
   headerSub:     { fontSize: 13, color: '#D0BCFF', marginTop: 4 },
   catHighlight:  { color: '#fff', fontWeight: 'bold' },
 
-  chipBar:     { flexGrow: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#EDE7F6' },
+  chipBar:     { flexGrow: 0, flexShrink: 0, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#EDE7F6' },
+  bookScroll:  { flex: 1 },
   chipContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 6,
