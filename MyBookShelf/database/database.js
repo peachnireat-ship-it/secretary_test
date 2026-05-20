@@ -281,11 +281,12 @@ export const trackDailyReading = (pagesRead = 0) => {
 };
 
 export const onBookCompleted = (book) => {
-  addXp(XP_REWARDS.BOOK_COMPLETE);
+  const multiplier = isDoubleXpActive() ? 2 : 1;
+  addXp(XP_REWARDS.BOOK_COMPLETE * multiplier);
   if (book.goalDate && book.endDate) {
     const endDay = new Date(book.endDate).setHours(0, 0, 0, 0);
     const goalDay = new Date(book.goalDate).setHours(0, 0, 0, 0);
-    if (endDay <= goalDay) addXp(XP_REWARDS.CHALLENGE_SUCCESS);
+    if (endDay <= goalDay) addXp(XP_REWARDS.CHALLENGE_SUCCESS * multiplier);
   }
 };
 
@@ -394,11 +395,12 @@ export const isMissionClaimed = (missionId, weekKey) =>
 
 export const claimMissionReward = (missionId, weekKey, xpAmount) => {
   try {
+    const multiplier = isDoubleXpActive() ? 2 : 1;
     db.runSync(
       `INSERT INTO completed_missions (missionId, weekKey, xp) VALUES (?, ?, ?)`,
-      [missionId, weekKey, xpAmount]
+      [missionId, weekKey, xpAmount * multiplier]
     );
-    addXp(xpAmount);
+    addXp(xpAmount * multiplier);
     return true;
   } catch (_) {
     return false;
@@ -418,7 +420,8 @@ export const insertBookReview = (bookId, content, type = 'memo') => {
     'INSERT INTO book_reviews (bookId, sequence, content, type, createdAt) VALUES (?, ?, ?, ?, ?)',
     [bookId, nextSeq, content, type, Date.now()]
   );
-  addXp(XP_REWARDS.MEMO_ADD);
+  const multiplier = isDoubleXpActive() ? 2 : 1;
+  addXp(XP_REWARDS.MEMO_ADD * multiplier);
 };
 
 export const deleteBookReview = (id) => {

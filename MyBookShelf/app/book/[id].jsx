@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats } from '../../database/database';
+import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, isDoubleXpActive } from '../../database/database';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
 import BookShareCard from '../../components/BookShareCard';
@@ -162,7 +162,9 @@ export default function BookDetailScreen() {
 
     const isCompleted = book.status === 'completed' || autoComplete;
     if (isCompleted && review.trim() && !book.review) {
-      addXp(XP_REWARDS.BOOK_REVIEW);
+      const reviewMultiplier = isDoubleXpActive() ? 2 : 1;
+      addXp(XP_REWARDS.BOOK_REVIEW * reviewMultiplier);
+      if (reviewMultiplier === 2) doubleXpApplied = true;
     }
 
     const newLevel = getUserStats().level;
