@@ -571,26 +571,18 @@ export const getGenreCompletedStats = () =>
 export const getDayOfWeekStats = () => {
   const counts = [0, 0, 0, 0, 0, 0, 0];
 
-  // 체크인 기록 우선 반영
-  const checkinBooks = db.getAllSync(
-    `SELECT checkins FROM books WHERE checkins IS NOT NULL AND checkins != '[]'`
-  );
-  checkinBooks.forEach(b => {
-    try {
-      JSON.parse(b.checkins || '[]').forEach(ts => {
-        counts[new Date(ts).getDay()]++;
-      });
-    } catch (_) {}
-  });
+  const addDay = (ts) => {
+    if (!ts) return;
+    counts[new Date(ts).getDay()]++;
+  };
 
-  // 체크인 없이 완독된 도서는 완독일(endDate)을 독서 활동으로 집계
-  const completedNonCheckin = db.getAllSync(
-    `SELECT endDate FROM books
-     WHERE status = 'completed' AND endDate IS NOT NULL
-       AND (checkins IS NULL OR checkins = '[]')`
+  const rows = db.getAllSync(
+    `SELECT createdAt, updatedAt, goalSetAt FROM books`
   );
-  completedNonCheckin.forEach(b => {
-    counts[new Date(b.endDate).getDay()]++;
+  rows.forEach(r => {
+    addDay(r.createdAt);
+    addDay(r.updatedAt);
+    addDay(r.goalSetAt);
   });
 
   return ['월', '화', '수', '목', '금', '토', '일'].map((label, i) => ({
