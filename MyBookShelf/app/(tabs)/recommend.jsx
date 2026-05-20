@@ -8,14 +8,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { insertBook } from '../../database/database';
 
 const CATEGORIES = [
-  { key: 'fiction',                        label: '소설' },
-  { key: 'mystery_and_detective_stories',  label: '추리/미스터리' },
-  { key: 'science_fiction',               label: 'SF' },
-  { key: 'fantasy',                        label: '판타지' },
-  { key: 'historical_fiction',             label: '역사소설' },
-  { key: 'science',                        label: '과학' },
-  { key: 'biography',                      label: '인물/자서전' },
-  { key: 'children',                       label: '어린이' },
+  { key: 'fiction',                        googleKey: '소설',      label: '소설' },
+  { key: 'mystery_and_detective_stories',  googleKey: '추리소설',  label: '추리/미스터리' },
+  { key: 'science_fiction',               googleKey: 'SF소설',    label: 'SF' },
+  { key: 'fantasy',                        googleKey: '판타지',    label: '판타지' },
+  { key: 'historical_fiction',             googleKey: '역사소설',  label: '역사소설' },
+  { key: 'science',                        googleKey: '과학',      label: '과학' },
+  { key: 'biography',                      googleKey: '자서전',    label: '인물/자서전' },
+  { key: 'children',                       googleKey: '동화',      label: '어린이' },
 ];
 
 function todayCatIndex() {
@@ -26,8 +26,42 @@ function todayCatIndex() {
   return dayOfYear % CATEGORIES.length;
 }
 
-function coverUrl(id, size = 'M') {
-  return id ? `https://covers.openlibrary.org/b/id/${id}-${size}.jpg` : null;
+async function fetchGoogleBooks(googleKey) {
+  const res = await fetch(
+    `https://www.googleapis.com/books/v1/volumes?q=subject:${encodeURIComponent(googleKey)}&langRestrict=ko&maxResults=13&printType=books&orderBy=relevance`
+  );
+  if (!res.ok) throw new Error('fetch error');
+  const data = await res.json();
+  return (data.items || []).filter(item => item.volumeInfo?.imageLinks?.thumbnail);
+}
+
+function normalizeGoogleBook(item) {
+  const v = item.volumeInfo;
+  const thumb = v.imageLinks?.thumbnail?.replace('http://', 'https://');
+  return {
+    id: item.id,
+    title: v.title || '',
+    author: v.authors?.[0] || '저자 미상',
+    coverUrl: thumb || null,
+    year: v.publishedDate ? parseInt(v.publishedDate.slice(0, 4), 10) : null,
+    description: v.description || null,
+    source: 'google',
+    rawKey: item.id,
+  };
+}
+
+function normalizeOpenLibBook(work) {
+  return {
+    id: work.key,
+    title: work.title || '',
+    author: work.authors?.[0]?.name || '저자 미상',
+    coverUrl: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-M.jpg` : null,
+    coverUrlLarge: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-L.jpg` : null,
+    year: work.first_publish_year || null,
+    description: null,
+    source: 'openlib',
+    rawKey: work.key,
+  };
 }
 
 async function fetchSubjectBooks(subject) {
@@ -47,18 +81,26 @@ async function fetchWorkDetail(key) {
 
 export default function RecommendScreen() {
   const [catIdx, setCatIdx]           = useState(todayCatIndex);
+  const [bookRegion, setBookRegion]   = useState('korean');
   const [books, setBooks]             = useState([]);
   const [loading, setLoading]         = useState(false);
   const [selected, setSelected]       = useState(null);
   const [detail, setDetail]           = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const loadBooks = useCallback(async (idx) => {
+  const loadBooks = useCallback(async (idx, region) => {
     setLoading(true);
     setBooks([]);
     try {
-      const works = await fetchSubjectBooks(CATEGORIES[idx].key);
-      setBooks(works);
+      let normalized;
+      if (region === 'foreign') {
+        const works = await fetchSubjectBooks(CATEGORIES[idx].key);
+        normalized = works.map(normalizeOpenLibBook);
+      } else {
+        const items = await fetchGoogleBooks(CATEGORIES[idx].googleKey);
+        normalized = items.map(normalizeGoogleBook);
+      }
+      setBooks(normalized);
     } catch {
       // 네트워크 오류 → 빈 목록 유지
     } finally {
@@ -67,20 +109,22 @@ export default function RecommendScreen() {
   }, []);
 
   useFocusEffect(
-    useCallback(() => { loadBooks(catIdx); }, [catIdx])
+    useCallback(() => { loadBooks(catIdx, bookRegion); }, [catIdx, bookRegion])
   );
 
   const openBook = async (book) => {
     setSelected(book);
     setDetail(null);
-    setDetailLoading(true);
-    try {
-      const d = await fetchWorkDetail(book.key);
-      setDetail(d);
-    } catch {
-      // 상세 로드 실패는 무시
-    } finally {
-      setDetailLoading(false);
+    if (book.source === 'openlib') {
+      setDetailLoading(true);
+      try {
+        const d = await fetchWorkDetail(book.rawKey);
+        setDetail(d);
+      } catch {
+        // 상세 로드 실패는 무시
+      } finally {
+        setDetailLoading(false);
+      }
     }
   };
 
@@ -93,8 +137,8 @@ export default function RecommendScreen() {
     if (!selected) return;
     try {
       insertBook({
-        title:      selected.title || '',
-        author:     selected.authors?.[0]?.name || '',
+        title:      selected.title,
+        author:     selected.author,
         totalPages: 0,
         status:     'want_to_read',
         bookType:   'physical',
@@ -117,6 +161,10 @@ export default function RecommendScreen() {
   const rest     = books.slice(1);
 
   const descText = (() => {
+    if (selected?.source === 'google') {
+      const raw = selected.description || '';
+      return raw.length > 300 ? raw.slice(0, 300) + '…' : raw || null;
+    }
     if (!detail?.description) return null;
     const raw = typeof detail.description === 'string'
       ? detail.description
@@ -133,6 +181,26 @@ export default function RecommendScreen() {
         <Text style={styles.headerSub}>
           오늘의 장르: <Text style={styles.catHighlight}>{CATEGORIES[catIdx].label}</Text>
         </Text>
+      </View>
+
+      {/* ── 한국/외국 탭 ── */}
+      <View style={styles.regionTabs}>
+        <TouchableOpacity
+          style={[styles.regionTab, bookRegion === 'korean' && styles.regionTabActive]}
+          onPress={() => setBookRegion('korean')}
+        >
+          <Text style={[styles.regionTabText, bookRegion === 'korean' && styles.regionTabTextActive]}>
+            한국도서
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.regionTab, bookRegion === 'foreign' && styles.regionTabActive]}
+          onPress={() => setBookRegion('foreign')}
+        >
+          <Text style={[styles.regionTabText, bookRegion === 'foreign' && styles.regionTabTextActive]}>
+            외국도서
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* ── 장르 칩 ── */}
@@ -166,7 +234,7 @@ export default function RecommendScreen() {
           <Ionicons name="wifi-outline" size={48} color="#BDBDBD" />
           <Text style={styles.emptyText}>추천 도서를 불러올 수 없습니다.</Text>
           <Text style={styles.emptyHint}>네트워크 연결을 확인해주세요.</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => loadBooks(catIdx)}>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => loadBooks(catIdx, bookRegion)}>
             <Text style={styles.retryText}>다시 시도</Text>
           </TouchableOpacity>
         </View>
@@ -178,7 +246,7 @@ export default function RecommendScreen() {
               <Text style={styles.sectionLabel}>오늘의 추천</Text>
               <TouchableOpacity style={styles.featuredCard} onPress={() => openBook(featured)} activeOpacity={0.85}>
                 <Image
-                  source={{ uri: coverUrl(featured.cover_id, 'L') }}
+                  source={{ uri: featured.coverUrlLarge || featured.coverUrl }}
                   style={styles.featuredCover}
                   resizeMode="cover"
                 />
@@ -188,9 +256,9 @@ export default function RecommendScreen() {
                     <Text style={styles.todayBadgeText}>추천</Text>
                   </View>
                   <Text style={styles.featuredTitle} numberOfLines={3}>{featured.title}</Text>
-                  <Text style={styles.featuredAuthor}>{featured.authors?.[0]?.name || '저자 미상'}</Text>
-                  {featured.first_publish_year ? (
-                    <Text style={styles.featuredYear}>{featured.first_publish_year}년</Text>
+                  <Text style={styles.featuredAuthor}>{featured.author}</Text>
+                  {featured.year ? (
+                    <Text style={styles.featuredYear}>{featured.year}년</Text>
                   ) : null}
                   <View style={styles.moreRow}>
                     <Text style={styles.moreText}>자세히 보기</Text>
@@ -216,14 +284,12 @@ export default function RecommendScreen() {
                     activeOpacity={0.8}
                   >
                     <Image
-                      source={{ uri: coverUrl(book.cover_id) }}
+                      source={{ uri: book.coverUrl }}
                       style={styles.bookCover}
                       resizeMode="cover"
                     />
                     <Text style={styles.bookTitle} numberOfLines={2}>{book.title}</Text>
-                    <Text style={styles.bookAuthor} numberOfLines={1}>
-                      {book.authors?.[0]?.name || ''}
-                    </Text>
+                    <Text style={styles.bookAuthor} numberOfLines={1}>{book.author}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -246,9 +312,9 @@ export default function RecommendScreen() {
               {selected && (
                 <>
                   <View style={styles.sheetTop}>
-                    {selected.cover_id ? (
+                    {selected.coverUrl ? (
                       <Image
-                        source={{ uri: coverUrl(selected.cover_id, 'L') }}
+                        source={{ uri: selected.coverUrlLarge || selected.coverUrl }}
                         style={styles.sheetCover}
                         resizeMode="cover"
                       />
@@ -259,11 +325,9 @@ export default function RecommendScreen() {
                     )}
                     <View style={styles.sheetMeta}>
                       <Text style={styles.sheetTitle}>{selected.title}</Text>
-                      <Text style={styles.sheetAuthor}>
-                        {selected.authors?.[0]?.name || '저자 미상'}
-                      </Text>
-                      {selected.first_publish_year ? (
-                        <Text style={styles.sheetYear}>{selected.first_publish_year}년 출판</Text>
+                      <Text style={styles.sheetAuthor}>{selected.author}</Text>
+                      {selected.year ? (
+                        <Text style={styles.sheetYear}>{selected.year}년 출판</Text>
                       ) : null}
                       <View style={styles.genreBadge}>
                         <Text style={styles.genreBadgeText}>{CATEGORIES[catIdx].label}</Text>
@@ -415,4 +479,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14, gap: 8, marginTop: 8,
   },
   addBtnText: { fontSize: 15, color: '#fff', fontWeight: 'bold' },
+
+  regionTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDE7F6',
+  },
+  regionTab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  regionTabActive:     { borderBottomColor: '#6750A4' },
+  regionTabText:       { fontSize: 14, color: '#9E9E9E', fontWeight: '500' },
+  regionTabTextActive: { color: '#6750A4', fontWeight: 'bold' },
 });
