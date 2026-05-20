@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Alert } from 'react-native';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +32,13 @@ function getWeeklyMissions() {
   const key = getWeekKey();
   const seed = parseInt(key.replace('-W', ''), 10);
   return seededShuffle(MISSION_POOL, seed).slice(0, 3);
+}
+
+function getExtraMissions(currentMissions) {
+  const currentIds = new Set(currentMissions.map(m => m.id));
+  const remaining = MISSION_POOL.filter(m => !currentIds.has(m.id));
+  const seed = parseInt(getWeekKey().replace('-W', ''), 10) + 31337;
+  return seededShuffle(remaining, seed).slice(0, 2);
 }
 
 const ENCOURAGEMENT = {
@@ -141,33 +148,46 @@ function getMissionProgress(mission, progress) {
   return 0;
 }
 
-function WeeklyMissionCard({ missions, progress, claimed }) {
+function MissionItem({ mission, progress, claimed }) {
+  const current = Math.min(getMissionProgress(mission, progress), mission.target);
+  const pct = Math.min(100, Math.round((current / mission.target) * 100));
+  const done = current >= mission.target;
+  const isClaimed = claimed.includes(mission.id);
+  return (
+    <View style={styles.missionItem}>
+      <Ionicons name={mission.icon} size={20} color={done ? '#4CAF50' : '#6750A4'} style={styles.missionIcon} />
+      <View style={styles.missionInfo}>
+        <Text style={[styles.missionLabel, done && styles.missionLabelDone]}>{mission.label}</Text>
+        <View style={styles.missionBarBg}>
+          <View style={[styles.missionBarFill, { width: `${pct}%` }, done && styles.missionBarFillDone]} />
+        </View>
+        <Text style={styles.missionProgressText}>{done ? '완료!' : `${current} / ${mission.target}`}</Text>
+      </View>
+      <View style={[styles.missionXpTag, done && styles.missionXpTagDone]}>
+        <Text style={[styles.missionXpText, done && styles.missionXpTextDone]}>
+          {isClaimed ? '✓ 수령' : `+${mission.xp} XP`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function WeeklyMissionCard({ missions, progress, claimed, extraMissions }) {
   return (
     <View style={styles.missionCard}>
       <Text style={styles.missionTitle}>🎯 주간 미션</Text>
-      {missions.map((mission) => {
-        const current = Math.min(getMissionProgress(mission, progress), mission.target);
-        const pct = Math.min(100, Math.round((current / mission.target) * 100));
-        const done = current >= mission.target;
-        const isClaimed = claimed.includes(mission.id);
-        return (
-          <View key={mission.id} style={styles.missionItem}>
-            <Ionicons name={mission.icon} size={20} color={done ? '#4CAF50' : '#6750A4'} style={styles.missionIcon} />
-            <View style={styles.missionInfo}>
-              <Text style={[styles.missionLabel, done && styles.missionLabelDone]}>{mission.label}</Text>
-              <View style={styles.missionBarBg}>
-                <View style={[styles.missionBarFill, { width: `${pct}%` }, done && styles.missionBarFillDone]} />
-              </View>
-              <Text style={styles.missionProgressText}>{done ? '완료!' : `${current} / ${mission.target}`}</Text>
-            </View>
-            <View style={[styles.missionXpTag, done && styles.missionXpTagDone]}>
-              <Text style={[styles.missionXpText, done && styles.missionXpTextDone]}>
-                {isClaimed ? '✓ 수령' : `+${mission.xp} XP`}
-              </Text>
-            </View>
-          </View>
-        );
-      })}
+      {missions.map((mission) => (
+        <MissionItem key={mission.id} mission={mission} progress={progress} claimed={claimed} />
+      ))}
+      {extraMissions && extraMissions.length > 0 && (
+        <>
+          <View style={styles.missionDivider} />
+          <Text style={styles.missionExtraTitle}>⚡ 추가 미션</Text>
+          {extraMissions.map((mission) => (
+            <MissionItem key={mission.id} mission={mission} progress={progress} claimed={claimed} />
+          ))}
+        </>
+      )}
     </View>
   );
 }
@@ -198,6 +218,8 @@ export default function HomeScreen() {
   const [schoolLevel, setSchoolLevel] = useState('');
   const [doubleXpEvent, setDoubleXpEvent] = useState(null);
   const [newBadges, setNewBadges] = useState([]);
+  const [extraMissions, setExtraMissions] = useState([]);
+  const extraMissionsAcceptedRef = useRef(false);
   const toastAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -232,15 +254,59 @@ export default function HomeScreen() {
           claimed.push(m.id);
         }
       });
-      setClaimedMissions([...claimed]);
+      // Extra missions: 이전에 수락했거나 이미 클레임한 게 있으면 계속 표시
+      const allExtra = getExtraMissions(missions);
+      const anyExtraClaimed = allExtra.some(m => isMissionClaimed(m.id, weekKey));
+      if (anyExtraClaimed || extraMissionsAcceptedRef.current) {
+        allExtra.forEach(m => {
+          const cur = getMissionProgress(m, progress);
+          if (cur >= m.target && !isMissionClaimed(m.id, weekKey)) {
+            claimMissionReward(m.id, weekKey, m.xp);
+          }
+          if (isMissionClaimed(m.id, weekKey)) claimed.push(m.id);
+        });
+        setExtraMissions(allExtra);
+      } else {
+        setExtraMissions([]);
+      }
 
+      setClaimedMissions([...claimed]);
       setUserStats(getUserStats());
       setSchoolLevel(getSchoolLevel());
       setDoubleXpEvent(getWeeklyDoubleXpEvent());
+
       const weeklyBadge = checkAndUnlockWeeklyAllMissionsBadge(weekKey, missions);
       const unlocked = checkAndUnlockBadges();
-      const allNew = [...(weeklyBadge ? [weeklyBadge] : []), ...unlocked];
-      if (allNew.length > 0) setNewBadges(allNew);
+      if (unlocked.length > 0) setNewBadges(unlocked);
+
+      if (weeklyBadge !== null) {
+        Alert.alert(
+          '🎉 주간 미션 완료!',
+          '이번 주 미션을 모두 달성했어요! 🏆\n\n추가 미션에도 도전해볼까요?',
+          [
+            { text: '괜찮아요', style: 'cancel' },
+            {
+              text: '도전할게요!',
+              onPress: () => {
+                extraMissionsAcceptedRef.current = true;
+                const extraClaimed = [];
+                allExtra.forEach(m => {
+                  const cur = getMissionProgress(m, progress);
+                  if (cur >= m.target) {
+                    claimMissionReward(m.id, weekKey, m.xp);
+                    extraClaimed.push(m.id);
+                  }
+                });
+                setExtraMissions(allExtra);
+                if (extraClaimed.length > 0) {
+                  setClaimedMissions(prev => [...new Set([...prev, ...extraClaimed])]);
+                  setUserStats(getUserStats());
+                }
+              },
+            },
+          ]
+        );
+      }
     }, [])
   );
 
@@ -285,7 +351,7 @@ export default function HomeScreen() {
         <StatCard icon="bookmark-outline" label="읽고 싶음" value={stats.want} color="#FF9800" />
       </View>
 
-      <WeeklyMissionCard missions={weeklyMissions} progress={weeklyProgress} claimed={claimedMissions} />
+      <WeeklyMissionCard missions={weeklyMissions} progress={weeklyProgress} claimed={claimedMissions} extraMissions={extraMissions} />
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>읽는 중인 책</Text>
@@ -543,6 +609,17 @@ const styles = StyleSheet.create({
   },
   missionXpTextDone: {
     color: '#4CAF50',
+  },
+  missionDivider: {
+    height: 1,
+    backgroundColor: '#EDE7F6',
+    marginVertical: 12,
+  },
+  missionExtraTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6750A4',
+    marginBottom: 10,
   },
   doubleXpBannerActive: {
     backgroundColor: '#E65100',
