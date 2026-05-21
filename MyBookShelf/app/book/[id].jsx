@@ -148,6 +148,7 @@ export default function BookDetailScreen() {
     insertBookReview(parseInt(id), text);
     setNewReviewText('');
     loadReviews();
+    checkAndUnlockBadges();
     const newLevel = getUserStats().level;
     if (newLevel > prevLevel) {
       setLevelUpModal({ visible: true, level: newLevel, navigateBack: false });

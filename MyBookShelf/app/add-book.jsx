@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { insertBook } from '../database/database';
-import { GENRES } from '../database/badges';
+import { GENRES, checkAndUnlockBadges } from '../database/badges';
 import BookShareCard from '../components/BookShareCard';
 
 const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
@@ -121,6 +121,7 @@ export default function AddBookScreen() {
       review: review.trim(),
       cover: coverImage,
     });
+    checkAndUnlockBadges();
     router.back();
   };
 
