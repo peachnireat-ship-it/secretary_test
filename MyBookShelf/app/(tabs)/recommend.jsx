@@ -61,9 +61,11 @@ function todayCatIndex() {
 
 const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
 
-async function fetchAladinBooks(keyword, target = 'Book') {
+async function fetchAladinBooks(keyword, target = 'Book', ageGroup = null) {
+  const catMap = target === 'Book' ? AGE_ALADIN_CATEGORY : AGE_ALADIN_CATEGORY_FOREIGN;
+  const catParam = ageGroup ? (catMap[ageGroup] ?? '') : '';
   const res = await fetch(
-    `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(keyword)}&QueryType=Keyword&SearchTarget=${target}&MaxResults=13&output=js&Version=20131101&Cover=Big`
+    `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(keyword)}&QueryType=Keyword&SearchTarget=${target}&MaxResults=13&output=js&Version=20131101&Cover=Big${catParam}`
   );
   if (!res.ok) throw new Error('fetch error');
   const data = await res.json();
@@ -127,7 +129,7 @@ export default function RecommendScreen() {
         const keyword = region === 'foreign'
           ? (cat.foreignAgeKeys?.[ag] ?? cat.foreignKey)
           : (cat.ageKeys?.[ag] ?? cat.googleKey);
-        items = await fetchAladinBooks(keyword, target);
+        items = await fetchAladinBooks(keyword, target, ag);
       }
       setBooks(items.map(normalizeAladinBook));
     } catch {
