@@ -329,7 +329,7 @@ export default function HomeScreen() {
           </View>
           <View style={styles.xpRow}>
             <View style={styles.xpBarBg}>
-              <View style={[styles.xpBarFill, { width: `${Math.min(100, Math.round((userStats.xpInLevel / userStats.xpForNext) * 100))}%` }]} />
+              <View style={[styles.xpBarFill, { width: `${Math.min(100, Math.round((userStats.xpInLevel / userStats.xpForNext) * 100))}%`, backgroundColor: userStats.tierColor }]} />
             </View>
             <Text style={styles.xpText}>{userStats.xpInLevel} / {userStats.xpForNext} XP</Text>
           </View>
@@ -505,7 +505,6 @@ const styles = StyleSheet.create({
   },
   xpBarFill: {
     height: '100%',
-    backgroundColor: '#6750A4',
     borderRadius: 2,
   },
   statsRow: {
