@@ -40,7 +40,13 @@ const AGE_GROUP_INFO = {
 const AGE_ALADIN_CATEGORY = {
   child: '&CategoryId=13789',
   teen:  '&CategoryId=5361',
-  adult: '',
+  adult: '&CategoryId=1',  // 국내도서 종합 (어린이/청소년 제외)
+};
+
+const AGE_ALADIN_CATEGORY_FOREIGN = {
+  child: '&CategoryId=1366',
+  teen:  '&CategoryId=1374',
+  adult: '&CategoryId=2',  // 외국도서 종합
 };
 
 function todayCatIndex() {
@@ -63,7 +69,8 @@ async function fetchAladinBooks(keyword, target = 'Book') {
 }
 
 async function fetchAladinBestsellers(ageGroup, target = 'Book') {
-  const catParam = target === 'Book' ? (AGE_ALADIN_CATEGORY[ageGroup] ?? '') : '';
+  const catMap = target === 'Book' ? AGE_ALADIN_CATEGORY : AGE_ALADIN_CATEGORY_FOREIGN;
+  const catParam = catMap[ageGroup] ?? '';
   const res = await fetch(
     `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ALADIN_TTB_KEY}&QueryType=Bestseller&MaxResults=20&SearchTarget=${target}&output=js&Version=20131101&Cover=Big${catParam}`
   );
@@ -107,7 +114,8 @@ export default function RecommendScreen() {
     try {
       let items;
       if (currentMode === 'popular') {
-        items = await fetchAladinBestsellers('adult', target);
+        const ag = getAgeGroup(getAge()) || 'adult';
+        items = await fetchAladinBestsellers(ag, target);
       } else if (currentMode === 'age') {
         const ag = getAgeGroup(getAge()) || 'adult';
         items = await fetchAladinBestsellers(ag, target);
