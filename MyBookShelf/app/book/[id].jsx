@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, isDoubleXpActive } from '../../database/database';
-import { GENRES } from '../../database/badges';
+import { GENRES, checkAndUnlockBadges } from '../../database/badges';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
 import BookShareCard from '../../components/BookShareCard';
@@ -227,6 +227,8 @@ export default function BookDetailScreen() {
       if (reviewMultiplier === 2) doubleXpApplied = true;
     }
 
+    checkAndUnlockBadges();
+
     const newLevel = getUserStats().level;
     if (newLevel > prevLevel) {
       setLevelUpModal({ visible: true, level: newLevel, navigateBack: true });
@@ -300,6 +302,7 @@ export default function BookDetailScreen() {
           const prevLevel = getUserStats().level;
           trackDailyReading(0);
           onBookCompleted({ ...book, endDate: finalEndDate, goalDate: goalTs ?? book.goalDate });
+          checkAndUnlockBadges();
           const newLevel = getUserStats().level;
           if (newLevel > prevLevel) {
             setLevelUpModal({ visible: true, level: newLevel, navigateBack: true });
