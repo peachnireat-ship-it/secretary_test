@@ -8,7 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, isDoubleXpActive } from '../../database/database';
+import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, getTierInfo, isDoubleXpActive } from '../../database/database';
 import { GENRES, checkAndUnlockBadges } from '../../database/badges';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
@@ -40,7 +40,7 @@ export default function BookDetailScreen() {
   const [bookType, setBookType] = useState('physical');
   const [genre, setGenre] = useState('');
   const [progressPct, setProgressPct] = useState('');
-  const [levelUpModal, setLevelUpModal] = useState({ visible: false, level: 1, navigateBack: false });
+  const [levelUpModal, setLevelUpModal] = useState({ visible: false, tier: '브론즈', tierLevel: 1, tierColor: '#CD7F32', navigateBack: false });
 
   const [editTitle, setEditTitle] = useState('');
   const [editAuthor, setEditAuthor] = useState('');
@@ -149,9 +149,9 @@ export default function BookDetailScreen() {
     setNewReviewText('');
     loadReviews();
     checkAndUnlockBadges();
-    const newLevel = getUserStats().level;
-    if (newLevel > prevLevel) {
-      setLevelUpModal({ visible: true, level: newLevel, navigateBack: false });
+    const newStats = getUserStats();
+    if (newStats.level > prevLevel) {
+      setLevelUpModal({ visible: true, ...getTierInfo(newStats.level), navigateBack: false });
     }
   };
 
@@ -230,9 +230,9 @@ export default function BookDetailScreen() {
 
     checkAndUnlockBadges();
 
-    const newLevel = getUserStats().level;
-    if (newLevel > prevLevel) {
-      setLevelUpModal({ visible: true, level: newLevel, navigateBack: true });
+    const newStats = getUserStats();
+    if (newStats.level > prevLevel) {
+      setLevelUpModal({ visible: true, ...getTierInfo(newStats.level), navigateBack: true });
     } else {
       const baseMsg = autoComplete ? '진척률 100%로 완독 처리되었습니다.' : '변경사항이 저장되었습니다.';
       Alert.alert(
@@ -304,9 +304,9 @@ export default function BookDetailScreen() {
           trackDailyReading(0);
           onBookCompleted({ ...book, endDate: finalEndDate, goalDate: goalTs ?? book.goalDate });
           checkAndUnlockBadges();
-          const newLevel = getUserStats().level;
-          if (newLevel > prevLevel) {
-            setLevelUpModal({ visible: true, level: newLevel, navigateBack: true });
+          const newStats = getUserStats();
+          if (newStats.level > prevLevel) {
+            setLevelUpModal({ visible: true, ...getTierInfo(newStats.level), navigateBack: true });
           } else {
             router.back();
           }
@@ -332,9 +332,11 @@ export default function BookDetailScreen() {
     <>
     <LevelUpModal
       visible={levelUpModal.visible}
-      level={levelUpModal.level}
+      tier={levelUpModal.tier}
+      tierLevel={levelUpModal.tierLevel}
+      tierColor={levelUpModal.tierColor}
       onClose={() => {
-        setLevelUpModal({ visible: false, level: 1, navigateBack: false });
+        setLevelUpModal({ visible: false, tier: '브론즈', tierLevel: 1, tierColor: '#CD7F32', navigateBack: false });
         if (levelUpModal.navigateBack) router.back();
       }}
     />

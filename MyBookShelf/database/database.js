@@ -200,6 +200,26 @@ export const XP_REWARDS = {
   BOOK_REVIEW: 50,          // 완독 도서 리뷰 최초 등록
 };
 
+// 티어 정의: 브론즈(1~100) → 실버(1~80) → 골드(1~60) → 플래티넘(1~40) → 다이아(1~30)
+export const TIERS = [
+  { name: '브론즈',   maxLevel: 100, color: '#CD7F32' },
+  { name: '실버',     maxLevel: 80,  color: '#9E9E9E' },
+  { name: '골드',     maxLevel: 60,  color: '#FFA000' },
+  { name: '플래티넘', maxLevel: 40,  color: '#607D8B' },
+  { name: '다이아',   maxLevel: 30,  color: '#29B6F6' },
+];
+
+// 누적 글로벌 레벨 → { tier, tierLevel, tierColor }
+export function getTierInfo(globalLevel) {
+  let remaining = globalLevel;
+  for (const t of TIERS) {
+    if (remaining <= t.maxLevel) return { tier: t.name, tierLevel: remaining, tierColor: t.color };
+    remaining -= t.maxLevel;
+  }
+  const last = TIERS[TIERS.length - 1];
+  return { tier: last.name, tierLevel: last.maxLevel, tierColor: last.color };
+}
+
 // 레벨 N → N+1 진급에 필요한 XP: 80 × N^1.5
 function xpRequiredForLevel(level) {
   return Math.round(80 * Math.pow(level, 1.5));
@@ -225,9 +245,13 @@ export const getUserStats = () => {
   const level = calcLevel(xp);
   const currentLevelXp = xpForLevel(level);
   const nextLevelXp = xpForLevel(level + 1);
+  const { tier, tierLevel, tierColor } = getTierInfo(level);
   return {
     xp,
     level,
+    tier,
+    tierLevel,
+    tierColor,
     xpInLevel: xp - currentLevelXp,
     xpForNext: nextLevelXp - currentLevelXp,
   };

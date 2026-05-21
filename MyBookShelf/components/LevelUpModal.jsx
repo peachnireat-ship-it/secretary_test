@@ -6,7 +6,7 @@ const { width } = Dimensions.get('window');
 
 const CONFETTI_COLORS = ['#6750A4', '#B69DF8', '#FFD700', '#FF6B9D', '#4CAF50', '#2196F3', '#FF9800'];
 
-export default function LevelUpModal({ visible, level, onClose }) {
+export default function LevelUpModal({ visible, tier, tierLevel, tierColor, onClose }) {
   const confettiRef = useRef(null);
 
   useEffect(() => {
@@ -31,12 +31,13 @@ export default function LevelUpModal({ visible, level, onClose }) {
         <View style={styles.card}>
           <Text style={styles.trophy}>🏆</Text>
           <Text style={styles.levelUpLabel}>LEVEL UP!</Text>
-          <View style={styles.levelBadge}>
-            <Text style={styles.levelNum}>Lv.{level}</Text>
+          <View style={[styles.levelBadge, { backgroundColor: tierColor }]}>
+            <Text style={styles.tierName}>{tier}</Text>
+            <Text style={styles.levelNum}>Lv.{tierLevel}</Text>
           </View>
           <Text style={styles.congrats}>축하합니다!</Text>
           <Text style={styles.message}>새로운 레벨에 도달했습니다{'\n'}계속 독서하며 성장하세요 📚</Text>
-          <TouchableOpacity style={styles.btn} onPress={onClose} activeOpacity={0.85}>
+          <TouchableOpacity style={[styles.btn, { backgroundColor: tierColor }]} onPress={onClose} activeOpacity={0.85}>
             <Text style={styles.btnText}>확인</Text>
           </TouchableOpacity>
         </View>
@@ -76,11 +77,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   levelBadge: {
-    backgroundColor: '#6750A4',
     borderRadius: 16,
     paddingHorizontal: 28,
     paddingVertical: 10,
     marginBottom: 18,
+    alignItems: 'center',
+  },
+  tierName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 1,
+    opacity: 0.9,
   },
   levelNum: {
     fontSize: 34,

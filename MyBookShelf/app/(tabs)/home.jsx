@@ -322,8 +322,8 @@ export default function HomeScreen() {
         <View style={styles.profileBox}>
           <View style={styles.profileNameRow}>
             <Text style={styles.profileName}>{username}</Text>
-            <View style={styles.levelBadge}>
-              <Text style={styles.levelText}>Lv.{userStats.level}</Text>
+            <View style={[styles.levelBadge, { backgroundColor: userStats.tierColor }]}>
+              <Text style={styles.levelText}>{userStats.tier} Lv.{userStats.tierLevel}</Text>
             </View>
           </View>
           <View style={styles.xpRow}>
@@ -465,7 +465,6 @@ const styles = StyleSheet.create({
     color: '#1C1B1F',
   },
   levelBadge: {
-    backgroundColor: '#6750A4',
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 2,
