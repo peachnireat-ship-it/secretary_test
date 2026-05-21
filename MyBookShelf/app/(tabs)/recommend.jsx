@@ -26,27 +26,31 @@ function todayCatIndex() {
   return dayOfYear % CATEGORIES.length;
 }
 
-async function fetchGoogleBooks(googleKey) {
+const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
+
+async function fetchAladinBooks(keyword) {
   const res = await fetch(
-    `https://www.googleapis.com/books/v1/volumes?q=subject:${encodeURIComponent(googleKey)}&langRestrict=ko&maxResults=13&printType=books&orderBy=relevance`
+    `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(keyword)}&QueryType=Keyword&SearchTarget=Book&MaxResults=13&output=js&Version=20131101&Cover=Big`
   );
   if (!res.ok) throw new Error('fetch error');
   const data = await res.json();
-  return (data.items || []).filter(item => item.volumeInfo?.imageLinks?.thumbnail);
+  return (data.item || []).filter(item => item.cover && !item.cover.includes('noimg'));
 }
 
-function normalizeGoogleBook(item) {
-  const v = item.volumeInfo;
-  const thumb = v.imageLinks?.thumbnail?.replace('http://', 'https://');
+function normalizeAladinBook(item) {
+  const author = item.author
+    ? item.author.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() || '저자 미상'
+    : '저자 미상';
   return {
-    id: item.id,
-    title: v.title || '',
-    author: v.authors?.[0] || '저자 미상',
-    coverUrl: thumb || null,
-    year: v.publishedDate ? parseInt(v.publishedDate.slice(0, 4), 10) : null,
-    description: v.description || null,
-    source: 'google',
-    rawKey: item.id,
+    id: String(item.itemId),
+    title: item.title || '',
+    author,
+    coverUrl: item.cover || null,
+    coverUrlLarge: item.cover || null,
+    year: item.pubDate ? parseInt(item.pubDate.slice(0, 4), 10) : null,
+    description: item.description || null,
+    source: 'aladin',
+    rawKey: String(item.itemId),
   };
 }
 
@@ -97,8 +101,8 @@ export default function RecommendScreen() {
         const works = await fetchSubjectBooks(CATEGORIES[idx].key);
         normalized = works.map(normalizeOpenLibBook);
       } else {
-        const items = await fetchGoogleBooks(CATEGORIES[idx].googleKey);
-        normalized = items.map(normalizeGoogleBook);
+        const items = await fetchAladinBooks(CATEGORIES[idx].googleKey);
+        normalized = items.map(normalizeAladinBook);
       }
       setBooks(normalized);
     } catch {
@@ -161,7 +165,7 @@ export default function RecommendScreen() {
   const rest     = books.slice(1);
 
   const descText = (() => {
-    if (selected?.source === 'google') {
+    if (selected?.source === 'google' || selected?.source === 'aladin') {
       const raw = selected.description || '';
       return raw.length > 300 ? raw.slice(0, 300) + '…' : raw || null;
     }
