@@ -1,6 +1,6 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useState, useCallback } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllBooks, getBooksByStatus, deleteBook } from '../../database/database';
 import BookCard from '../../components/BookCard';
@@ -14,20 +14,25 @@ const TABS = [
 
 export default function LibraryScreen() {
   const router = useRouter();
+  const { status: statusParam } = useLocalSearchParams();
   const [books, setBooks] = useState([]);
   const [activeTab, setActiveTab] = useState('all');
 
   const loadBooks = useCallback((tab) => {
-    const data = (tab || activeTab) === 'all'
-      ? getAllBooks()
-      : getBooksByStatus(tab || activeTab);
+    const key = tab || activeTab;
+    const data = key === 'all' ? getAllBooks() : getBooksByStatus(key);
     setBooks(data);
   }, [activeTab]);
 
   useFocusEffect(
     useCallback(() => {
-      loadBooks();
-    }, [loadBooks])
+      if (statusParam && TABS.some(t => t.key === statusParam)) {
+        setActiveTab(statusParam);
+        setBooks(getBooksByStatus(statusParam));
+      } else {
+        loadBooks();
+      }
+    }, [statusParam, loadBooks])
   );
 
   const handleTabChange = (tabKey) => {

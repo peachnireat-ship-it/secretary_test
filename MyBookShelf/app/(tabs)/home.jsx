@@ -354,7 +354,14 @@ export default function HomeScreen() {
       <WeeklyMissionCard missions={weeklyMissions} progress={weeklyProgress} claimed={claimedMissions} extraMissions={extraMissions} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>읽는 중인 책</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>읽는 중인 책</Text>
+          {stats.reading > 3 && (
+            <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'reading' } })}>
+              <Text style={styles.moreLink}>더보기 ({stats.reading}권)</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {readingBooks.length > 0 ? (
           readingBooks.map((book) => (
             <BookCard key={book.id} book={book} onPress={() => router.push(`/book/${book.id}`)} />
@@ -368,7 +375,14 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>읽고 싶은 책</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>읽고 싶은 책</Text>
+          {stats.want > 3 && (
+            <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'want_to_read' } })}>
+              <Text style={styles.moreLink}>더보기 ({stats.want}권)</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {wishlistBooks.length > 0 ? (
           wishlistBooks.map((book) => (
             <BookCard key={book.id} book={book} onPress={() => router.push(`/book/${book.id}`)} />
@@ -382,7 +396,14 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>완독한 책</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>완독한 책</Text>
+          {stats.completed > 3 && (
+            <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'completed' } })}>
+              <Text style={styles.moreLink}>더보기 ({stats.completed}권)</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {completedBooks.length > 0 ? (
           completedBooks.map((book) => (
             <BookCard key={book.id} book={book} onPress={() => router.push(`/book/${book.id}`)} />
@@ -514,11 +535,21 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1C1B1F',
-    marginBottom: 12,
+  },
+  moreLink: {
+    fontSize: 13,
+    color: '#6750A4',
+    fontWeight: '600',
   },
   emptyBox: {
     backgroundColor: '#fff',
