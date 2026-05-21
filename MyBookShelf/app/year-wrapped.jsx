@@ -3,6 +3,7 @@ import {
   TouchableOpacity, StatusBar, SafeAreaView,
 } from 'react-native';
 import { useState, useRef, useCallback } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -258,6 +259,7 @@ const SLIDE_COMPONENTS = {
 
 export default function YearWrappedScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [slides, setSlides] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatRef = useRef(null);
@@ -336,7 +338,7 @@ export default function YearWrappedScreen() {
           getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
         />
 
-        <View style={ss.bottomBar}>
+        <View style={[ss.bottomBar, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
           {isLast ? (
             <TouchableOpacity style={ss.finishBtn} onPress={() => router.back()}>
               <Text style={ss.finishBtnText}>돌아가기</Text>
