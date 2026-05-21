@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import {
   getGenreCompletedStats,
   getDayOfWeekStats,
@@ -87,8 +88,25 @@ function HorzBarChart({ data, color = '#6750A4' }) {
   );
 }
 
+function YearEndBanner({ year, onPress }) {
+  return (
+    <TouchableOpacity style={styles.yearBanner} onPress={onPress} activeOpacity={0.88}>
+      <View style={styles.yearBannerLeft}>
+        <Text style={styles.yearBannerEmoji}>📖</Text>
+        <View>
+          <Text style={styles.yearBannerTitle}>{year}년 독서 리포트 오픈!</Text>
+          <Text style={styles.yearBannerSub}>올 한 해 나의 독서를 돌아봐요</Text>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#fff" />
+    </TouchableOpacity>
+  );
+}
+
 export default function ReadingPatternScreen() {
   const router = useRouter();
+  const isDecember = useMemo(() => new Date().getMonth() === 11, []);
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [genreStats, setGenreStats] = useState([]);
   const [dayStats, setDayStats] = useState([]);
   const [ratingStats, setRatingStats] = useState([]);
@@ -109,6 +127,12 @@ export default function ReadingPatternScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {isDecember && (
+        <YearEndBanner
+          year={currentYear}
+          onPress={() => router.push('/year-wrapped')}
+        />
+      )}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>장르별 완독 현황</Text>
         <HorzBarChart data={genreStats} />
@@ -216,6 +240,39 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'right',
     marginLeft: 4,
+  },
+  yearBanner: {
+    backgroundColor: '#1A0A3C',
+    borderRadius: 16,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    elevation: 4,
+    shadowColor: '#6750A4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+  },
+  yearBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+  },
+  yearBannerEmoji: {
+    fontSize: 32,
+  },
+  yearBannerTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  yearBannerSub: {
+    fontSize: 12,
+    color: '#B39DDB',
   },
   resultButton: {
     backgroundColor: '#6750A4',

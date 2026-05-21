@@ -586,6 +586,63 @@ export const getPageCountDistribution = () => {
   return buckets.map((b, i) => ({ label: b.label, count: counts[i] }));
 };
 
+export const getYearlyWrappedStats = (year) => {
+  const start = new Date(year, 0, 1).getTime();
+  const end = new Date(year, 11, 31, 23, 59, 59, 999).getTime();
+
+  const completed = db.getFirstSync(
+    `SELECT COUNT(*) as c FROM books WHERE status='completed' AND COALESCE(endDate,createdAt) BETWEEN ? AND ?`,
+    [start, end]
+  )?.c ?? 0;
+
+  const totalPages = db.getFirstSync(
+    `SELECT COALESCE(SUM(totalPages),0) as p FROM books WHERE status='completed' AND COALESCE(endDate,createdAt) BETWEEN ? AND ?`,
+    [start, end]
+  )?.p ?? 0;
+
+  const memos = db.getFirstSync(
+    `SELECT COUNT(*) as c FROM book_reviews WHERE createdAt BETWEEN ? AND ?`,
+    [start, end]
+  )?.c ?? 0;
+
+  const avgRaw = db.getFirstSync(
+    `SELECT AVG(rating) as avg FROM books WHERE rating>0 AND COALESCE(endDate,createdAt) BETWEEN ? AND ?`,
+    [start, end]
+  )?.avg ?? 0;
+  const avgRating = Math.round((avgRaw || 0) * 10) / 10;
+
+  const topGenreRow = db.getFirstSync(
+    `SELECT COALESCE(NULLIF(genre,''),'기타') as genre, COUNT(*) as c FROM books
+     WHERE status='completed' AND COALESCE(endDate,createdAt) BETWEEN ? AND ?
+     GROUP BY COALESCE(NULLIF(genre,''),'기타') ORDER BY c DESC LIMIT 1`,
+    [start, end]
+  );
+  const topGenre = topGenreRow?.genre ?? null;
+  const topGenreCount = topGenreRow?.c ?? 0;
+
+  const bestBookRow = db.getFirstSync(
+    `SELECT title, rating FROM books WHERE status='completed' AND rating>0
+     AND COALESCE(endDate,createdAt) BETWEEN ? AND ?
+     ORDER BY rating DESC, COALESCE(endDate,createdAt) DESC LIMIT 1`,
+    [start, end]
+  );
+  const bestBook = bestBookRow ? { title: bestBookRow.title, rating: bestBookRow.rating } : null;
+
+  let bestMonth = null;
+  let bestMonthCount = 0;
+  for (let m = 0; m < 12; m++) {
+    const ms = new Date(year, m, 1).getTime();
+    const me = new Date(year, m + 1, 0, 23, 59, 59, 999).getTime();
+    const cnt = db.getFirstSync(
+      `SELECT COUNT(*) as c FROM books WHERE status='completed' AND COALESCE(endDate,createdAt) BETWEEN ? AND ?`,
+      [ms, me]
+    )?.c ?? 0;
+    if (cnt > bestMonthCount) { bestMonthCount = cnt; bestMonth = m + 1; }
+  }
+
+  return { year, completed, totalPages, memos, avgRating, topGenre, topGenreCount, bestBook, bestMonth, bestMonthCount };
+};
+
 export const getGenreCompletedStats = () =>
   db.getAllSync(
     `SELECT COALESCE(NULLIF(genre, ''), '기타') as label, COUNT(*) as count
