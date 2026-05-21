@@ -1,9 +1,10 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { useState, useCallback, useRef } from 'react';
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useState, useCallback } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllBooks, getBooksByStatus, deleteBook } from '../../database/database';
 import BookCard from '../../components/BookCard';
+import { takePendingLibraryStatus } from './_libraryFilter';
 
 const TABS = [
   { key: 'all', label: '전체' },
@@ -14,10 +15,8 @@ const TABS = [
 
 export default function LibraryScreen() {
   const router = useRouter();
-  const { status: statusParam, navId } = useLocalSearchParams();
   const [books, setBooks] = useState([]);
   const [activeTab, setActiveTab] = useState('all');
-  const consumedNavIdRef = useRef(null);
 
   const loadBooks = useCallback((tab) => {
     const key = tab || activeTab;
@@ -27,15 +26,15 @@ export default function LibraryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (statusParam && navId && navId !== consumedNavIdRef.current && TABS.some(t => t.key === statusParam)) {
-        consumedNavIdRef.current = navId;
-        setActiveTab(statusParam);
-        setBooks(getBooksByStatus(statusParam));
+      const pendingStatus = takePendingLibraryStatus();
+      if (pendingStatus && TABS.some(t => t.key === pendingStatus)) {
+        setActiveTab(pendingStatus);
+        setBooks(getBooksByStatus(pendingStatus));
       } else {
         setActiveTab('all');
         setBooks(getAllBooks());
       }
-    }, [statusParam, navId, loadBooks])
+    }, [])
   );
 
   const handleTabChange = (tabKey) => {
