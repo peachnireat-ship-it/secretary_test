@@ -357,8 +357,8 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>읽는 중인 책</Text>
           {stats.reading > 3 && (
-            <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'reading' } })}>
-              <Text style={styles.moreLink}>더보기 ({stats.reading}권)</Text>
+            <TouchableOpacity style={styles.moreBtn} onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'reading' } })}>
+              <Text style={styles.moreBtnText}>더보기</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -378,8 +378,8 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>읽고 싶은 책</Text>
           {stats.want > 3 && (
-            <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'want_to_read' } })}>
-              <Text style={styles.moreLink}>더보기 ({stats.want}권)</Text>
+            <TouchableOpacity style={styles.moreBtn} onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'want_to_read' } })}>
+              <Text style={styles.moreBtnText}>더보기</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -399,8 +399,8 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>완독한 책</Text>
           {stats.completed > 3 && (
-            <TouchableOpacity onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'completed' } })}>
-              <Text style={styles.moreLink}>더보기 ({stats.completed}권)</Text>
+            <TouchableOpacity style={styles.moreBtn} onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'completed' } })}>
+              <Text style={styles.moreBtnText}>더보기</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -546,8 +546,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1C1B1F',
   },
-  moreLink: {
-    fontSize: 13,
+  moreBtn: {
+    borderWidth: 1,
+    borderColor: '#6750A4',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  moreBtnText: {
+    fontSize: 12,
     color: '#6750A4',
     fontWeight: '600',
   },
