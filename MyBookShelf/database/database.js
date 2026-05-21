@@ -43,6 +43,9 @@ try {
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN goalSetAt INTEGER`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN cover TEXT DEFAULT ''`);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS book_reviews (
@@ -239,8 +242,8 @@ export const getBookById = (id) =>
 export const insertBook = (book) => {
   const now = Date.now();
   db.runSync(
-    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, endDate, createdAt, bookType, genre)
-     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, endDate, createdAt, bookType, genre, cover)
+     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
     [
       book.title,
       book.author || '',
@@ -252,6 +255,7 @@ export const insertBook = (book) => {
       now,
       book.bookType || 'physical',
       book.genre || '',
+      book.cover || '',
     ]
   );
 };

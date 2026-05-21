@@ -54,6 +54,7 @@ export default function AddBookScreen() {
   const [bookType, setBookType] = useState('physical');
   const [genre, setGenre] = useState('');
   const [review, setReview] = useState('');
+  const [coverImage, setCoverImage] = useState('');
 
   const handleSearch = async () => {
     const q = searchQuery.trim();
@@ -87,6 +88,7 @@ export default function AddBookScreen() {
     setAuthor(cleanAladinAuthor(item.author));
     const pages = item.subInfo?.itemPage;
     if (pages && pages > 0) setTotalPages(String(pages));
+    setCoverImage(item.cover || '');
     setSearchResults([]);
     setSearchQuery('');
   };
@@ -117,6 +119,7 @@ export default function AddBookScreen() {
       bookType,
       genre,
       review: review.trim(),
+      cover: coverImage,
     });
     router.back();
   };
@@ -173,6 +176,12 @@ export default function AddBookScreen() {
             ))}
           </View>
         )}
+
+        {coverImage ? (
+          <View style={styles.selectedCoverContainer}>
+            <Image source={{ uri: coverImage }} style={styles.selectedCoverImage} />
+          </View>
+        ) : null}
 
         <Text style={styles.label}>책 제목 *</Text>
         <TextInput
@@ -357,6 +366,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#EDE9F6',
   },
   searchResultInfo: { flex: 1 },
+  selectedCoverContainer: { alignItems: 'center', marginTop: 20 },
+  selectedCoverImage: { width: 80, height: 114, borderRadius: 6, resizeMode: 'cover', backgroundColor: '#EDE9F6' },
   searchResultTitle: { fontSize: 13, fontWeight: '600', color: '#1C1B1F', marginBottom: 2 },
   searchResultAuthor: { fontSize: 12, color: '#49454F' },
   saveBtn: {
