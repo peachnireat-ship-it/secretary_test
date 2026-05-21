@@ -2,12 +2,14 @@ import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { getUsername } from '../database/database';
+import { checkAndUnlockBadges } from '../database/badges';
 import XpGainToast from '../components/XpGainToast';
 
 export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
+    checkAndUnlockBadges();
     const timer = setTimeout(() => {
       if (!getUsername()) {
         router.replace('/username-setup');
