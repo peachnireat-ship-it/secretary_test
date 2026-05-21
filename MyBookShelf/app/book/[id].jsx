@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, isDoubleXpActive } from '../../database/database';
+import { GENRES } from '../../database/badges';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
 import BookShareCard from '../../components/BookShareCard';
@@ -37,6 +38,7 @@ export default function BookDetailScreen() {
   const [endDateStr, setEndDateStr] = useState('');
   const [goalDateStr, setGoalDateStr] = useState('');
   const [bookType, setBookType] = useState('physical');
+  const [genre, setGenre] = useState('');
   const [progressPct, setProgressPct] = useState('');
   const [levelUpModal, setLevelUpModal] = useState({ visible: false, level: 1, navigateBack: false });
 
@@ -95,6 +97,7 @@ export default function BookDetailScreen() {
       setEndDateStr(tsToDateStr(data.endDate));
       setGoalDateStr(tsToDateStr(data.goalDate));
       setBookType(data.bookType || 'physical');
+      setGenre(data.genre || '');
       setProgressPct(data.progressPct > 0 ? data.progressPct.toString() : '');
       setEditTitle(data.title || '');
       setEditAuthor(data.author || '');
@@ -197,6 +200,7 @@ export default function BookDetailScreen() {
       endDate: finalEndDate,
       goalDate: goalTs ?? book.goalDate,
       bookType,
+      genre,
       progressPct: parseInt(progressPct) || 0,
       status: autoComplete ? 'completed' : book.status,
     });
@@ -255,6 +259,7 @@ export default function BookDetailScreen() {
             currentPage: parseInt(currentPage) || 0,
             status: 'reading',
             startDate: dateStrToTs(startDateStr) || now,
+            genre,
             progressPct: parseInt(progressPct) || 0,
           });
           router.back();
@@ -289,6 +294,7 @@ export default function BookDetailScreen() {
             status: 'completed',
             endDate: finalEndDate,
             goalDate: goalTs ?? book.goalDate,
+            genre,
             progressPct: parseInt(progressPct) || 0,
           });
           const prevLevel = getUserStats().level;
@@ -448,6 +454,19 @@ export default function BookDetailScreen() {
         {book.status !== 'completed' && effectiveProgress < 50 && rating === 0 && (
           <Text style={styles.ratingHint}>진척률 50% 이상부터 별점을 남길 수 있습니다.</Text>
         )}
+
+        <Text style={styles.sectionLabel}>장르</Text>
+        <View style={styles.genreRow}>
+          {GENRES.map((g) => (
+            <TouchableOpacity
+              key={g}
+              style={[styles.genreBtn, genre === g && styles.genreBtnActive]}
+              onPress={() => setGenre(genre === g ? '' : g)}
+            >
+              <Text style={[styles.genreBtnText, genre === g && styles.genreBtnTextActive]}>{g}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         <Text style={styles.sectionLabel}>책 형태</Text>
         <View style={styles.typeRow}>
@@ -634,6 +653,17 @@ const styles = StyleSheet.create({
     color: '#1C1B1F',
   },
   reviewInput: { height: 120 },
+  genreRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  genreBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#CAC4D0',
+    borderRadius: 20,
+  },
+  genreBtnActive: { backgroundColor: '#6750A4', borderColor: '#6750A4' },
+  genreBtnText: { fontSize: 13, color: '#49454F' },
+  genreBtnTextActive: { color: '#fff', fontWeight: '600' },
   typeRow: { flexDirection: 'row', gap: 8 },
   typeBtn: {
     flex: 1,
