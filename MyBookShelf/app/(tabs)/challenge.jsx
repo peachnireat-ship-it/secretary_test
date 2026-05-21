@@ -1,11 +1,16 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useState, useCallback, Fragment } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getBooksByStatus, addCheckin, getSuccessfulChallengeBooks, getAllBooks } from '../../database/database';
+import { getBooksByStatus, addCheckin, getSuccessfulChallengeBooks, getAllBooks, addXp, getPref, setPref } from '../../database/database';
 
 const STEPS = 7;
 const PURPLE = '#6750A4';
+
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+}
 const PURPLE_LIGHT = '#E8DEF8';
 const PURPLE_MID = '#D0BCFF';
 
@@ -210,6 +215,16 @@ function ChallengeCard({ book, onPress, isSuccess }) {
     if (alreadyCheckedIn) return;
     addCheckin(book.id, todayTs);
     setCheckins((prev) => [...prev, todayTs]);
+
+    if (book.goalDate) {
+      const bonusKey = `challenge_bonus_${book.id}_${todayKey()}`;
+      if (!getPref(bonusKey)) {
+        const bonus = 5 + Math.floor(Math.random() * 6);
+        addXp(bonus);
+        setPref(bonusKey, '1');
+        Alert.alert('🎯 챌린지 보너스!', `오늘 챌린지 인증 완료!\n+${bonus} XP 보너스를 획득했습니다!`);
+      }
+    }
   };
 
   const elapsedDays = (book.status === 'reading' && startMidnight)
