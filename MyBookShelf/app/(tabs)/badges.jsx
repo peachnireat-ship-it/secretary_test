@@ -4,7 +4,8 @@ import { useFocusEffect } from 'expo-router';
 import { getBadgesWithStatus, checkAndUnlockBadges, getWeeklyCompletionBadges } from '../../database/badges';
 
 function BadgeCard({ badge }) {
-  const pct = Math.min(100, Math.round((badge.progress.current / badge.progress.max) * 100));
+  const isLocked = !badge.unlocked && badge.available === false;
+  const pct = isLocked ? 0 : Math.min(100, Math.round((badge.progress.current / badge.progress.max) * 100));
   const opacity = useRef(new Animated.Value(0)).current;
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const timerRef = useRef(null);
@@ -22,25 +23,46 @@ function BadgeCard({ badge }) {
     }, 4300);
   };
 
+  const tooltipMsg = isLocked && badge.prerequisiteName
+    ? `'${badge.prerequisiteName}' 달성 후 도전 가능!\n\n${badge.desc}`
+    : badge.desc;
+
   return (
     <TouchableOpacity
-      style={[styles.badgeCard, badge.unlocked && styles.badgeCardUnlocked, tooltipVisible && styles.badgeCardActive]}
+      style={[
+        styles.badgeCard,
+        badge.unlocked && styles.badgeCardUnlocked,
+        isLocked && styles.badgeCardLocked,
+        tooltipVisible && styles.badgeCardActive,
+      ]}
       onPress={handlePress}
       activeOpacity={0.85}
     >
       {tooltipVisible && (
         <Animated.View style={[styles.tooltip, { opacity }]} pointerEvents="none">
-          <Text style={styles.tooltipText}>{badge.desc}</Text>
+          <Text style={styles.tooltipText}>{tooltipMsg}</Text>
           <View style={styles.tooltipArrow} />
         </Animated.View>
+      )}
+      {badge.tier && (
+        <View style={[styles.tierTag, badge.unlocked && styles.tierTagUnlocked, isLocked && styles.tierTagLocked]}>
+          <Text style={[styles.tierTagText, badge.unlocked && styles.tierTagTextUnlocked]}>Lv.{badge.tier}</Text>
+        </View>
+      )}
+      {isLocked && (
+        <Text style={styles.lockIcon}>🔒</Text>
       )}
       <Text style={[styles.badgeEmoji, !badge.unlocked && styles.badgeEmojiLocked]}>{badge.emoji}</Text>
       <Text style={[styles.badgeName, !badge.unlocked && styles.badgeNameLocked]}>{badge.name}</Text>
       <View style={styles.badgeBarBg}>
         <View style={[styles.badgeBarFill, { width: `${pct}%` }, badge.unlocked && styles.badgeBarFillDone]} />
       </View>
-      <Text style={styles.badgeProgressText}>
-        {badge.unlocked ? '✓ 달성!' : `${badge.progress.current} / ${badge.progress.max}`}
+      <Text style={[styles.badgeProgressText, isLocked && styles.badgeProgressLocked]}>
+        {badge.unlocked
+          ? '✓ 달성!'
+          : isLocked
+            ? '이전 단계 달성 필요'
+            : `${badge.progress.current} / ${badge.progress.max}`}
       </Text>
     </TouchableOpacity>
   );
@@ -216,5 +238,44 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#9E9E9E',
     fontWeight: '600',
+  },
+  badgeProgressLocked: {
+    fontSize: 9,
+    color: '#BDBDBD',
+    fontWeight: '400',
+  },
+  badgeCardLocked: {
+    borderColor: '#EEEEEE',
+    backgroundColor: '#FAFAFA',
+    opacity: 0.6,
+  },
+  tierTag: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#E8DEF8',
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  tierTagUnlocked: {
+    backgroundColor: '#6750A4',
+  },
+  tierTagLocked: {
+    backgroundColor: '#E0E0E0',
+  },
+  tierTagText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#6750A4',
+  },
+  tierTagTextUnlocked: {
+    color: '#fff',
+  },
+  lockIcon: {
+    position: 'absolute',
+    top: 8,
+    left: 10,
+    fontSize: 11,
   },
 });
