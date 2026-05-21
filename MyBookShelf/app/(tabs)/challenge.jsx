@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useState, useCallback, Fragment } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -222,7 +222,6 @@ function ChallengeCard({ book, onPress, isSuccess }) {
         const bonus = 5 + Math.floor(Math.random() * 6);
         addXp(bonus);
         setPref(bonusKey, '1');
-        Alert.alert('🎯 챌린지 보너스!', `오늘 챌린지 인증 완료!\n+${bonus} XP 보너스를 획득했습니다!`);
       }
     }
   };
