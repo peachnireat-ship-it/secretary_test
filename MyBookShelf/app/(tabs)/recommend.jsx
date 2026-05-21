@@ -129,7 +129,8 @@ export default function RecommendScreen() {
         const keyword = region === 'foreign'
           ? (cat.foreignAgeKeys?.[ag] ?? cat.foreignKey)
           : (cat.ageKeys?.[ag] ?? cat.googleKey);
-        items = await fetchAladinBooks(keyword, target, ag);
+        // 외국도서는 키워드 자체로 충분하며 CategoryId 필터 적용 시 결과 없음
+        items = await fetchAladinBooks(keyword, target, region === 'foreign' ? null : ag);
       }
       setBooks(items.map(normalizeAladinBook));
     } catch {
