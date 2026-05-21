@@ -1,7 +1,7 @@
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, KeyboardAvoidingView, Platform,
-  ActivityIndicator,
+  ActivityIndicator, Image,
 } from 'react-native';
 import { useState, useRef } from 'react';
 import { useRouter } from 'expo-router';
@@ -10,6 +10,10 @@ import * as Sharing from 'expo-sharing';
 import { insertBook } from '../database/database';
 import { GENRES } from '../database/badges';
 import BookShareCard from '../components/BookShareCard';
+
+const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
+const cleanAladinAuthor = (str) =>
+  str ? str.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() || '저자 미상' : '저자 미상';
 
 const STATUS_OPTIONS = [
   { key: 'want_to_read', label: '읽고 싶음' },
@@ -40,8 +44,9 @@ export default function AddBookScreen() {
     }, 300);
   };
 
-  const [isbn, setIsbn] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [totalPages, setTotalPages] = useState('');
@@ -50,36 +55,38 @@ export default function AddBookScreen() {
   const [genre, setGenre] = useState('');
   const [review, setReview] = useState('');
 
-  const handleIsbnSearch = async () => {
-    const cleaned = isbn.replace(/[-\s]/g, '');
-    if (!cleaned) {
-      Alert.alert('알림', 'ISBN을 입력해주세요.');
-      return;
-    }
-    if (!/^\d{10}$|^\d{13}$/.test(cleaned)) {
-      Alert.alert('알림', 'ISBN은 10자리 또는 13자리 숫자입니다.');
+  const handleSearch = async () => {
+    const q = searchQuery.trim();
+    if (!q) {
+      Alert.alert('알림', '검색어를 입력해주세요.');
       return;
     }
     setIsSearching(true);
+    setSearchResults([]);
     try {
       const res = await fetch(
-        `https://openlibrary.org/api/books?bibkeys=ISBN:${cleaned}&format=json&jscmd=data`
+        `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(q)}&QueryType=Keyword&SearchTarget=Book&MaxResults=10&output=js&Version=20131101&Cover=Big`
       );
-      const json = await res.json();
-      const data = json[`ISBN:${cleaned}`];
-      if (!data) {
-        Alert.alert('검색 결과 없음', '일치하는 책 정보가 없습니다.\nISBN 번호를 다시 확인해보세요.');
+      if (!res.ok) throw new Error('fetch error');
+      const data = await res.json();
+      const items = (data.item || []).filter(item => item.cover && !item.cover.includes('noimg'));
+      if (items.length === 0) {
+        Alert.alert('검색 결과 없음', '일치하는 책 정보가 없습니다.\n다른 검색어를 시도해보세요.');
         return;
       }
-      if (data.title) setTitle(data.title);
-      if (data.authors?.length > 0) setAuthor(data.authors[0].name || '');
-      if (data.number_of_pages) setTotalPages(String(data.number_of_pages));
-      Alert.alert('검색 완료', '책 정보가 자동으로 입력되었습니다.');
+      setSearchResults(items);
     } catch {
       Alert.alert('오류', '책 정보를 가져오지 못했습니다. 네트워크를 확인해주세요.');
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const selectBook = (item) => {
+    setTitle(item.title || '');
+    setAuthor(cleanAladinAuthor(item.author));
+    setSearchResults([]);
+    setSearchQuery('');
   };
 
   const handleShare = async () => {
@@ -125,21 +132,20 @@ export default function AddBookScreen() {
     >
       <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={{ paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
 
-        <Text style={styles.label}>ISBN 검색 <Text style={styles.labelOptional}>(선택)</Text></Text>
+        <Text style={styles.label}>도서 검색 <Text style={styles.labelOptional}>(선택 · 알라딘)</Text></Text>
         <View style={styles.isbnRow}>
           <TextInput
             style={[styles.input, styles.isbnInput]}
-            value={isbn}
-            onChangeText={setIsbn}
-            placeholder="ISBN 10자리 또는 13자리"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="책 제목, 저자 또는 ISBN 입력"
             placeholderTextColor="#CAC4D0"
-            keyboardType="numeric"
             returnKeyType="search"
-            onSubmitEditing={handleIsbnSearch}
+            onSubmitEditing={handleSearch}
           />
           <TouchableOpacity
             style={[styles.isbnBtn, isSearching && styles.isbnBtnDisabled]}
-            onPress={handleIsbnSearch}
+            onPress={handleSearch}
             disabled={isSearching}
           >
             {isSearching
@@ -148,6 +154,23 @@ export default function AddBookScreen() {
             }
           </TouchableOpacity>
         </View>
+        {searchResults.length > 0 && (
+          <View style={styles.searchResults}>
+            {searchResults.map((item) => (
+              <TouchableOpacity
+                key={String(item.itemId)}
+                style={styles.searchResultItem}
+                onPress={() => selectBook(item)}
+              >
+                <Image source={{ uri: item.cover }} style={styles.searchResultCover} />
+                <View style={styles.searchResultInfo}>
+                  <Text style={styles.searchResultTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.searchResultAuthor} numberOfLines={1}>{cleanAladinAuthor(item.author)}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.label}>책 제목 *</Text>
         <TextInput
@@ -307,6 +330,33 @@ const styles = StyleSheet.create({
   statusBtnText: { fontSize: 13, color: '#49454F' },
   statusBtnTextActive: { color: '#fff', fontWeight: '600' },
   reviewInput: { height: 120, paddingTop: 12 },
+
+  searchResults: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#CAC4D0',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EDF6',
+  },
+  searchResultCover: {
+    width: 38,
+    height: 54,
+    borderRadius: 4,
+    resizeMode: 'cover',
+    backgroundColor: '#EDE9F6',
+  },
+  searchResultInfo: { flex: 1 },
+  searchResultTitle: { fontSize: 13, fontWeight: '600', color: '#1C1B1F', marginBottom: 2 },
+  searchResultAuthor: { fontSize: 12, color: '#49454F' },
   saveBtn: {
     backgroundColor: '#6750A4',
     borderRadius: 10,
