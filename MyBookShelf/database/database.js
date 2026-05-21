@@ -46,6 +46,9 @@ try {
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN cover TEXT DEFAULT ''`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN ratedAt INTEGER`);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS book_reviews (
@@ -234,7 +237,7 @@ export const getBooksByStatus = (status) =>
   db.getAllSync(`SELECT * FROM books WHERE status = ? ORDER BY ${STATUS_ORDER}, createdAt DESC`, [status]);
 
 export const getFiveStarBooks = () =>
-  db.getAllSync('SELECT * FROM books WHERE rating = 5 ORDER BY endDate DESC, createdAt DESC');
+  db.getAllSync('SELECT * FROM books WHERE rating = 5 ORDER BY ratedAt DESC, endDate DESC, createdAt DESC');
 
 export const getBookById = (id) =>
   db.getFirstSync('SELECT * FROM books WHERE id = ?', [id]);
@@ -262,14 +265,17 @@ export const insertBook = (book) => {
 
 export const updateBook = (book) => {
   const now = Date.now();
-  const current = db.getFirstSync('SELECT goalDate, goalSetAt FROM books WHERE id = ?', [book.id]);
+  const current = db.getFirstSync('SELECT goalDate, goalSetAt, rating, ratedAt FROM books WHERE id = ?', [book.id]);
   const newGoalSetAt = (book.goalDate && book.goalDate !== current?.goalDate)
     ? now
     : (current?.goalSetAt || null);
+  const newRatedAt = book.rating === 5
+    ? (current?.rating === 5 ? current?.ratedAt : now)
+    : null;
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
      status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?,
-     bookType = ?, progressPct = ?, genre = ?, updatedAt = ?, goalSetAt = ? WHERE id = ?`,
+     bookType = ?, progressPct = ?, genre = ?, updatedAt = ?, goalSetAt = ?, ratedAt = ? WHERE id = ?`,
     [
       book.title,
       book.author || '',
@@ -286,6 +292,7 @@ export const updateBook = (book) => {
       book.genre || '',
       now,
       newGoalSetAt,
+      newRatedAt,
       book.id,
     ]
   );

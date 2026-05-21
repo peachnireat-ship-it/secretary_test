@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Image } from 'react-native';
 import { useCallback } from 'react';
 import { useState } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -49,34 +49,40 @@ function BookSpine({ book, index, onPress }) {
       onPress={onPress}
       activeOpacity={0.75}
     >
-      {/* 클로스 바인딩 — 왼쪽 가죽/천 재질 띠 */}
-      <View style={[styles.spineBinding, { backgroundColor: colors.binding }]}>
-        <View style={styles.bindingRib} />
-        <View style={styles.bindingRib} />
-        <View style={styles.bindingRib} />
-      </View>
+      {book.cover ? (
+        <Image source={{ uri: book.cover }} style={styles.coverImage} />
+      ) : (
+        <>
+          {/* 클로스 바인딩 — 왼쪽 가죽/천 재질 띠 */}
+          <View style={[styles.spineBinding, { backgroundColor: colors.binding }]}>
+            <View style={styles.bindingRib} />
+            <View style={styles.bindingRib} />
+            <View style={styles.bindingRib} />
+          </View>
 
-      {/* 척추 본문 — 금색 밴드 + 제목/저자 */}
-      <View style={styles.spineCenter}>
-        <View style={[styles.goldBand, { backgroundColor: colors.accent }]} />
-        <View style={styles.spineTitleWrap}>
-          <Text style={[styles.spineTitle, { color: colors.fg }]} numberOfLines={5}>
-            {book.title}
-          </Text>
-          {book.author ? (
-            <Text style={[styles.spineAuthor, { color: colors.fg }]} numberOfLines={2}>
-              {book.author}
-            </Text>
-          ) : null}
-        </View>
-        <View style={[styles.goldBand, { backgroundColor: colors.accent }]} />
-      </View>
+          {/* 척추 본문 — 금색 밴드 + 제목/저자 */}
+          <View style={styles.spineCenter}>
+            <View style={[styles.goldBand, { backgroundColor: colors.accent }]} />
+            <View style={styles.spineTitleWrap}>
+              <Text style={[styles.spineTitle, { color: colors.fg }]} numberOfLines={5}>
+                {book.title}
+              </Text>
+              {book.author ? (
+                <Text style={[styles.spineAuthor, { color: colors.fg }]} numberOfLines={2}>
+                  {book.author}
+                </Text>
+              ) : null}
+            </View>
+            <View style={[styles.goldBand, { backgroundColor: colors.accent }]} />
+          </View>
 
-      {/* 페이지 단면 — 오른쪽 크림색 */}
-      <View style={styles.spinePageEdge} />
+          {/* 페이지 단면 — 오른쪽 크림색 */}
+          <View style={styles.spinePageEdge} />
 
-      {/* 상단 광택 라인 */}
-      <View style={[styles.spineTopEdge, { backgroundColor: lighten(colors.bg) }]} />
+          {/* 상단 광택 라인 */}
+          <View style={[styles.spineTopEdge, { backgroundColor: lighten(colors.bg) }]} />
+        </>
+      )}
     </TouchableOpacity>
   );
 }
@@ -431,6 +437,11 @@ const styles = StyleSheet.create({
 
   fillerBook: {
     backgroundColor: 'transparent',
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
 
   // ── 빈 상태 ────────────────────────────────────────
