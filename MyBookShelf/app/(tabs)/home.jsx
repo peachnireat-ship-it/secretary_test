@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Alert } from 'react-native';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent } from '../../database/database';
 import { setPendingLibraryStatus } from './_libraryFilter';
 import { checkAndUnlockBadges, checkAndUnlockWeeklyAllMissionsBadge } from '../../database/badges';
@@ -322,8 +322,9 @@ export default function HomeScreen() {
         <View style={styles.profileBox}>
           <View style={styles.profileNameRow}>
             <Text style={styles.profileName}>{username}</Text>
-            <View style={[styles.levelBadge, { backgroundColor: userStats.tierColor }]}>
-              <Text style={styles.levelText}>{userStats.tier} Lv.{userStats.tierLevel}</Text>
+            <View style={[styles.levelBadge, { borderColor: userStats.tierColor, backgroundColor: userStats.tierColor + '22' }]}>
+              <MaterialCommunityIcons name="diamond" size={13} color={userStats.tierColor} />
+              <Text style={[styles.levelText, { color: userStats.tierColor }]}>{userStats.tier} Lv.{userStats.tierLevel}</Text>
             </View>
           </View>
           <View style={styles.xpRow}>
@@ -465,14 +466,17 @@ const styles = StyleSheet.create({
     color: '#1C1B1F',
   },
   levelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   levelText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#fff',
   },
   profileNameRow: {
     flexDirection: 'row',
