@@ -65,7 +65,7 @@ export default function AddBookScreen() {
     setSearchResults([]);
     try {
       const res = await fetch(
-        `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(q)}&QueryType=Keyword&SearchTarget=Book&MaxResults=10&output=js&Version=20131101&Cover=Big`
+        `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(q)}&QueryType=Keyword&SearchTarget=Book&MaxResults=10&output=js&Version=20131101&Cover=Big&OptResult=subInfo`
       );
       if (!res.ok) throw new Error('fetch error');
       const data = await res.json();
@@ -85,6 +85,8 @@ export default function AddBookScreen() {
   const selectBook = (item) => {
     setTitle(item.title || '');
     setAuthor(cleanAladinAuthor(item.author));
+    const pages = item.subInfo?.itemPage;
+    if (pages && pages > 0) setTotalPages(String(pages));
     setSearchResults([]);
     setSearchQuery('');
   };
