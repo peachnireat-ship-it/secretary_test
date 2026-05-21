@@ -1,5 +1,5 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllBooks, getBooksByStatus, deleteBook } from '../../database/database';
@@ -14,9 +14,10 @@ const TABS = [
 
 export default function LibraryScreen() {
   const router = useRouter();
-  const { status: statusParam } = useLocalSearchParams();
+  const { status: statusParam, navId } = useLocalSearchParams();
   const [books, setBooks] = useState([]);
   const [activeTab, setActiveTab] = useState('all');
+  const consumedNavIdRef = useRef(null);
 
   const loadBooks = useCallback((tab) => {
     const key = tab || activeTab;
@@ -26,13 +27,15 @@ export default function LibraryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (statusParam && TABS.some(t => t.key === statusParam)) {
+      if (statusParam && navId && navId !== consumedNavIdRef.current && TABS.some(t => t.key === statusParam)) {
+        consumedNavIdRef.current = navId;
         setActiveTab(statusParam);
         setBooks(getBooksByStatus(statusParam));
       } else {
-        loadBooks();
+        setActiveTab('all');
+        setBooks(getAllBooks());
       }
-    }, [statusParam, loadBooks])
+    }, [statusParam, navId, loadBooks])
   );
 
   const handleTabChange = (tabKey) => {

@@ -357,7 +357,7 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>읽는 중인 책</Text>
           {stats.reading > 3 && (
-            <TouchableOpacity style={styles.moreBtn} onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'reading' } })}>
+            <TouchableOpacity style={styles.moreBtn} onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'reading', navId: Date.now() } })}>
               <Text style={styles.moreBtnText}>더보기</Text>
             </TouchableOpacity>
           )}
@@ -378,7 +378,7 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>읽고 싶은 책</Text>
           {stats.want > 3 && (
-            <TouchableOpacity style={styles.moreBtn} onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'want_to_read' } })}>
+            <TouchableOpacity style={styles.moreBtn} onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'want_to_read', navId: Date.now() } })}>
               <Text style={styles.moreBtnText}>더보기</Text>
             </TouchableOpacity>
           )}
@@ -399,7 +399,7 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>완독한 책</Text>
           {stats.completed > 3 && (
-            <TouchableOpacity style={styles.moreBtn} onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'completed' } })}>
+            <TouchableOpacity style={styles.moreBtn} onPress={() => router.push({ pathname: '/(tabs)', params: { status: 'completed', navId: Date.now() } })}>
               <Text style={styles.moreBtnText}>더보기</Text>
             </TouchableOpacity>
           )}
