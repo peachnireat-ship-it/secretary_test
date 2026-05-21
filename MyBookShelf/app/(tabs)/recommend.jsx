@@ -3,9 +3,9 @@ import {
   Image, ActivityIndicator, Modal, Pressable, Alert,
 } from 'react-native';
 import { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { insertBook } from '../../database/database';
+import { insertBook, getAge } from '../../database/database';
 
 const CATEGORIES = [
   { key: 'fiction',                        googleKey: '소설',      label: '소설' },
@@ -17,6 +17,31 @@ const CATEGORIES = [
   { key: 'biography',                      googleKey: '자서전',    label: '인물/자서전' },
   { key: 'children',                       googleKey: '동화',      label: '어린이' },
 ];
+
+const MODES = [
+  { key: 'genre',   label: '장르별' },
+  { key: 'popular', label: '인기 순위' },
+  { key: 'age',     label: '연령대 추천' },
+];
+
+function getAgeGroup(age) {
+  if (!age || age <= 0) return null;
+  if (age <= 12) return 'child';
+  if (age <= 18) return 'teen';
+  return 'adult';
+}
+
+const AGE_GROUP_INFO = {
+  child: { label: '어린이', desc: '~12세',   color: '#4CAF50', icon: 'happy-outline' },
+  teen:  { label: '청소년', desc: '13~18세', color: '#2196F3', icon: 'school-outline' },
+  adult: { label: '성인',   desc: '19세~',   color: '#6750A4', icon: 'person-outline' },
+};
+
+const AGE_ALADIN_CATEGORY = {
+  child: '&CategoryId=13789',
+  teen:  '&CategoryId=5361',
+  adult: '',
+};
 
 function todayCatIndex() {
   const now = new Date();
@@ -31,6 +56,16 @@ const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
 async function fetchAladinBooks(keyword) {
   const res = await fetch(
     `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(keyword)}&QueryType=Keyword&SearchTarget=Book&MaxResults=13&output=js&Version=20131101&Cover=Big`
+  );
+  if (!res.ok) throw new Error('fetch error');
+  const data = await res.json();
+  return (data.item || []).filter(item => item.cover && !item.cover.includes('noimg'));
+}
+
+async function fetchAladinBestsellers(ageGroup) {
+  const catParam = AGE_ALADIN_CATEGORY[ageGroup] ?? '';
+  const res = await fetch(
+    `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ALADIN_TTB_KEY}&QueryType=Bestseller&MaxResults=20&SearchTarget=Book&output=js&Version=20131101&Cover=Big${catParam}`
   );
   if (!res.ok) throw new Error('fetch error');
   const data = await res.json();
@@ -68,6 +103,35 @@ function normalizeOpenLibBook(work) {
   };
 }
 
+function normalizeTrendingBook(work) {
+  return {
+    id: work.key,
+    title: work.title || '',
+    author: work.author_name?.[0] || '저자 미상',
+    coverUrl: work.cover_i ? `https://covers.openlibrary.org/b/id/${work.cover_i}-M.jpg` : null,
+    coverUrlLarge: work.cover_i ? `https://covers.openlibrary.org/b/id/${work.cover_i}-L.jpg` : null,
+    year: work.first_publish_year || null,
+    description: null,
+    source: 'openlib',
+    rawKey: work.key,
+  };
+}
+
+async function fetchOpenLibPopular(ageGroup) {
+  if (ageGroup === 'child') {
+    const works = await fetchSubjectBooks('juvenile-literature');
+    return works.map(normalizeOpenLibBook);
+  }
+  if (ageGroup === 'teen') {
+    const works = await fetchSubjectBooks('young-adult-fiction');
+    return works.map(normalizeOpenLibBook);
+  }
+  const res = await fetch('https://openlibrary.org/trending/daily.json?limit=20');
+  if (!res.ok) throw new Error('fetch error');
+  const json = await res.json();
+  return (json.works || []).filter(w => w.cover_i).map(normalizeTrendingBook);
+}
+
 async function fetchSubjectBooks(subject) {
   const res = await fetch(
     `https://openlibrary.org/subjects/${subject}.json?limit=13`
@@ -84,25 +148,45 @@ async function fetchWorkDetail(key) {
 }
 
 export default function RecommendScreen() {
-  const [catIdx, setCatIdx]           = useState(todayCatIndex);
-  const [bookRegion, setBookRegion]   = useState('korean');
+  const router = useRouter();
+  const [mode, setMode]             = useState('genre');
+  const [catIdx, setCatIdx]         = useState(todayCatIndex);
+  const [bookRegion, setBookRegion] = useState('korean');
+  const [userAge, setUserAge]       = useState(0);
   const [books, setBooks]             = useState([]);
   const [loading, setLoading]         = useState(false);
   const [selected, setSelected]       = useState(null);
   const [detail, setDetail]           = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const loadBooks = useCallback(async (idx, region) => {
+  const loadBooks = useCallback(async (currentMode, idx, region) => {
     setLoading(true);
     setBooks([]);
     try {
       let normalized;
-      if (region === 'foreign') {
-        const works = await fetchSubjectBooks(CATEGORIES[idx].key);
-        normalized = works.map(normalizeOpenLibBook);
+      if (currentMode === 'popular') {
+        if (region === 'foreign') {
+          normalized = await fetchOpenLibPopular('adult');
+        } else {
+          const items = await fetchAladinBestsellers('adult');
+          normalized = items.map(normalizeAladinBook);
+        }
+      } else if (currentMode === 'age') {
+        const ag = getAgeGroup(getAge()) || 'adult';
+        if (region === 'foreign') {
+          normalized = await fetchOpenLibPopular(ag);
+        } else {
+          const items = await fetchAladinBestsellers(ag);
+          normalized = items.map(normalizeAladinBook);
+        }
       } else {
-        const items = await fetchAladinBooks(CATEGORIES[idx].googleKey);
-        normalized = items.map(normalizeAladinBook);
+        if (region === 'foreign') {
+          const works = await fetchSubjectBooks(CATEGORIES[idx].key);
+          normalized = works.map(normalizeOpenLibBook);
+        } else {
+          const items = await fetchAladinBooks(CATEGORIES[idx].googleKey);
+          normalized = items.map(normalizeAladinBook);
+        }
       }
       setBooks(normalized);
     } catch {
@@ -113,7 +197,10 @@ export default function RecommendScreen() {
   }, []);
 
   useFocusEffect(
-    useCallback(() => { loadBooks(catIdx, bookRegion); }, [catIdx, bookRegion])
+    useCallback(() => {
+      setUserAge(getAge());
+      loadBooks(mode, catIdx, bookRegion);
+    }, [mode, catIdx, bookRegion])
   );
 
   const openBook = async (book) => {
@@ -146,7 +233,7 @@ export default function RecommendScreen() {
         totalPages: 0,
         status:     'want_to_read',
         bookType:   'physical',
-        genre:      CATEGORIES[catIdx].label,
+        genre:      mode === 'genre' ? CATEGORIES[catIdx].label : '',
         review:     '',
       });
       Alert.alert('추가 완료', `"${selected.title}"을(를) 서재에 추가했습니다.`);
@@ -156,10 +243,13 @@ export default function RecommendScreen() {
     }
   };
 
-  const todayLabel = (() => {
-    const d = new Date();
-    return `${d.getMonth() + 1}월 ${d.getDate()}일`;
-  })();
+  const d = new Date();
+  const todayLabel = `${d.getMonth() + 1}월 ${d.getDate()}일`;
+  const ageGroup = getAgeGroup(userAge);
+
+  const headerTitle = mode === 'popular' ? '인기 도서 순위'
+    : mode === 'age' ? '연령대별 추천 도서'
+    : '오늘의 추천 도서';
 
   const featured = books[0] ?? null;
   const rest     = books.slice(1);
@@ -181,10 +271,35 @@ export default function RecommendScreen() {
       {/* ── 헤더 ── */}
       <View style={styles.header}>
         <Text style={styles.dateLabel}>{todayLabel}</Text>
-        <Text style={styles.headerTitle}>오늘의 추천 도서</Text>
-        <Text style={styles.headerSub}>
-          오늘의 장르: <Text style={styles.catHighlight}>{CATEGORIES[catIdx].label}</Text>
-        </Text>
+        <Text style={styles.headerTitle}>{headerTitle}</Text>
+        {mode === 'genre' ? (
+          <Text style={styles.headerSub}>
+            오늘의 장르: <Text style={styles.catHighlight}>{CATEGORIES[catIdx].label}</Text>
+          </Text>
+        ) : mode === 'popular' ? (
+          <Text style={styles.headerSub}>지금 가장 많이 읽히는 책</Text>
+        ) : (
+          <Text style={styles.headerSub}>
+            {ageGroup
+              ? `${AGE_GROUP_INFO[ageGroup].label}(${AGE_GROUP_INFO[ageGroup].desc})을 위한 추천`
+              : '나이를 설정하면 맞춤 추천을 드려요'}
+          </Text>
+        )}
+      </View>
+
+      {/* ── 모드 탭 ── */}
+      <View style={styles.modeTabs}>
+        {MODES.map(m => (
+          <TouchableOpacity
+            key={m.key}
+            style={[styles.modeTab, mode === m.key && styles.modeTabActive]}
+            onPress={() => setMode(m.key)}
+          >
+            <Text style={[styles.modeTabText, mode === m.key && styles.modeTabTextActive]}>
+              {m.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* ── 한국/외국 탭 ── */}
@@ -207,25 +322,47 @@ export default function RecommendScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── 장르 칩 ── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipBar}
-        contentContainerStyle={styles.chipContent}
-      >
-        {CATEGORIES.map((cat, i) => (
-          <TouchableOpacity
-            key={cat.key}
-            style={[styles.chip, catIdx === i && styles.chipActive]}
-            onPress={() => setCatIdx(i)}
-          >
-            <Text style={[styles.chipText, catIdx === i && styles.chipTextActive]}>
-              {cat.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* ── 장르 칩 (장르별 모드) ── */}
+      {mode === 'genre' && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipBar}
+          contentContainerStyle={styles.chipContent}
+        >
+          {CATEGORIES.map((cat, i) => (
+            <TouchableOpacity
+              key={cat.key}
+              style={[styles.chip, catIdx === i && styles.chipActive]}
+              onPress={() => setCatIdx(i)}
+            >
+              <Text style={[styles.chipText, catIdx === i && styles.chipTextActive]}>
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* ── 연령대 배너 ── */}
+      {mode === 'age' && (
+        <View style={styles.ageBanner}>
+          {ageGroup ? (
+            <View style={[styles.ageInfoRow, { borderLeftColor: AGE_GROUP_INFO[ageGroup].color }]}>
+              <Ionicons name={AGE_GROUP_INFO[ageGroup].icon} size={18} color={AGE_GROUP_INFO[ageGroup].color} />
+              <Text style={[styles.ageInfoText, { color: AGE_GROUP_INFO[ageGroup].color }]}>
+                {AGE_GROUP_INFO[ageGroup].label} ({AGE_GROUP_INFO[ageGroup].desc}) 맞춤 추천
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.ageSetupRow} onPress={() => router.push('/profile-edit')}>
+              <Ionicons name="person-add-outline" size={16} color="#6750A4" />
+              <Text style={styles.ageSetupText}>나이를 설정하면 맞춤 추천을 받을 수 있어요</Text>
+              <Ionicons name="chevron-forward" size={14} color="#6750A4" />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* ── 콘텐츠 ── */}
       {loading ? (
@@ -238,16 +375,42 @@ export default function RecommendScreen() {
           <Ionicons name="wifi-outline" size={48} color="#BDBDBD" />
           <Text style={styles.emptyText}>추천 도서를 불러올 수 없습니다.</Text>
           <Text style={styles.emptyHint}>네트워크 연결을 확인해주세요.</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => loadBooks(catIdx, bookRegion)}>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => loadBooks(mode, catIdx, bookRegion)}>
             <Text style={styles.retryText}>다시 시도</Text>
           </TouchableOpacity>
         </View>
+      ) : mode === 'popular' ? (
+        <ScrollView style={styles.bookScroll} contentContainerStyle={styles.scroll}>
+          <Text style={styles.sectionLabel}>
+            {bookRegion === 'korean' ? '한국도서 베스트셀러' : '해외도서 인기 순위'}
+          </Text>
+          {books.map((book, i) => {
+            const rank = i + 1;
+            const rankColor = rank === 1 ? '#FFB800' : rank === 2 ? '#9E9E9E' : rank === 3 ? '#CD7F32' : '#BDBDBD';
+            return (
+              <TouchableOpacity key={i} style={styles.rankRow} onPress={() => openBook(book)} activeOpacity={0.8}>
+                <Text style={[styles.rankNum, { color: rankColor }]}>{rank}</Text>
+                <Image source={{ uri: book.coverUrl }} style={styles.rankCover} resizeMode="cover" />
+                <View style={styles.rankInfo}>
+                  <Text style={styles.rankTitle} numberOfLines={2}>{book.title}</Text>
+                  <Text style={styles.rankAuthor} numberOfLines={1}>{book.author}</Text>
+                  {book.year ? <Text style={styles.rankYear}>{book.year}년</Text> : null}
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#CAC4D0" />
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       ) : (
         <ScrollView style={styles.bookScroll} contentContainerStyle={styles.scroll}>
           {/* 오늘의 추천 (첫 번째 책) */}
           {featured && (
             <>
-              <Text style={styles.sectionLabel}>오늘의 추천</Text>
+              <Text style={styles.sectionLabel}>
+                {mode === 'age' && ageGroup
+                  ? `${AGE_GROUP_INFO[ageGroup].label} 추천 1위`
+                  : '오늘의 추천'}
+              </Text>
               <TouchableOpacity style={styles.featuredCard} onPress={() => openBook(featured)} activeOpacity={0.85}>
                 <Image
                   source={{ uri: featured.coverUrlLarge || featured.coverUrl }}
@@ -277,7 +440,9 @@ export default function RecommendScreen() {
           {rest.length > 0 && (
             <>
               <Text style={[styles.sectionLabel, { marginTop: 20 }]}>
-                {CATEGORIES[catIdx].label} 추천 도서
+                {mode === 'age' && ageGroup
+                  ? `${AGE_GROUP_INFO[ageGroup].label} 추천 도서`
+                  : `${CATEGORIES[catIdx].label} 추천 도서`}
               </Text>
               <View style={styles.grid}>
                 {rest.map((book, i) => (
@@ -483,6 +648,54 @@ const styles = StyleSheet.create({
     paddingVertical: 14, gap: 8, marginTop: 8,
   },
   addBtnText: { fontSize: 15, color: '#fff', fontWeight: 'bold' },
+
+  modeTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDE7F6',
+  },
+  modeTab: {
+    flex: 1,
+    paddingVertical: 11,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  modeTabActive:     { borderBottomColor: '#6750A4' },
+  modeTabText:       { fontSize: 13, color: '#9E9E9E', fontWeight: '500' },
+  modeTabTextActive: { color: '#6750A4', fontWeight: 'bold' },
+
+  ageBanner: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDE7F6',
+  },
+  ageInfoRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderLeftWidth: 3, paddingLeft: 10,
+  },
+  ageInfoText:  { fontSize: 13, fontWeight: '600' },
+  ageSetupRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  ageSetupText: { flex: 1, fontSize: 13, color: '#6750A4' },
+
+  rankRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff', borderRadius: 12, padding: 12,
+    marginBottom: 8, elevation: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 2,
+  },
+  rankNum:    { fontSize: 18, fontWeight: 'bold', width: 28, textAlign: 'center' },
+  rankCover:  { width: 48, height: 72, borderRadius: 6, backgroundColor: '#EDE7F6' },
+  rankInfo:   { flex: 1, gap: 3 },
+  rankTitle:  { fontSize: 13, fontWeight: '600', color: '#1C1B1F', lineHeight: 18 },
+  rankAuthor: { fontSize: 11, color: '#6750A4' },
+  rankYear:   { fontSize: 10, color: '#9E9E9E' },
 
   regionTabs: {
     flexDirection: 'row',
