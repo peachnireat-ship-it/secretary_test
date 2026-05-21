@@ -346,10 +346,17 @@ export default function BookDetailScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={{ paddingBottom: insets.bottom + 120 }} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{editTitle || book.title}</Text>
-        {(editAuthor || book.author) ? <Text style={styles.author}>{editAuthor || book.author}</Text> : null}
-        <View style={styles.badgeRow}>
-          <StatusBadge status={book.status} />
+        <View style={styles.titleRow}>
+          {editCover ? (
+            <Image source={{ uri: editCover }} style={styles.headerCover} resizeMode="cover" />
+          ) : null}
+          <View style={styles.titleMeta}>
+            <Text style={styles.title}>{editTitle || book.title}</Text>
+            {(editAuthor || book.author) ? <Text style={styles.author}>{editAuthor || book.author}</Text> : null}
+            <View style={styles.badgeRow}>
+              <StatusBadge status={book.status} />
+            </View>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -611,9 +618,12 @@ export default function BookDetailScreen() {
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: { flex: 1, backgroundColor: '#fff', padding: 16 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#1C1B1F', marginTop: 8, marginBottom: 4 },
-  author: { fontSize: 15, color: '#49454F', marginBottom: 12 },
-  badgeRow: { marginBottom: 20 },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 8, marginBottom: 20 },
+  headerCover: { width: 72, height: 108, borderRadius: 6, backgroundColor: '#EDE7F6' },
+  titleMeta: { flex: 1 },
+  title: { fontSize: 20.5, fontWeight: 'bold', color: '#1C1B1F', marginBottom: 4 },
+  author: { fontSize: 15, color: '#49454F', marginBottom: 10 },
+  badgeRow: {},
   sectionLabel: { fontSize: 14, fontWeight: '600', color: '#1C1B1F', marginBottom: 8, marginTop: 20 },
   input: {
     borderWidth: 1,

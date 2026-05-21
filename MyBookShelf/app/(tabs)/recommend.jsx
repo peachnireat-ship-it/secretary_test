@@ -8,14 +8,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { insertBook, getAge } from '../../database/database';
 
 const CATEGORIES = [
-  { key: 'fiction',                        googleKey: '소설',      label: '소설' },
-  { key: 'mystery_and_detective_stories',  googleKey: '추리소설',  label: '추리/미스터리' },
-  { key: 'science_fiction',               googleKey: 'SF소설',    label: 'SF' },
-  { key: 'fantasy',                        googleKey: '판타지',    label: '판타지' },
-  { key: 'historical_fiction',             googleKey: '역사소설',  label: '역사소설' },
-  { key: 'science',                        googleKey: '과학',      label: '과학' },
-  { key: 'biography',                      googleKey: '자서전',    label: '인물/자서전' },
-  { key: 'children',                       googleKey: '동화',      label: '어린이' },
+  { key: 'fiction',                        googleKey: '소설',      foreignKey: 'fiction novel',               label: '소설' },
+  { key: 'mystery_and_detective_stories',  googleKey: '추리소설',  foreignKey: 'mystery detective thriller',  label: '추리/미스터리' },
+  { key: 'science_fiction',               googleKey: 'SF소설',    foreignKey: 'science fiction',             label: 'SF' },
+  { key: 'fantasy',                        googleKey: '판타지',    foreignKey: 'fantasy',                     label: '판타지' },
+  { key: 'historical_fiction',             googleKey: '역사소설',  foreignKey: 'historical fiction',          label: '역사소설' },
+  { key: 'science',                        googleKey: '과학',      foreignKey: 'popular science',             label: '과학' },
+  { key: 'biography',                      googleKey: '자서전',    foreignKey: 'biography autobiography',     label: '인물/자서전' },
+  { key: 'children',                       googleKey: '동화',      foreignKey: "children picture book",       label: '어린이' },
 ];
 
 const MODES = [
@@ -53,19 +53,19 @@ function todayCatIndex() {
 
 const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
 
-async function fetchAladinBooks(keyword) {
+async function fetchAladinBooks(keyword, target = 'Book') {
   const res = await fetch(
-    `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(keyword)}&QueryType=Keyword&SearchTarget=Book&MaxResults=13&output=js&Version=20131101&Cover=Big`
+    `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(keyword)}&QueryType=Keyword&SearchTarget=${target}&MaxResults=13&output=js&Version=20131101&Cover=Big`
   );
   if (!res.ok) throw new Error('fetch error');
   const data = await res.json();
   return (data.item || []).filter(item => item.cover && !item.cover.includes('noimg'));
 }
 
-async function fetchAladinBestsellers(ageGroup) {
-  const catParam = AGE_ALADIN_CATEGORY[ageGroup] ?? '';
+async function fetchAladinBestsellers(ageGroup, target = 'Book') {
+  const catParam = target === 'Book' ? (AGE_ALADIN_CATEGORY[ageGroup] ?? '') : '';
   const res = await fetch(
-    `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ALADIN_TTB_KEY}&QueryType=Bestseller&MaxResults=20&SearchTarget=Book&output=js&Version=20131101&Cover=Big${catParam}`
+    `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ALADIN_TTB_KEY}&QueryType=Bestseller&MaxResults=20&SearchTarget=${target}&output=js&Version=20131101&Cover=Big${catParam}`
   );
   if (!res.ok) throw new Error('fetch error');
   const data = await res.json();
@@ -89,63 +89,6 @@ function normalizeAladinBook(item) {
   };
 }
 
-function normalizeOpenLibBook(work) {
-  return {
-    id: work.key,
-    title: work.title || '',
-    author: work.authors?.[0]?.name || '저자 미상',
-    coverUrl: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-M.jpg` : null,
-    coverUrlLarge: work.cover_id ? `https://covers.openlibrary.org/b/id/${work.cover_id}-L.jpg` : null,
-    year: work.first_publish_year || null,
-    description: null,
-    source: 'openlib',
-    rawKey: work.key,
-  };
-}
-
-function normalizeTrendingBook(work) {
-  return {
-    id: work.key,
-    title: work.title || '',
-    author: work.author_name?.[0] || '저자 미상',
-    coverUrl: work.cover_i ? `https://covers.openlibrary.org/b/id/${work.cover_i}-M.jpg` : null,
-    coverUrlLarge: work.cover_i ? `https://covers.openlibrary.org/b/id/${work.cover_i}-L.jpg` : null,
-    year: work.first_publish_year || null,
-    description: null,
-    source: 'openlib',
-    rawKey: work.key,
-  };
-}
-
-async function fetchOpenLibPopular(ageGroup) {
-  if (ageGroup === 'child') {
-    const works = await fetchSubjectBooks('juvenile-literature');
-    return works.map(normalizeOpenLibBook);
-  }
-  if (ageGroup === 'teen') {
-    const works = await fetchSubjectBooks('young-adult-fiction');
-    return works.map(normalizeOpenLibBook);
-  }
-  const res = await fetch('https://openlibrary.org/trending/daily.json?limit=20');
-  if (!res.ok) throw new Error('fetch error');
-  const json = await res.json();
-  return (json.works || []).filter(w => w.cover_i).map(normalizeTrendingBook);
-}
-
-async function fetchSubjectBooks(subject) {
-  const res = await fetch(
-    `https://openlibrary.org/subjects/${subject}.json?limit=13`
-  );
-  if (!res.ok) throw new Error('fetch error');
-  const data = await res.json();
-  return (data.works || []).filter(w => w.cover_id);
-}
-
-async function fetchWorkDetail(key) {
-  const res = await fetch(`https://openlibrary.org${key}.json`);
-  if (!res.ok) throw new Error('fetch error');
-  return res.json();
-}
 
 export default function RecommendScreen() {
   const router = useRouter();
@@ -153,42 +96,28 @@ export default function RecommendScreen() {
   const [catIdx, setCatIdx]         = useState(todayCatIndex);
   const [bookRegion, setBookRegion] = useState('korean');
   const [userAge, setUserAge]       = useState(0);
-  const [books, setBooks]             = useState([]);
-  const [loading, setLoading]         = useState(false);
-  const [selected, setSelected]       = useState(null);
-  const [detail, setDetail]           = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [books, setBooks]       = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [selected, setSelected] = useState(null);
 
   const loadBooks = useCallback(async (currentMode, idx, region) => {
     setLoading(true);
     setBooks([]);
+    const target = region === 'foreign' ? 'Foreign' : 'Book';
     try {
-      let normalized;
+      let items;
       if (currentMode === 'popular') {
-        if (region === 'foreign') {
-          normalized = await fetchOpenLibPopular('adult');
-        } else {
-          const items = await fetchAladinBestsellers('adult');
-          normalized = items.map(normalizeAladinBook);
-        }
+        items = await fetchAladinBestsellers('adult', target);
       } else if (currentMode === 'age') {
         const ag = getAgeGroup(getAge()) || 'adult';
-        if (region === 'foreign') {
-          normalized = await fetchOpenLibPopular(ag);
-        } else {
-          const items = await fetchAladinBestsellers(ag);
-          normalized = items.map(normalizeAladinBook);
-        }
+        items = await fetchAladinBestsellers(ag, target);
       } else {
-        if (region === 'foreign') {
-          const works = await fetchSubjectBooks(CATEGORIES[idx].key);
-          normalized = works.map(normalizeOpenLibBook);
-        } else {
-          const items = await fetchAladinBooks(CATEGORIES[idx].googleKey);
-          normalized = items.map(normalizeAladinBook);
-        }
+        const keyword = region === 'foreign'
+          ? CATEGORIES[idx].foreignKey
+          : CATEGORIES[idx].googleKey;
+        items = await fetchAladinBooks(keyword, target);
       }
-      setBooks(normalized);
+      setBooks(items.map(normalizeAladinBook));
     } catch {
       // 네트워크 오류 → 빈 목록 유지
     } finally {
@@ -203,26 +132,9 @@ export default function RecommendScreen() {
     }, [mode, catIdx, bookRegion])
   );
 
-  const openBook = async (book) => {
-    setSelected(book);
-    setDetail(null);
-    if (book.source === 'openlib') {
-      setDetailLoading(true);
-      try {
-        const d = await fetchWorkDetail(book.rawKey);
-        setDetail(d);
-      } catch {
-        // 상세 로드 실패는 무시
-      } finally {
-        setDetailLoading(false);
-      }
-    }
-  };
+  const openBook = (book) => setSelected(book);
 
-  const closeModal = () => {
-    setSelected(null);
-    setDetail(null);
-  };
+  const closeModal = () => setSelected(null);
 
   const addToShelf = () => {
     if (!selected) return;
@@ -255,15 +167,8 @@ export default function RecommendScreen() {
   const rest     = books.slice(1);
 
   const descText = (() => {
-    if (selected?.source === 'google' || selected?.source === 'aladin') {
-      const raw = selected.description || '';
-      return raw.length > 300 ? raw.slice(0, 300) + '…' : raw || null;
-    }
-    if (!detail?.description) return null;
-    const raw = typeof detail.description === 'string'
-      ? detail.description
-      : detail.description?.value ?? '';
-    return raw.length > 300 ? raw.slice(0, 300) + '…' : raw;
+    const raw = selected?.description || '';
+    return raw.length > 300 ? raw.slice(0, 300) + '…' : raw || null;
   })();
 
   return (
@@ -504,9 +409,7 @@ export default function RecommendScreen() {
                     </View>
                   </View>
 
-                  {detailLoading ? (
-                    <ActivityIndicator color="#6750A4" style={{ marginVertical: 16 }} />
-                  ) : descText ? (
+                  {descText ? (
                     <Text style={styles.sheetDesc}>{descText}</Text>
                   ) : null}
 
