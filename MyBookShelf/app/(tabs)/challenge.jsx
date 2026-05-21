@@ -186,6 +186,11 @@ function ChallengeCard({ book, onPress, isSuccess }) {
   const [checkins, setCheckins] = useState(() => {
     try { return JSON.parse(book.checkins || '[]'); } catch { return []; }
   });
+  const bonusPrefKey = `challenge_bonus_${book.id}_${todayKey()}`;
+  const [bonusXp, setBonusXp] = useState(() => {
+    const val = parseInt(getPref(bonusPrefKey) ?? '0', 10);
+    return isNaN(val) ? 0 : val;
+  });
 
   const startTs = book.startDate || book.createdAt;
   const startMidnight = startTs ? new Date(startTs).setHours(0, 0, 0, 0) : null;
@@ -216,13 +221,11 @@ function ChallengeCard({ book, onPress, isSuccess }) {
     addCheckin(book.id, todayTs);
     setCheckins((prev) => [...prev, todayTs]);
 
-    if (book.goalDate) {
-      const bonusKey = `challenge_bonus_${book.id}_${todayKey()}`;
-      if (!getPref(bonusKey)) {
-        const bonus = 5 + Math.floor(Math.random() * 6);
-        addXp(bonus);
-        setPref(bonusKey, '1');
-      }
+    if (book.goalDate && !getPref(bonusPrefKey)) {
+      const bonus = 5 + Math.floor(Math.random() * 6);
+      addXp(bonus);
+      setPref(bonusPrefKey, String(bonus));
+      setBonusXp(bonus);
     }
   };
 
@@ -281,6 +284,10 @@ function ChallengeCard({ book, onPress, isSuccess }) {
         <Text style={styles.dateLabel}>{startLabel}</Text>
         <Text style={styles.dateLabel} numberOfLines={1}>{goalLabel}</Text>
       </View>
+
+      {alreadyCheckedIn && bonusXp > 0 && (
+        <Text style={styles.bonusLabel}>🎯 오늘 챌린지 보너스 +{bonusXp} XP</Text>
+      )}
     </TouchableOpacity>
   );
 }
@@ -424,6 +431,13 @@ const styles = StyleSheet.create({
   checkinBtnDone: { backgroundColor: '#4CAF50' },
   checkinBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
 
+  bonusLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6750A4',
+    marginTop: 8,
+    textAlign: 'right',
+  },
   snakeTrack: { marginBottom: 12, flexDirection: 'column' },
   vertConnector: { width: 4, height: 20, borderRadius: 2 },
 
