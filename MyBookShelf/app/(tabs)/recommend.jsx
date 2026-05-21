@@ -13,7 +13,9 @@ const CATEGORIES = [
   { key: 'science_fiction',               googleKey: 'SF소설',    foreignKey: 'science fiction',             label: 'SF' },
   { key: 'fantasy',                        googleKey: '판타지',    foreignKey: 'fantasy',                     label: '판타지' },
   { key: 'historical_fiction',             googleKey: '역사소설',  foreignKey: 'historical fiction',          label: '역사소설' },
-  { key: 'science',                        googleKey: '과학',      foreignKey: 'popular science',             label: '과학' },
+  { key: 'science',                        googleKey: '교양과학',  foreignKey: 'popular science',             label: '과학',
+    ageKeys: { child: '어린이 과학', teen: '청소년 과학', adult: '교양과학' },
+    foreignAgeKeys: { child: 'children science', teen: 'teen science', adult: 'popular science' } },
   { key: 'biography',                      googleKey: '자서전',    foreignKey: 'biography autobiography',     label: '인물/자서전' },
   { key: 'children',                       googleKey: '동화',      foreignKey: "children picture book",       label: '어린이' },
 ];
@@ -120,9 +122,11 @@ export default function RecommendScreen() {
         const ag = getAgeGroup(getAge()) || 'adult';
         items = await fetchAladinBestsellers(ag, target);
       } else {
+        const ag = getAgeGroup(getAge()) || 'adult';
+        const cat = CATEGORIES[idx];
         const keyword = region === 'foreign'
-          ? CATEGORIES[idx].foreignKey
-          : CATEGORIES[idx].googleKey;
+          ? (cat.foreignAgeKeys?.[ag] ?? cat.foreignKey)
+          : (cat.ageKeys?.[ag] ?? cat.googleKey);
         items = await fetchAladinBooks(keyword, target);
       }
       setBooks(items.map(normalizeAladinBook));
