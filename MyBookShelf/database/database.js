@@ -49,6 +49,7 @@ try {
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN ratedAt INTEGER`);
 } catch (_) {}
+db.execSync(`UPDATE books SET ratedAt = COALESCE(updatedAt, endDate, createdAt) WHERE rating = 5 AND ratedAt IS NULL`);
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS book_reviews (
@@ -270,7 +271,7 @@ export const updateBook = (book) => {
     ? now
     : (current?.goalSetAt || null);
   const newRatedAt = book.rating === 5
-    ? (current?.rating === 5 ? current?.ratedAt : now)
+    ? (current?.rating === 5 && current?.ratedAt ? current.ratedAt : now)
     : null;
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
