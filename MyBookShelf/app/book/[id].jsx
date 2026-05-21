@@ -1,6 +1,7 @@
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, KeyboardAvoidingView, Platform,
+  Image, ActivityIndicator,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -12,6 +13,10 @@ import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
 import BookShareCard from '../../components/BookShareCard';
 import LevelUpModal from '../../components/LevelUpModal';
+
+const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
+const cleanAladinAuthor = (str) =>
+  str ? str.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() || '저자 미상' : '저자 미상';
 
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -34,6 +39,15 @@ export default function BookDetailScreen() {
   const [bookType, setBookType] = useState('physical');
   const [progressPct, setProgressPct] = useState('');
   const [levelUpModal, setLevelUpModal] = useState({ visible: false, level: 1, navigateBack: false });
+
+  const [editTitle, setEditTitle] = useState('');
+  const [editAuthor, setEditAuthor] = useState('');
+  const [editTotalPages, setEditTotalPages] = useState('');
+  const [editCover, setEditCover] = useState('');
+  const [showInfoEdit, setShowInfoEdit] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
 
   const tsToDateStr = (ts) => {
     if (!ts) return '';
@@ -82,9 +96,47 @@ export default function BookDetailScreen() {
       setGoalDateStr(tsToDateStr(data.goalDate));
       setBookType(data.bookType || 'physical');
       setProgressPct(data.progressPct > 0 ? data.progressPct.toString() : '');
+      setEditTitle(data.title || '');
+      setEditAuthor(data.author || '');
+      setEditTotalPages(data.totalPages > 0 ? data.totalPages.toString() : '');
+      setEditCover(data.cover || '');
     }
     loadReviews();
   }, [id]);
+
+  const handleSearch = async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setIsSearching(true);
+    setSearchResults([]);
+    try {
+      const res = await fetch(
+        `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(q)}&QueryType=Keyword&SearchTarget=Book&MaxResults=10&output=js&Version=20131101&Cover=Big&OptResult=subInfo`
+      );
+      if (!res.ok) throw new Error('fetch error');
+      const data = await res.json();
+      const items = (data.item || []).filter(item => item.cover && !item.cover.includes('noimg'));
+      if (items.length === 0) {
+        Alert.alert('검색 결과 없음', '일치하는 책 정보가 없습니다.\n다른 검색어를 시도해보세요.');
+        return;
+      }
+      setSearchResults(items);
+    } catch {
+      Alert.alert('오류', '책 정보를 가져오지 못했습니다. 네트워크를 확인해주세요.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const selectBookInfo = (item) => {
+    setEditTitle(item.title || editTitle);
+    setEditAuthor(cleanAladinAuthor(item.author));
+    const pages = item.subInfo?.itemPage;
+    if (pages && pages > 0) setEditTotalPages(String(pages));
+    setEditCover(item.cover || '');
+    setSearchResults([]);
+    setSearchQuery('');
+  };
 
   const handleAddReview = () => {
     const text = newReviewText.trim();
@@ -134,6 +186,10 @@ export default function BookDetailScreen() {
     const finalEndDate = autoComplete ? (endTs || Date.now()) : endTs;
     updateBook({
       ...book,
+      title: editTitle.trim() || book.title,
+      author: editAuthor.trim(),
+      totalPages: parseInt(editTotalPages) || book.totalPages,
+      cover: editCover,
       rating,
       review,
       currentPage: newCurrentPage,
@@ -190,6 +246,10 @@ export default function BookDetailScreen() {
           const now = Date.now();
           updateBook({
             ...book,
+            title: editTitle.trim() || book.title,
+            author: editAuthor.trim(),
+            totalPages: parseInt(editTotalPages) || book.totalPages,
+            cover: editCover,
             rating,
             review,
             currentPage: parseInt(currentPage) || 0,
@@ -219,6 +279,10 @@ export default function BookDetailScreen() {
           const finalEndDate = Date.now();
           updateBook({
             ...book,
+            title: editTitle.trim() || book.title,
+            author: editAuthor.trim(),
+            totalPages: parseInt(editTotalPages) || book.totalPages,
+            cover: editCover,
             rating,
             review,
             currentPage: parseInt(currentPage) || 0,
@@ -249,8 +313,9 @@ export default function BookDetailScreen() {
     );
   }
 
-  const effectiveProgress = book.totalPages > 0
-    ? Math.min(100, Math.round((parseInt(currentPage || 0) / book.totalPages) * 100))
+  const resolvedTotalPages = parseInt(editTotalPages) || book.totalPages;
+  const effectiveProgress = resolvedTotalPages > 0
+    ? Math.min(100, Math.round((parseInt(currentPage || 0) / resolvedTotalPages) * 100))
     : Math.min(100, parseInt(progressPct) || 0);
 
   return (
@@ -281,11 +346,91 @@ export default function BookDetailScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={{ paddingBottom: insets.bottom + 120 }} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{book.title}</Text>
-        {book.author ? <Text style={styles.author}>{book.author}</Text> : null}
+        <Text style={styles.title}>{editTitle || book.title}</Text>
+        {(editAuthor || book.author) ? <Text style={styles.author}>{editAuthor || book.author}</Text> : null}
         <View style={styles.badgeRow}>
           <StatusBadge status={book.status} />
         </View>
+
+        <TouchableOpacity
+          style={styles.infoEditToggle}
+          onPress={() => { setShowInfoEdit(!showInfoEdit); setSearchResults([]); }}
+        >
+          <Text style={styles.infoEditToggleText}>{showInfoEdit ? '도서 정보 정정 닫기 ▲' : '도서 정보 정정 ▼'}</Text>
+        </TouchableOpacity>
+
+        {showInfoEdit && (
+          <View style={styles.infoEditSection}>
+            <View style={styles.searchRow}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="책 제목, 저자 또는 ISBN 검색"
+                placeholderTextColor="#CAC4D0"
+                returnKeyType="search"
+                onSubmitEditing={handleSearch}
+              />
+              <TouchableOpacity
+                style={[styles.searchBtn, isSearching && styles.searchBtnDisabled]}
+                onPress={handleSearch}
+                disabled={isSearching}
+              >
+                {isSearching
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.searchBtnText}>검색</Text>
+                }
+              </TouchableOpacity>
+            </View>
+            {searchResults.length > 0 && (
+              <View style={styles.searchResults}>
+                {searchResults.map((item) => (
+                  <TouchableOpacity
+                    key={String(item.itemId)}
+                    style={styles.searchResultItem}
+                    onPress={() => selectBookInfo(item)}
+                  >
+                    <Image source={{ uri: item.cover }} style={styles.searchResultCover} />
+                    <View style={styles.searchResultInfo}>
+                      <Text style={styles.searchResultTitle} numberOfLines={2}>{item.title}</Text>
+                      <Text style={styles.searchResultAuthor} numberOfLines={1}>{cleanAladinAuthor(item.author)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            {editCover ? (
+              <View style={styles.coverPreviewRow}>
+                <Image source={{ uri: editCover }} style={styles.coverPreview} />
+              </View>
+            ) : null}
+            <Text style={styles.infoEditLabel}>제목</Text>
+            <TextInput
+              style={styles.input}
+              value={editTitle}
+              onChangeText={setEditTitle}
+              placeholder="책 제목"
+              placeholderTextColor="#CAC4D0"
+            />
+            <Text style={styles.infoEditLabel}>저자</Text>
+            <TextInput
+              style={styles.input}
+              value={editAuthor}
+              onChangeText={setEditAuthor}
+              placeholder="저자"
+              placeholderTextColor="#CAC4D0"
+            />
+            <Text style={styles.infoEditLabel}>총 페이지 수</Text>
+            <TextInput
+              style={styles.input}
+              value={editTotalPages}
+              onChangeText={setEditTotalPages}
+              placeholder="페이지 수"
+              placeholderTextColor="#CAC4D0"
+              keyboardType="numeric"
+            />
+          </View>
+        )}
 
         <Text style={styles.sectionLabel}>별점</Text>
         <StarRating
@@ -323,7 +468,7 @@ export default function BookDetailScreen() {
           placeholder={
             bookType === 'ebook'
               ? '위치 번호 입력'
-              : book.totalPages > 0 ? `전체 ${book.totalPages}p` : '페이지 입력'
+              : resolvedTotalPages > 0 ? `전체 ${resolvedTotalPages}p` : '페이지 입력'
           }
           placeholderTextColor="#CAC4D0"
         />
@@ -334,9 +479,9 @@ export default function BookDetailScreen() {
             <View style={styles.progressBarBg}>
               <View style={[styles.progressBarFill, { width: `${effectiveProgress}%` }]} />
             </View>
-            {book.totalPages > 0 ? (
+            {resolvedTotalPages > 0 ? (
               <Text style={styles.progressInfo}>
-                {effectiveProgress}% ({parseInt(currentPage) || 0} / {book.totalPages}p)
+                {effectiveProgress}% ({parseInt(currentPage) || 0} / {resolvedTotalPages}p)
               </Text>
             ) : (
               <View style={styles.pctInputRow}>
@@ -566,6 +711,63 @@ const styles = StyleSheet.create({
   },
   reviewAddText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   reviewTextarea: { height: 120, marginBottom: 8 },
+  infoEditToggle: {
+    borderWidth: 1,
+    borderColor: '#6750A4',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  infoEditToggleText: { fontSize: 13, color: '#6750A4', fontWeight: '600' },
+  infoEditSection: {
+    backgroundColor: '#F5F0FF',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  infoEditLabel: { fontSize: 13, fontWeight: '600', color: '#49454F', marginTop: 4 },
+  searchRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  searchBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 56,
+  },
+  searchBtnDisabled: { backgroundColor: '#CAC4D0' },
+  searchBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  searchResults: {
+    borderWidth: 1,
+    borderColor: '#CAC4D0',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EDF6',
+  },
+  searchResultCover: {
+    width: 38,
+    height: 54,
+    borderRadius: 4,
+    resizeMode: 'cover',
+    backgroundColor: '#EDE9F6',
+  },
+  searchResultInfo: { flex: 1 },
+  searchResultTitle: { fontSize: 13, fontWeight: '600', color: '#1C1B1F', marginBottom: 2 },
+  searchResultAuthor: { fontSize: 12, color: '#49454F' },
+  coverPreviewRow: { alignItems: 'center', paddingVertical: 8 },
+  coverPreview: { width: 72, height: 102, borderRadius: 6, resizeMode: 'cover', backgroundColor: '#EDE9F6' },
   readonlyBox: {
     borderWidth: 1,
     borderColor: '#E0D8F0',
