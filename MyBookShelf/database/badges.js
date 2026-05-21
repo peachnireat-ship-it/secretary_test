@@ -28,12 +28,24 @@ export const BADGE_DEFS = [
   { id: 'lit_lover',      emoji: '📖', name: '문학 애호가',   desc: '소설/문학 완독 3권',  type: 'genre', genre: '소설/문학', threshold: 3,  tier: 1 },
   { id: 'lit_explorer',   emoji: '📚', name: '문학 탐험가',   desc: '소설/문학 완독 7권',  type: 'genre', genre: '소설/문학', threshold: 7,  tier: 2, prerequisite: 'lit_lover' },
   { id: 'lit_master',     emoji: '🖋️', name: '문학 마스터',   desc: '소설/문학 완독 10권', type: 'genre', genre: '소설/문학', threshold: 10, tier: 3, prerequisite: 'lit_explorer' },
+  // 장르 패턴 - 과학/기술 (4단계 진화)
+  { id: 'science_fan',    emoji: '🔬', name: '과학 탐구자',   desc: '과학/기술 완독 3권',   type: 'genre', genre: '과학/기술', threshold: 3,  tier: 1 },
+  { id: 'science_maniac', emoji: '⚗️', name: '과학 마니아',   desc: '과학/기술 완독 7권',   type: 'genre', genre: '과학/기술', threshold: 7,  tier: 2, prerequisite: 'science_fan' },
+  { id: 'science_master', emoji: '🧪', name: '과학 마스터',   desc: '과학/기술 완독 12권',  type: 'genre', genre: '과학/기술', threshold: 12, tier: 3, prerequisite: 'science_maniac' },
+  { id: 'science_madman', emoji: '🧬', name: '과학 광인',     desc: '과학/기술 완독 20권',  type: 'genre', genre: '과학/기술', threshold: 20, tier: 4, prerequisite: 'science_master' },
   // 장르 패턴 - 기타 (단일 등급)
   { id: 'history_buff',   emoji: '📜', name: '역사 탐험가',   desc: '역사 완독 3권',        type: 'genre', genre: '역사',      threshold: 3 },
-  { id: 'science_fan',    emoji: '🔬', name: '과학 탐구자',   desc: '과학/기술 완독 3권',   type: 'genre', genre: '과학/기술', threshold: 3 },
   { id: 'self_dev',       emoji: '💼', name: '자기계발러',    desc: '자기계발 완독 3권',    type: 'genre', genre: '자기계발',  threshold: 3 },
   { id: 'essay_fan',      emoji: '✏️', name: '에세이 팬',    desc: '에세이 완독 3권',        type: 'genre', genre: '에세이',    threshold: 3 },
-  { id: 'econ_dreamer',   emoji: '📈', name: '재테크 꿈나무', desc: '경제/경영 완독 3권',     type: 'genre', genre: '경제/경영', threshold: 3 },
+  // 장르 패턴 - 경제/경영 (8단계 진화)
+  { id: 'econ_dreamer',    emoji: '📈', name: '재테크 꿈나무',  desc: '경제/경영 완독 3권',   type: 'genre', genre: '경제/경영', threshold: 3,  tier: 1 },
+  { id: 'econ_sprout',     emoji: '🌱', name: '재테크 새싹',    desc: '경제/경영 완독 5권',   type: 'genre', genre: '경제/경영', threshold: 5,  tier: 2, prerequisite: 'econ_dreamer' },
+  { id: 'econ_beginner',   emoji: '📊', name: '재테크 입문자',  desc: '경제/경영 완독 8권',   type: 'genre', genre: '경제/경영', threshold: 8,  tier: 3, prerequisite: 'econ_sprout' },
+  { id: 'econ_researcher', emoji: '🔍', name: '재테크 연구원',  desc: '경제/경영 완독 12권',  type: 'genre', genre: '경제/경영', threshold: 12, tier: 4, prerequisite: 'econ_beginner' },
+  { id: 'econ_investor',   emoji: '💹', name: '재테크 투자자',  desc: '경제/경영 완독 17권',  type: 'genre', genre: '경제/경영', threshold: 17, tier: 5, prerequisite: 'econ_researcher' },
+  { id: 'econ_strategist', emoji: '♟️', name: '재테크 전략가',  desc: '경제/경영 완독 23권',  type: 'genre', genre: '경제/경영', threshold: 23, tier: 6, prerequisite: 'econ_investor' },
+  { id: 'econ_planner',    emoji: '📐', name: '재테크 설계자',  desc: '경제/경영 완독 30권',  type: 'genre', genre: '경제/경영', threshold: 30, tier: 7, prerequisite: 'econ_strategist' },
+  { id: 'econ_master',     emoji: '🏆', name: '자산관리 마스터', desc: '경제/경영 완독 40권', type: 'genre', genre: '경제/경영', threshold: 40, tier: 8, prerequisite: 'econ_planner' },
   { id: 'religion_seeker',emoji: '🙏', name: '신앙 탐구자',  desc: '종교 완독 3권',          type: 'genre', genre: '종교',      threshold: 3 },
   { id: 'genre_explorer', emoji: '🗺️', name: '장르 탐험가',  desc: '3가지 이상 장르 완독',   type: 'multi', threshold: 3 },
   // 활동 패턴 - 완독 수 (6단계 진화)
