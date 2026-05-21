@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   getGenreCompletedStats,
   getDayOfWeekStats,
@@ -88,6 +88,7 @@ function HorzBarChart({ data, color = '#6750A4' }) {
 }
 
 export default function ReadingPatternScreen() {
+  const router = useRouter();
   const [genreStats, setGenreStats] = useState([]);
   const [dayStats, setDayStats] = useState([]);
   const [ratingStats, setRatingStats] = useState([]);
@@ -137,6 +138,14 @@ export default function ReadingPatternScreen() {
         <Text style={styles.cardTitle}>시간대별 독서 활동</Text>
         <VertBarChart data={timeOfDayStats} color="#29B6F6" height={160} labelLines={2} />
       </View>
+
+      <TouchableOpacity
+        style={[styles.resultButton, styles.mt]}
+        onPress={() => router.push('/pattern-result')}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.resultButtonText}>패턴 분석 결과보기</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -207,5 +216,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'right',
     marginLeft: 4,
+  },
+  resultButton: {
+    backgroundColor: '#6750A4',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 8,
+    elevation: 3,
+    shadowColor: '#6750A4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  resultButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    letterSpacing: 0.3,
   },
 });

@@ -616,6 +616,34 @@ export const getRatingDistribution = () => {
   return [1, 2, 3, 4, 5].map(s => ({ label: `${s}점`, count: map[s] || 0 }));
 };
 
+export const getMonthlyReport = () => {
+  const now = new Date();
+  const build = (year, month) => {
+    const start = new Date(year, month, 1).getTime();
+    const end = new Date(year, month + 1, 0, 23, 59, 59, 999).getTime();
+    const completed = db.getFirstSync(
+      `SELECT COUNT(*) as c FROM books WHERE status='completed' AND COALESCE(endDate,createdAt) BETWEEN ? AND ?`,
+      [start, end]
+    )?.c ?? 0;
+    const added = db.getFirstSync(
+      `SELECT COUNT(*) as c FROM books WHERE createdAt BETWEEN ? AND ?`,
+      [start, end]
+    )?.c ?? 0;
+    const memos = db.getFirstSync(
+      `SELECT COUNT(*) as c FROM book_reviews WHERE createdAt BETWEEN ? AND ?`,
+      [start, end]
+    )?.c ?? 0;
+    const avgRaw = db.getFirstSync(
+      `SELECT AVG(rating) as avg FROM books WHERE rating>0 AND COALESCE(endDate,createdAt) BETWEEN ? AND ?`,
+      [start, end]
+    )?.avg ?? 0;
+    return { label: `${month + 1}월`, completed, added, memos, avgRating: Math.round((avgRaw || 0) * 10) / 10 };
+  };
+  const y = now.getFullYear(), m = now.getMonth();
+  const lm = m === 0 ? { y: y - 1, m: 11 } : { y, m: m - 1 };
+  return { thisMonth: build(y, m), lastMonth: build(lm.y, lm.m) };
+};
+
 export const getCompletionTimeStats = () => {
   const rows = db.getAllSync(
     `SELECT COALESCE(startDate, createdAt) AS startDate, endDate FROM books
