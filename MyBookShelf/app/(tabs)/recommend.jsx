@@ -73,8 +73,7 @@ async function fetchAladinBooks(keyword, target = 'Book', ageGroup = null) {
 }
 
 async function fetchAladinBestsellers(ageGroup, target = 'Book') {
-  const catMap = target === 'Book' ? AGE_ALADIN_CATEGORY : AGE_ALADIN_CATEGORY_FOREIGN;
-  const catParam = catMap[ageGroup] ?? '';
+  const catParam = target === 'Foreign' ? '' : (AGE_ALADIN_CATEGORY[ageGroup] ?? '');
   const res = await fetch(
     `https://www.aladin.co.kr/ttb/api/ItemList.aspx?ttbkey=${ALADIN_TTB_KEY}&QueryType=Bestseller&MaxResults=20&SearchTarget=${target}&output=js&Version=20131101&Cover=Big${catParam}`
   );
