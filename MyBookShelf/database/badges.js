@@ -29,6 +29,7 @@ export const BADGE_DEFS = [
   { id: 'essay_fan',      emoji: '✏️', name: '에세이 팬',    desc: '에세이 완독 3권',        type: 'genre', genre: '에세이',    threshold: 3 },
   { id: 'sf_maniac',      emoji: '🚀', name: 'SF 광인',      desc: '판타지/SF 완독 10권',    type: 'genre', genre: '판타지/SF', threshold: 10 },
   { id: 'econ_dreamer',   emoji: '📈', name: '재테크 꿈나무', desc: '경제/경영 완독 3권',     type: 'genre', genre: '경제/경영', threshold: 3 },
+  { id: 'religion_seeker', emoji: '🙏', name: '신앙 탐구자',  desc: '종교 완독 3권',          type: 'genre', genre: '종교',      threshold: 3 },
   { id: 'genre_explorer', emoji: '🗺️', name: '장르 탐험가',  desc: '3가지 이상 장르 완독',   type: 'multi', threshold: 3 },
   // 활동 패턴
   { id: 'memo_master',    emoji: '📝', name: '메모 달인',     desc: '메모 10개 이상 작성',  type: 'activity', threshold: 10 },
