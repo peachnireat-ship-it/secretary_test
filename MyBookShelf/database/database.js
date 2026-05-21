@@ -123,6 +123,19 @@ db.execSync(`
   );
 `);
 
+// one-time fix: 'Test' 완독 도서 종료일 → 2026-05-20
+try {
+  const _fixKey = 'fix_test_enddate_20260520';
+  const _applied = db.getFirstSync(`SELECT value FROM user_prefs WHERE key = ?`, [_fixKey]);
+  if (!_applied) {
+    db.runSync(
+      `UPDATE books SET endDate = ? WHERE title = 'Test' AND status = 'completed'`,
+      [new Date(2026, 4, 20).getTime()]
+    );
+    db.runSync(`INSERT OR REPLACE INTO user_prefs (key, value) VALUES (?, '1')`, [_fixKey]);
+  }
+} catch (_) {}
+
 export function getPref(key, defaultValue = null) {
   const row = db.getFirstSync('SELECT value FROM user_prefs WHERE key = ?', [key]);
   return row ? row.value : defaultValue;
