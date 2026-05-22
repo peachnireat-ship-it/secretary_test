@@ -63,8 +63,7 @@ function todayCatIndex() {
 const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
 
 async function fetchAladinBooks(keyword, target = 'Book', ageGroup = null) {
-  const catMap = target === 'Book' ? AGE_ALADIN_CATEGORY : AGE_ALADIN_CATEGORY_FOREIGN;
-  const catParam = ageGroup ? (catMap[ageGroup] ?? '') : '';
+  const catParam = (target === 'Book' && ageGroup) ? (AGE_ALADIN_CATEGORY[ageGroup] ?? '') : '';
   const res = await fetch(
     `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(keyword)}&QueryType=Keyword&SearchTarget=${target}&MaxResults=13&output=js&Version=20131101&Cover=Big${catParam}`
   );
