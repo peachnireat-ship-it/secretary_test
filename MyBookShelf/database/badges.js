@@ -136,6 +136,65 @@ function getBadgeProgress(badge) {
   }
 }
 
+function getChallengeSuccessCount() {
+  const rows = db.getAllSync(
+    "SELECT endDate, goalDate FROM books WHERE status='completed' AND goalDate IS NOT NULL AND endDate IS NOT NULL"
+  );
+  return rows.filter(b =>
+    new Date(b.endDate).setHours(0, 0, 0, 0) <= new Date(b.goalDate).setHours(0, 0, 0, 0)
+  ).length;
+}
+
+const MILESTONE_EMOJIS = ['🎯', '⭐', '🌟', '💫', '🏅', '🥉', '🥈', '🥇', '💎', '🏆'];
+
+function challengeMilestoneMeta(n) {
+  const tier = Math.floor(n / 3) - 1; // 6→1, 9→2, 12→3, ...
+  const emoji = MILESTONE_EMOJIS[Math.min(tier - 1, MILESTONE_EMOJIS.length - 1)];
+  return {
+    id: `challenge_milestone_${n}`,
+    emoji,
+    name: `챌린지 ${n}회 달성`,
+    desc: `목표 기간 내 챌린지를 ${n}번 성공했습니다!`,
+    type: 'challenge_milestone',
+  };
+}
+
+function checkAndUnlockChallengeMilestoneBadges() {
+  const count = getChallengeSuccessCount();
+  if (count < 6) return [];
+  const existing = new Set(
+    db.getAllSync("SELECT badgeId FROM user_badges WHERE badgeId LIKE 'challenge_milestone_%'")
+      .map(r => r.badgeId)
+  );
+  const newlyUnlocked = [];
+  for (let n = 6; n <= count; n += 3) {
+    const badgeId = `challenge_milestone_${n}`;
+    if (!existing.has(badgeId)) {
+      try {
+        db.runSync('INSERT INTO user_badges (badgeId, unlockedAt) VALUES (?, ?)', [badgeId, Date.now()]);
+        newlyUnlocked.push(challengeMilestoneMeta(n));
+      } catch (_) {}
+    }
+  }
+  return newlyUnlocked;
+}
+
+export function getChallengeMilestoneBadges() {
+  const rows = db.getAllSync(
+    "SELECT badgeId, unlockedAt FROM user_badges WHERE badgeId LIKE 'challenge_milestone_%' ORDER BY unlockedAt ASC"
+  );
+  return rows.map(row => {
+    const n = parseInt(row.badgeId.replace('challenge_milestone_', ''), 10);
+    return {
+      ...challengeMilestoneMeta(n),
+      unlocked: true,
+      available: true,
+      unlockedAt: row.unlockedAt,
+      progress: { current: 1, max: 1 },
+    };
+  });
+}
+
 // "2026-W21" → "5월 3주차"
 function weekKeyToLabel(weekKey) {
   const [yearStr, weekStr] = weekKey.split('-W');
@@ -213,6 +272,7 @@ export function checkAndUnlockBadges() {
       } catch (_) {}
     }
   }
+  newlyUnlocked.push(...checkAndUnlockChallengeMilestoneBadges());
   return newlyUnlocked;
 }
 

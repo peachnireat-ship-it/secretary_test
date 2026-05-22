@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { getBadgesWithStatus, checkAndUnlockBadges, getWeeklyCompletionBadges } from '../../database/badges';
+import { getBadgesWithStatus, checkAndUnlockBadges, getWeeklyCompletionBadges, getChallengeMilestoneBadges } from '../../database/badges';
 
 function BadgeCard({ badge }) {
   const isLocked = !badge.unlocked && badge.available === false;
@@ -71,17 +71,19 @@ function BadgeCard({ badge }) {
 export default function BadgesScreen() {
   const [badges, setBadges] = useState([]);
   const [weeklyBadges, setWeeklyBadges] = useState([]);
+  const [milestoneBadges, setMilestoneBadges] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
       checkAndUnlockBadges();
       setBadges(getBadgesWithStatus());
       setWeeklyBadges(getWeeklyCompletionBadges());
+      setMilestoneBadges(getChallengeMilestoneBadges());
     }, [])
   );
 
   const myBadges = badges.filter(b => b.unlocked);
-  const totalMy = myBadges.length + weeklyBadges.length;
+  const totalMy = myBadges.length + weeklyBadges.length + milestoneBadges.length;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -90,6 +92,9 @@ export default function BadgesScreen() {
         <Text style={styles.emptyText}>아직 달성한 뱃지가 없어요!</Text>
       ) : (
         <View style={styles.badgeGrid}>
+          {milestoneBadges.map((badge) => (
+            <BadgeCard key={badge.id} badge={badge} />
+          ))}
           {weeklyBadges.map((badge) => (
             <BadgeCard key={badge.id} badge={badge} />
           ))}
@@ -97,6 +102,19 @@ export default function BadgesScreen() {
             <BadgeCard key={badge.id} badge={badge} />
           ))}
         </View>
+      )}
+
+      {milestoneBadges.length > 0 && (
+        <>
+          <Text style={[styles.sectionHeader, styles.sectionHeaderGap]}>
+            🎯 챌린지 마일스톤 뱃지 ({milestoneBadges.length})
+          </Text>
+          <View style={styles.badgeGrid}>
+            {milestoneBadges.map((badge) => (
+              <BadgeCard key={badge.id} badge={badge} />
+            ))}
+          </View>
+        </>
       )}
 
       {weeklyBadges.length > 0 && (
