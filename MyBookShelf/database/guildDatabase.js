@@ -3,7 +3,7 @@ import {
   query, where, limit, serverTimestamp, increment,
 } from 'firebase/firestore';
 import { firestoreDb, isFirebaseReady } from './firebaseConfig';
-import { getWeeklyScore, getWeeklyProgress, getWeekKey } from './database';
+import { getWeeklyScore, getWeeklyProgress, getWeekKey, addXp, isDoubleXpActive } from './database';
 
 function generateInviteCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -135,8 +135,12 @@ export async function syncWeeklyScore(guildId, userId, displayName) {
   const score = getWeeklyScore();
   const progress = getWeeklyProgress();
 
+  const scoreRef = doc(firestoreDb, 'guild_scores', `${guildId}_${weekKey}_${userId}`);
+  const prevSnap = await getDoc(scoreRef);
+  const prevScore = prevSnap.exists() ? (prevSnap.data().score ?? 0) : 0;
+
   await setDoc(
-    doc(firestoreDb, 'guild_scores', `${guildId}_${weekKey}_${userId}`),
+    scoreRef,
     {
       guildId,
       weekKey,
@@ -148,6 +152,15 @@ export async function syncWeeklyScore(guildId, userId, displayName) {
     },
     { merge: true },
   );
+
+  const delta = score - prevScore;
+  if (delta > 0) {
+    const xpGain = Math.floor(delta / 10);
+    if (xpGain > 0) {
+      const multiplier = isDoubleXpActive() ? 2 : 1;
+      addXp(xpGain * multiplier);
+    }
+  }
 
   return score;
 }
