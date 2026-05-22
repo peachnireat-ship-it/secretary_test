@@ -232,6 +232,12 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
     return isNaN(val) ? 0 : val;
   });
 
+  const perfectPrefKey = `challenge_perfect_${book.id}`;
+  const [perfectBonus, setPerfectBonus] = useState(() => {
+    const val = parseInt(getPref(perfectPrefKey) ?? '0', 10);
+    return isNaN(val) ? 0 : val;
+  });
+
   const startTs = book.startDate || book.createdAt;
   const startMidnight = startTs ? new Date(startTs).setHours(0, 0, 0, 0) : null;
   const goalMidnight = book.goalDate ? new Date(book.goalDate).setHours(0, 0, 0, 0) : null;
@@ -259,8 +265,9 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
 
   const handleCheckin = () => {
     if (alreadyCheckedIn) return;
+    const newCheckins = [...checkins, todayTs];
     addCheckin(book.id, todayTs);
-    setCheckins((prev) => [...prev, todayTs]);
+    setCheckins(newCheckins);
     onCheckin?.(todayTs);
 
     if (book.goalDate && !getPref(bonusPrefKey)) {
@@ -268,6 +275,19 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
       addXp(bonus);
       setPref(bonusPrefKey, String(bonus));
       setBonusXp(bonus);
+    }
+
+    if (startMidnight && goalMidnight && todayTs >= goalMidnight && !getPref(perfectPrefKey)) {
+      const totalDays = Math.round((goalMidnight - startMidnight) / 86400000) + 1;
+      const checkinSet = new Set(newCheckins);
+      const allCovered = Array.from({ length: totalDays }, (_, i) => startMidnight + i * 86400000)
+        .every((d) => checkinSet.has(d));
+      if (allCovered) {
+        const PERFECT_BONUS = 100;
+        addXp(PERFECT_BONUS);
+        setPref(perfectPrefKey, String(PERFECT_BONUS));
+        setPerfectBonus(PERFECT_BONUS);
+      }
     }
   };
 
@@ -329,6 +349,9 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
 
       {alreadyCheckedIn && bonusXp > 0 && (
         <Text style={styles.bonusLabel}>🎯 오늘 챌린지 보너스 +{bonusXp} XP</Text>
+      )}
+      {perfectBonus > 0 && (
+        <Text style={styles.perfectBonusLabel}>🌟 매일 인증 달성! 보너스 +{perfectBonus} XP</Text>
       )}
     </TouchableOpacity>
   );
@@ -492,6 +515,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#6750A4',
     marginTop: 8,
+    textAlign: 'right',
+  },
+  perfectBonusLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#E65100',
+    marginTop: 6,
     textAlign: 'right',
   },
   snakeTrack: { marginBottom: 12, flexDirection: 'column' },
