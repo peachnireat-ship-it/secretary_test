@@ -47,8 +47,8 @@ export default function GuildScreen() {
     if (!isFirebaseReady()) {
       setLoading(false);
       Alert.alert(
-        'Firebase 미설정',
-        'database/firebaseConfig.js에 Firebase 설정값을 입력해야 길드 기능을 사용할 수 있습니다.',
+        '연결 오류',
+        '서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.',
       );
       return;
     }
@@ -119,8 +119,8 @@ export default function GuildScreen() {
           <View style={styles.warnBox}>
             <Ionicons name="warning-outline" size={16} color="#E65100" />
             <Text style={styles.warnText}>
-              Firebase 설정이 필요합니다.{'\n'}
-              database/firebaseConfig.js를 확인하세요.
+              서버에 연결할 수 없습니다.{'\n'}
+              네트워크 상태를 확인해주세요.
             </Text>
           </View>
         )}
