@@ -1,6 +1,6 @@
 import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  query, where, orderBy, limit, serverTimestamp, increment,
+  query, where, limit, serverTimestamp, increment,
 } from 'firebase/firestore';
 import { firestoreDb, isFirebaseReady } from './firebaseConfig';
 import { getWeeklyScore, getWeeklyProgress, getWeekKey } from './database';
@@ -86,11 +86,12 @@ export async function searchPublicGuilds(searchText) {
   const q = query(
     collection(firestoreDb, 'guilds'),
     where('isPublic', '==', true),
-    orderBy('memberCount', 'desc'),
     limit(30),
   );
   const snap = await getDocs(q);
-  const guilds = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const guilds = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
   if (searchText && searchText.trim()) {
     return guilds.filter((g) => g.name.includes(searchText.trim()));
   }
@@ -152,10 +153,9 @@ export async function getGuildWeeklyScores(guildId) {
     collection(firestoreDb, 'guild_scores'),
     where('guildId', '==', guildId),
     where('weekKey', '==', weekKey),
-    orderBy('score', 'desc'),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data());
+  return snap.docs.map((d) => d.data()).sort((a, b) => (b.score || 0) - (a.score || 0));
 }
 
 // ── 길드 간 주간 순위 ────────────────────────────────────────────
