@@ -288,12 +288,12 @@ export default function GuildScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnSecondary, styles.actionBtnHalf]}
+            style={[styles.actionBtn, styles.actionBtnHalf]}
             onPress={() => router.push({ pathname: '/guild-join', params: { tab: 'search' } })}
             activeOpacity={0.75}
           >
-            <Ionicons name="search-outline" size={16} color="#6750A4" />
-            <Text style={[styles.actionBtnText, styles.actionBtnTextSecondary, styles.actionBtnTextSm]}>
+            <Ionicons name="search-outline" size={16} color="#fff" />
+            <Text style={[styles.actionBtnText, styles.actionBtnTextSm]}>
               공개 길드 둘러보기
             </Text>
           </TouchableOpacity>
