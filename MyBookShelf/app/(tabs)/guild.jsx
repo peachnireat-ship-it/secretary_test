@@ -248,39 +248,6 @@ export default function GuildScreen() {
           </View>
         )}
 
-        {myGuilds.length > 0 ? (
-          <>
-            <Text style={styles.sectionLabel}>가입한 길드</Text>
-            {myGuilds.map((g) => (
-              <TouchableOpacity
-                key={g.id}
-                style={styles.guildCard}
-                onPress={() => loadGuildDetail(g.id)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.guildCardAccent} />
-                <View style={styles.guildCardInfo}>
-                  <Text style={styles.guildCardName}>{g.name}</Text>
-                  <Text style={styles.guildCardMeta}>
-                    멤버 {g.memberCount || 0}명 · 주간 목표 {g.weeklyGoal || 0}권
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#C4B9DC" />
-              </TouchableOpacity>
-            ))}
-          </>
-        ) : (
-          <View style={styles.emptyGuide}>
-            <View style={styles.emptyGuideIconWrap}>
-              <Ionicons name="people-outline" size={36} color="#9575CD" />
-            </View>
-            <Text style={styles.emptyGuideTitle}>가입한 길드가 없습니다</Text>
-            <Text style={styles.emptyGuideText}>
-              길드원과 함께 주간 독서 목표를 달성하고{'\n'}길드 대항전에서 실력을 겨뤄보세요!
-            </Text>
-          </View>
-        )}
-
         <View style={styles.xpBanner}>
           <View style={styles.xpBannerIcon}>
             <Ionicons name="flash" size={18} color="#7C3AED" />
@@ -329,6 +296,39 @@ export default function GuildScreen() {
             공개 길드 둘러보기
           </Text>
         </TouchableOpacity>
+
+        {myGuilds.length > 0 ? (
+          <>
+            <Text style={styles.sectionLabel}>가입한 길드</Text>
+            {myGuilds.map((g) => (
+              <TouchableOpacity
+                key={g.id}
+                style={styles.guildCard}
+                onPress={() => loadGuildDetail(g.id)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.guildCardAccent} />
+                <View style={styles.guildCardInfo}>
+                  <Text style={styles.guildCardName}>{g.name}</Text>
+                  <Text style={styles.guildCardMeta}>
+                    멤버 {g.memberCount || 0}명 · 주간 목표 {g.weeklyGoal || 0}권
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#C4B9DC" />
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : (
+          <View style={styles.emptyGuide}>
+            <View style={styles.emptyGuideIconWrap}>
+              <Ionicons name="people-outline" size={36} color="#9575CD" />
+            </View>
+            <Text style={styles.emptyGuideTitle}>가입한 길드가 없습니다</Text>
+            <Text style={styles.emptyGuideText}>
+              길드원과 함께 주간 독서 목표를 달성하고{'\n'}길드 대항전에서 실력을 겨뤄보세요!
+            </Text>
+          </View>
+        )}
       </ScrollView>
     );
   }
