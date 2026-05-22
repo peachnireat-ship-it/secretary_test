@@ -1,0 +1,200 @@
+import {
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+  query, where, orderBy, limit, serverTimestamp, increment,
+} from 'firebase/firestore';
+import { firestoreDb, isFirebaseReady } from './firebaseConfig';
+import { getWeeklyScore, getWeeklyProgress, getWeekKey } from './database';
+
+function generateInviteCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+// ── 길드 생성 ────────────────────────────────────────────────────
+
+export async function createGuild({ name, isPublic, weeklyGoal, userId, displayName, school, schoolLevel }) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+
+  const guildId = `g_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const inviteCode = generateInviteCode();
+
+  await setDoc(doc(firestoreDb, 'guilds', guildId), {
+    name: name.trim(),
+    inviteCode,
+    isPublic: !!isPublic,
+    creatorId: userId,
+    weeklyGoal: Number(weeklyGoal) || 0,
+    memberCount: 1,
+    createdAt: serverTimestamp(),
+  });
+
+  await setDoc(doc(firestoreDb, 'guild_members', `${guildId}_${userId}`), {
+    guildId,
+    userId,
+    displayName: displayName || '독서가',
+    school: school || '',
+    schoolLevel: schoolLevel || '',
+    joinedAt: serverTimestamp(),
+    isOwner: true,
+  });
+
+  return { guildId, inviteCode };
+}
+
+// ── 초대 코드로 가입 ─────────────────────────────────────────────
+
+export async function joinGuildByCode(inviteCode, userId, displayName, school, schoolLevel) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+
+  const q = query(
+    collection(firestoreDb, 'guilds'),
+    where('inviteCode', '==', inviteCode.trim().toUpperCase()),
+    limit(1),
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) throw new Error('유효하지 않은 초대 코드입니다.');
+
+  const guildDoc = snap.docs[0];
+  const guildId = guildDoc.id;
+
+  const memberRef = doc(firestoreDb, 'guild_members', `${guildId}_${userId}`);
+  const memberSnap = await getDoc(memberRef);
+  if (memberSnap.exists()) throw new Error('이미 이 길드의 멤버입니다.');
+
+  await setDoc(memberRef, {
+    guildId,
+    userId,
+    displayName: displayName || '독서가',
+    school: school || '',
+    schoolLevel: schoolLevel || '',
+    joinedAt: serverTimestamp(),
+    isOwner: false,
+  });
+
+  await updateDoc(doc(firestoreDb, 'guilds', guildId), {
+    memberCount: increment(1),
+  });
+
+  return { guildId, guildName: guildDoc.data().name };
+}
+
+// ── 공개 길드 검색 ───────────────────────────────────────────────
+
+export async function searchPublicGuilds(searchText) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+
+  const q = query(
+    collection(firestoreDb, 'guilds'),
+    where('isPublic', '==', true),
+    orderBy('memberCount', 'desc'),
+    limit(30),
+  );
+  const snap = await getDocs(q);
+  const guilds = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  if (searchText && searchText.trim()) {
+    return guilds.filter((g) => g.name.includes(searchText.trim()));
+  }
+  return guilds;
+}
+
+// ── 길드 정보 조회 ───────────────────────────────────────────────
+
+export async function getGuildInfo(guildId) {
+  if (!isFirebaseReady()) return null;
+  const snap = await getDoc(doc(firestoreDb, 'guilds', guildId));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() };
+}
+
+// ── 멤버 목록 조회 ───────────────────────────────────────────────
+
+export async function getGuildMembers(guildId) {
+  if (!isFirebaseReady()) return [];
+  const q = query(
+    collection(firestoreDb, 'guild_members'),
+    where('guildId', '==', guildId),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data());
+}
+
+// ── 주간 점수 동기화 ─────────────────────────────────────────────
+
+export async function syncWeeklyScore(guildId, userId, displayName) {
+  if (!isFirebaseReady()) return 0;
+  const weekKey = getWeekKey();
+  const score = getWeeklyScore();
+  const progress = getWeeklyProgress();
+
+  await setDoc(
+    doc(firestoreDb, 'guild_scores', `${guildId}_${weekKey}_${userId}`),
+    {
+      guildId,
+      weekKey,
+      userId,
+      displayName: displayName || '독서가',
+      score,
+      booksCompleted: progress.completed,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  return score;
+}
+
+// ── 길드 멤버별 이번 주 점수 ─────────────────────────────────────
+
+export async function getGuildWeeklyScores(guildId) {
+  if (!isFirebaseReady()) return [];
+  const weekKey = getWeekKey();
+  const q = query(
+    collection(firestoreDb, 'guild_scores'),
+    where('guildId', '==', guildId),
+    where('weekKey', '==', weekKey),
+    orderBy('score', 'desc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data());
+}
+
+// ── 길드 간 주간 순위 ────────────────────────────────────────────
+
+export async function getGuildRankings() {
+  if (!isFirebaseReady()) return [];
+  const weekKey = getWeekKey();
+  const q = query(
+    collection(firestoreDb, 'guild_scores'),
+    where('weekKey', '==', weekKey),
+  );
+  const snap = await getDocs(q);
+
+  const guildTotals = {};
+  snap.docs.forEach((d) => {
+    const data = d.data();
+    if (!guildTotals[data.guildId]) {
+      guildTotals[data.guildId] = { guildId: data.guildId, totalScore: 0, memberCount: 0 };
+    }
+    guildTotals[data.guildId].totalScore += data.score;
+    guildTotals[data.guildId].memberCount++;
+  });
+
+  const withNames = await Promise.all(
+    Object.values(guildTotals).map(async (g) => {
+      const info = await getGuildInfo(g.guildId);
+      return { ...g, name: info?.name || '알 수 없는 길드' };
+    }),
+  );
+
+  return withNames.sort((a, b) => b.totalScore - a.totalScore).slice(0, 20);
+}
+
+// ── 길드 탈퇴 ────────────────────────────────────────────────────
+
+export async function removeMemberFromGuild(guildId, userId) {
+  if (!isFirebaseReady()) return;
+  await deleteDoc(doc(firestoreDb, 'guild_members', `${guildId}_${userId}`));
+  await updateDoc(doc(firestoreDb, 'guilds', guildId), {
+    memberCount: increment(-1),
+  });
+}

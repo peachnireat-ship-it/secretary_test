@@ -115,6 +115,12 @@ try {
 try {
   db.execSync(`ALTER TABLE completed_missions ADD COLUMN xp INTEGER DEFAULT 0`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN userId TEXT DEFAULT ''`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN guildId TEXT DEFAULT ''`);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS user_prefs (
@@ -771,4 +777,34 @@ export const getCompletionTimeStats = () => {
     if (idx >= 0) counts[idx]++;
   });
   return buckets.map((b, i) => ({ label: b.label, count: counts[i] }));
+};
+
+// ── 길드 관련 헬퍼 ──────────────────────────────────────────────
+
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+export const getUserId = () => {
+  const row = db.getFirstSync('SELECT userId FROM user_stats WHERE id = 1');
+  if (row?.userId) return row.userId;
+  const newId = generateUUID();
+  db.runSync('UPDATE user_stats SET userId = ? WHERE id = 1', [newId]);
+  return newId;
+};
+
+export const getGuildId = () => {
+  const row = db.getFirstSync('SELECT guildId FROM user_stats WHERE id = 1');
+  return row?.guildId || '';
+};
+
+export const saveGuildId = (guildId) => {
+  db.runSync('UPDATE user_stats SET guildId = ? WHERE id = 1', [guildId]);
+};
+
+export const leaveGuild = () => {
+  db.runSync("UPDATE user_stats SET guildId = '' WHERE id = 1");
 };

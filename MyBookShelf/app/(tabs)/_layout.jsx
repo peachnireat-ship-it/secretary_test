@@ -18,6 +18,7 @@ const ALL_TABS = [
   { name: 'reading-pattern', title: '패턴 분석',   icon: 'analytics-outline' },
   { name: 'recommend',       title: '추천 도서',   icon: 'sparkles-outline' },
   { name: 'book-event',      title: '이벤트',      icon: 'flash-outline' },
+  { name: 'guild',           title: '독서 길드',   icon: 'people-outline' },
 ];
 
 const DEFAULT_VISIBLE = ['home', 'index'];

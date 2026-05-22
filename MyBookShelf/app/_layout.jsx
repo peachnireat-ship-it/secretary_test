@@ -34,6 +34,8 @@ export default function RootLayout() {
         <Stack.Screen name="pattern-result" options={{ title: '패턴 분석 결과' }} />
         <Stack.Screen name="year-wrapped" options={{ headerShown: false }} />
         <Stack.Screen name="username-setup" options={{ headerShown: false }} />
+        <Stack.Screen name="guild-create" options={{ title: '길드 만들기' }} />
+        <Stack.Screen name="guild-join" options={{ title: '길드 참여' }} />
       </Stack>
       <XpGainToast />
     </View>
