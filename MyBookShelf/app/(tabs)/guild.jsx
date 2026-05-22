@@ -275,27 +275,29 @@ export default function GuildScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnSecondary]}
-          onPress={() => router.push('/guild-join')}
-          activeOpacity={0.75}
-        >
-          <Ionicons name="key-outline" size={18} color="#6750A4" />
-          <Text style={[styles.actionBtnText, styles.actionBtnTextSecondary]}>
-            초대 코드로 참여
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnSecondary, styles.actionBtnHalf]}
+            onPress={() => router.push('/guild-join')}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="key-outline" size={16} color="#6750A4" />
+            <Text style={[styles.actionBtnText, styles.actionBtnTextSecondary, styles.actionBtnTextSm]}>
+              초대 코드로 참여
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnSecondary]}
-          onPress={() => router.push({ pathname: '/guild-join', params: { tab: 'search' } })}
-          activeOpacity={0.75}
-        >
-          <Ionicons name="search-outline" size={18} color="#6750A4" />
-          <Text style={[styles.actionBtnText, styles.actionBtnTextSecondary]}>
-            공개 길드 둘러보기
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnSecondary, styles.actionBtnHalf]}
+            onPress={() => router.push({ pathname: '/guild-join', params: { tab: 'search' } })}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="search-outline" size={16} color="#6750A4" />
+            <Text style={[styles.actionBtnText, styles.actionBtnTextSecondary, styles.actionBtnTextSm]}>
+              공개 길드 둘러보기
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {myGuilds.length > 0 ? (
           <>
@@ -791,6 +793,17 @@ const styles = StyleSheet.create({
   },
   actionBtnTextSecondary: {
     color: '#6750A4',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionBtnHalf: {
+    flex: 1,
+    width: undefined,
+  },
+  actionBtnTextSm: {
+    fontSize: 13,
   },
 
   // ── 길드 헤더 ─────────────────────────────────────────────────
