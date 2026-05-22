@@ -62,38 +62,6 @@ function todayCatIndex() {
 
 const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
 
-const FOREIGN_POPULAR_KEYWORDS = {
-  child: 'popular children picture book bestseller',
-  teen:  'popular young adult fiction bestseller',
-  adult: 'popular bestselling fiction novel',
-};
-
-async function fetchGoogleBooks(keyword, maxResults = 13) {
-  const res = await fetch(
-    `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(keyword)}&langRestrict=en&maxResults=${maxResults}&orderBy=relevance&printType=books`
-  );
-  if (!res.ok) throw new Error('fetch error');
-  const data = await res.json();
-  return (data.items || []).filter(item => item.volumeInfo?.imageLinks?.thumbnail);
-}
-
-function normalizeGoogleBook(item) {
-  const info = item.volumeInfo || {};
-  const author = info.authors?.[0] || 'Unknown';
-  const thumbnail = info.imageLinks?.thumbnail?.replace('http:', 'https:') || null;
-  return {
-    id: item.id,
-    title: info.title || '',
-    author,
-    coverUrl: thumbnail,
-    coverUrlLarge: thumbnail,
-    year: info.publishedDate ? parseInt(info.publishedDate.slice(0, 4), 10) : null,
-    description: info.description || null,
-    source: 'google',
-    rawKey: item.id,
-  };
-}
-
 async function fetchAladinBooks(keyword, target = 'Book', ageGroup = null) {
   const catMap = target === 'Book' ? AGE_ALADIN_CATEGORY : AGE_ALADIN_CATEGORY_FOREIGN;
   const catParam = ageGroup ? (catMap[ageGroup] ?? '') : '';
@@ -151,11 +119,11 @@ export default function RecommendScreen() {
       if (region === 'foreign') {
         const ag = getAgeGroup(getAge()) || 'adult';
         if (currentMode === 'popular' || currentMode === 'age') {
-          items = (await fetchGoogleBooks(FOREIGN_POPULAR_KEYWORDS[ag], 20)).map(normalizeGoogleBook);
+          items = (await fetchAladinBestsellers(ag, 'Foreign')).map(normalizeAladinBook);
         } else {
           const cat = CATEGORIES[idx];
           const keyword = cat.foreignAgeKeys?.[ag] ?? cat.foreignKey;
-          items = (await fetchGoogleBooks(keyword)).map(normalizeGoogleBook);
+          items = (await fetchAladinBooks(keyword, 'Foreign', ag)).map(normalizeAladinBook);
         }
       } else {
         const target = 'Book';
