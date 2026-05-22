@@ -2,7 +2,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-nati
 import { useState, useCallback, Fragment } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getBooksByStatus, addCheckin, getSuccessfulChallengeBooks, getAllBooks, addXp, getPref, setPref } from '../../database/database';
+import { getBooksByStatus, addCheckin, getSuccessfulChallengeBooks, getAllBooks, addXp, getPref, setPref, getReadStreak, getCheckinDays } from '../../database/database';
 
 const STEPS = 7;
 const PURPLE = '#6750A4';
@@ -89,6 +89,45 @@ function BoardTrack({ stepIdx, checkedInSteps }) {
           </Fragment>
         );
       })}
+    </View>
+  );
+}
+
+const DAY_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
+
+function StreakTrack({ streak, checkinDays }) {
+  const today = new Date().setHours(0, 0, 0, 0);
+  const days = Array.from({ length: 7 }, (_, i) => today - (6 - i) * 86400000);
+  return (
+    <View style={styles.streakCard}>
+      <View style={styles.streakHeader}>
+        <Text style={styles.streakTitle}>🔥 연속 독서</Text>
+        <Text style={styles.streakCount}>{streak}일 연속</Text>
+      </View>
+      <View style={styles.streakDayRow}>
+        {days.map((dayTs) => {
+          const isToday = dayTs === today;
+          const done = checkinDays.has(dayTs);
+          return (
+            <View key={dayTs} style={styles.streakDayCol}>
+              <Text style={[styles.streakDayLabel, isToday && styles.streakDayLabelToday]}>
+                {DAY_SHORT[new Date(dayTs).getDay()]}
+              </Text>
+              <View style={[
+                styles.streakDayNode,
+                done && styles.streakDayNodeDone,
+                isToday && !done && styles.streakDayNodeToday,
+              ]}>
+                {done ? (
+                  <Text style={styles.streakDayCheck}>✓</Text>
+                ) : isToday ? (
+                  <Text style={styles.streakDayToday}>·</Text>
+                ) : null}
+              </View>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -183,7 +222,7 @@ function DynamicSnakeTrack({ stepIdx, totalSteps, checkedInSteps }) {
   );
 }
 
-function ChallengeCard({ book, onPress, isSuccess }) {
+function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
   const [checkins, setCheckins] = useState(() => {
     try { return JSON.parse(book.checkins || '[]'); } catch { return []; }
   });
@@ -222,6 +261,7 @@ function ChallengeCard({ book, onPress, isSuccess }) {
     if (alreadyCheckedIn) return;
     addCheckin(book.id, todayTs);
     setCheckins((prev) => [...prev, todayTs]);
+    onCheckin?.(todayTs);
 
     if (book.goalDate && !getPref(bonusPrefKey)) {
       const bonus = 5 + Math.floor(Math.random() * 6);
@@ -299,16 +339,27 @@ export default function ChallengeScreen() {
   const insets = useSafeAreaInsets();
   const [books, setBooks] = useState([]);
   const [successBooks, setSuccessBooks] = useState([]);
+  const [streak, setStreak] = useState(0);
+  const [checkinDays, setCheckinDays] = useState(new Set());
+
+  const refreshStreak = useCallback(() => {
+    setStreak(getReadStreak());
+    setCheckinDays(getCheckinDays());
+  }, []);
+
+  const handleCheckinFromCard = useCallback((todayTs) => {
+    setStreak(getReadStreak());
+    setCheckinDays((prev) => new Set([...prev, todayTs]));
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      const allBooks = getAllBooks();
-      
       setBooks([
         ...getBooksByStatus('reading').filter((b) => b.goalDate),
         ...getBooksByStatus('want_to_read').filter((b) => b.goalDate),
       ]);
       setSuccessBooks(getSuccessfulChallengeBooks());
+      refreshStreak();
     }, [])
   );
 
@@ -329,6 +380,8 @@ export default function ChallengeScreen() {
       </View>
       <Text style={styles.screenSub}>목표일을 향해 한 칸씩 나아가세요!</Text>
 
+      <StreakTrack streak={streak} checkinDays={checkinDays} />
+
       {books.length === 0 && successBooks.length === 0 ? (
         <View style={styles.empty}>
           <Text style={{ fontSize: 48 }}>📚</Text>
@@ -341,6 +394,7 @@ export default function ChallengeScreen() {
               key={book.id}
               book={book}
               onPress={() => router.push(`/book/${book.id}`)}
+              onCheckin={handleCheckinFromCard}
             />
           ))}
           {successBooks.length > 0 && (
@@ -442,6 +496,39 @@ const styles = StyleSheet.create({
   },
   snakeTrack: { marginBottom: 12, flexDirection: 'column' },
   vertConnector: { width: 4, height: 20, borderRadius: 2 },
+
+  streakCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+  },
+  streakHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  streakTitle: { fontSize: 15, fontWeight: '700', color: '#1C1B1F' },
+  streakCount: { fontSize: 14, fontWeight: '800', color: '#E65100' },
+  streakDayRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  streakDayCol: { alignItems: 'center', gap: 6, flex: 1 },
+  streakDayLabel: { fontSize: 11, color: '#9E9E9E', fontWeight: '600' },
+  streakDayLabelToday: { color: PURPLE, fontWeight: '800' },
+  streakDayNode: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#F0EDF6',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  streakDayNodeDone: { backgroundColor: '#4CAF50' },
+  streakDayNodeToday: { borderWidth: 2, borderColor: PURPLE },
+  streakDayCheck: { fontSize: 14, color: '#fff', fontWeight: '700' },
+  streakDayToday: { fontSize: 16, color: PURPLE, fontWeight: '900' },
 
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 14, color: '#9E9E9E', textAlign: 'center' },

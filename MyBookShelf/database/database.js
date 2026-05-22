@@ -380,6 +380,18 @@ export const onBookCompleted = (book) => {
   }
 };
 
+export const getReadStreak = () =>
+  db.getFirstSync('SELECT readStreak FROM user_stats WHERE id = 1')?.readStreak ?? 0;
+
+export const getCheckinDays = () => {
+  const rows = db.getAllSync('SELECT checkins FROM books');
+  const days = new Set();
+  rows.forEach(r => {
+    try { JSON.parse(r.checkins || '[]').forEach(ts => days.add(ts)); } catch {}
+  });
+  return days;
+};
+
 export const addCheckin = (bookId, dayTs) => {
   const row = db.getFirstSync('SELECT checkins FROM books WHERE id = ?', [bookId]);
   const list = JSON.parse(row?.checkins || '[]');
