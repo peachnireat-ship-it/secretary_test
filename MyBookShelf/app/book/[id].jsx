@@ -271,6 +271,69 @@ export default function BookDetailScreen() {
     ]);
   };
 
+  const handleRevertToWantToRead = () => {
+    if (!book) return;
+    Alert.alert('읽고 싶음으로 변경', '이 책을 읽고 싶음으로 되돌릴까요?\n독서 시작일이 초기화됩니다.', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '변경',
+        onPress: () => {
+          updateBook({
+            ...book,
+            title: editTitle.trim() || book.title,
+            author: editAuthor.trim(),
+            totalPages: parseInt(editTotalPages) || book.totalPages,
+            cover: editCover,
+            rating,
+            review,
+            currentPage: parseInt(currentPage) || 0,
+            status: 'want_to_read',
+            startDate: null,
+            genre,
+            progressPct: parseInt(progressPct) || 0,
+          });
+          router.back();
+        },
+      },
+    ]);
+  };
+
+  const handleRevertToReading = () => {
+    if (!book) return;
+    let xpToDeduct = XP_REWARDS.BOOK_COMPLETE;
+    const endDay = book.endDate ? new Date(book.endDate).setHours(0, 0, 0, 0) : null;
+    const goalDay = book.goalDate ? new Date(book.goalDate).setHours(0, 0, 0, 0) : null;
+    if (endDay && goalDay && endDay <= goalDay) xpToDeduct += XP_REWARDS.CHALLENGE_SUCCESS;
+    Alert.alert(
+      '읽는 중으로 변경',
+      `이 책을 읽는 중으로 되돌릴까요?\n완독 기록이 취소되고 XP ${xpToDeduct}점이 차감됩니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '변경',
+          onPress: () => {
+            updateBook({
+              ...book,
+              title: editTitle.trim() || book.title,
+              author: editAuthor.trim(),
+              totalPages: parseInt(editTotalPages) || book.totalPages,
+              cover: editCover,
+              rating,
+              review,
+              currentPage: parseInt(currentPage) || 0,
+              status: 'reading',
+              endDate: null,
+              genre,
+              progressPct: parseInt(progressPct) || 0,
+            });
+            addXp(-xpToDeduct);
+            router.back();
+          },
+        },
+      ]
+    );
+  };
+
   const handleMarkCompleted = () => {
     if (!book) return;
     const startTs = dateStrToTs(startDateStr);
@@ -622,6 +685,16 @@ export default function BookDetailScreen() {
               <Text style={styles.readingBtnText}>읽는 중</Text>
             </TouchableOpacity>
           )}
+          {book.status === 'reading' && (
+            <TouchableOpacity style={styles.revertBtn} onPress={handleRevertToWantToRead}>
+              <Text style={styles.revertBtnText}>읽고 싶음</Text>
+            </TouchableOpacity>
+          )}
+          {book.status === 'completed' && (
+            <TouchableOpacity style={styles.revertBtn} onPress={handleRevertToReading}>
+              <Text style={styles.revertBtnText}>읽는 중</Text>
+            </TouchableOpacity>
+          )}
           {book.status !== 'completed' && (
             <TouchableOpacity style={styles.completedBtn} onPress={handleMarkCompleted}>
               <Text style={styles.completedBtnText}>완독</Text>
@@ -692,6 +765,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   readingBtnText: { color: '#1976D2', fontSize: 14, fontWeight: '600' },
+  revertBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#9E8FB2',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  revertBtnText: { color: '#9E8FB2', fontSize: 14, fontWeight: '600' },
   completedBtn: {
     flex: 1,
     borderWidth: 1,
