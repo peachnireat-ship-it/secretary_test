@@ -274,13 +274,15 @@ export default function GuildScreen() {
 
         <Text style={styles.sectionLabel}>길드 찾기</Text>
 
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => router.push('/guild-create')}
-        >
-          <Ionicons name="add-circle-outline" size={20} color="#fff" />
-          <Text style={styles.actionBtnText}>길드 만들기</Text>
-        </TouchableOpacity>
+        {!myGuilds.some((g) => g.creatorId === getUserId()) && (
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => router.push('/guild-create')}
+          >
+            <Ionicons name="add-circle-outline" size={20} color="#fff" />
+            <Text style={styles.actionBtnText}>길드 만들기</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnSecondary]}
