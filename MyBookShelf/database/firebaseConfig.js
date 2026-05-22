@@ -9,12 +9,12 @@ import { getFirestore } from 'firebase/firestore';
 // 4. 아래 YOUR_... 값을 실제 값으로 교체
 // ─────────────────────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_PROJECT_ID.firebasestorage.app',
-  messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: '***FIREBASE_API_KEY_REMOVED***',
+  authDomain: 'mybookshelf-32b29.firebaseapp.com',
+  projectId: 'mybookshelf-32b29',
+  storageBucket: 'mybookshelf-32b29.firebasestorage.app',
+  messagingSenderId: '372327629344',
+  appId: '1:372327629344:web:c620c717c1e9bdef16b245',
 };
 
 let firestoreDb = null;
