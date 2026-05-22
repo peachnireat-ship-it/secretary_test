@@ -18,6 +18,7 @@ const CATEGORIES = [
     foreignAgeKeys: { child: 'children science', teen: 'teen science', adult: 'popular science' } },
   { key: 'biography',                      googleKey: '자서전',    foreignKey: 'biography autobiography',     label: '인물/자서전' },
   { key: 'children',                       googleKey: '동화',      foreignKey: "children picture book",       label: '어린이' },
+  { key: 'religion_philosophy',            googleKey: '종교철학',  foreignKey: 'religion philosophy',         label: '종교/철학' },
 ];
 
 const MODES = [
@@ -255,7 +256,7 @@ export default function RecommendScreen() {
               style={[styles.chip, catIdx === i && styles.chipActive]}
               onPress={() => setCatIdx(i)}
             >
-              <Text style={[styles.chipText, catIdx === i && styles.chipTextActive]}>
+              <Text style={[styles.chipText, catIdx === i && styles.chipTextActive]} numberOfLines={1}>
                 {cat.label}
               </Text>
             </TouchableOpacity>
