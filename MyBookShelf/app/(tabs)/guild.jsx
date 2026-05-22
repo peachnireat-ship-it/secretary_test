@@ -229,13 +229,18 @@ export default function GuildScreen() {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.listContainer}>
         <View style={styles.listHeader}>
-          <Ionicons name="people" size={36} color="#6750A4" />
-          <Text style={styles.listTitle}>독서 길드</Text>
+          <View style={styles.listHeaderIcon}>
+            <Ionicons name="shield-half-outline" size={22} color="#6750A4" />
+          </View>
+          <View>
+            <Text style={styles.listTitle}>독서 길드</Text>
+            <Text style={styles.listSubtitle}>길드원과 함께 독서 목표를 달성하세요</Text>
+          </View>
         </View>
 
         {!isFirebaseReady() && (
           <View style={styles.warnBox}>
-            <Ionicons name="warning-outline" size={16} color="#E65100" />
+            <Ionicons name="warning-outline" size={15} color="#B45309" />
             <Text style={styles.warnText}>
               서버에 연결할 수 없습니다.{'\n'}
               네트워크 상태를 확인해주세요.
@@ -251,22 +256,26 @@ export default function GuildScreen() {
                 key={g.id}
                 style={styles.guildCard}
                 onPress={() => loadGuildDetail(g.id)}
+                activeOpacity={0.75}
               >
+                <View style={styles.guildCardAccent} />
                 <View style={styles.guildCardInfo}>
                   <Text style={styles.guildCardName}>{g.name}</Text>
                   <Text style={styles.guildCardMeta}>
                     멤버 {g.memberCount || 0}명 · 주간 목표 {g.weeklyGoal || 0}권
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#aaa" />
+                <Ionicons name="chevron-forward" size={18} color="#C4B9DC" />
               </TouchableOpacity>
             ))}
           </>
         ) : (
           <View style={styles.emptyGuide}>
-            <Ionicons name="people-outline" size={48} color="#D0BCFF" />
+            <View style={styles.emptyGuideIconWrap}>
+              <Ionicons name="people-outline" size={36} color="#9575CD" />
+            </View>
+            <Text style={styles.emptyGuideTitle}>가입한 길드가 없습니다</Text>
             <Text style={styles.emptyGuideText}>
-              아직 가입한 길드가 없습니다.{'\n'}
               길드원과 함께 주간 독서 목표를 달성하고{'\n'}길드 대항전에서 실력을 겨뤄보세요!
             </Text>
           </View>
@@ -278,8 +287,9 @@ export default function GuildScreen() {
           <TouchableOpacity
             style={styles.actionBtn}
             onPress={() => router.push('/guild-create')}
+            activeOpacity={0.8}
           >
-            <Ionicons name="add-circle-outline" size={20} color="#fff" />
+            <Ionicons name="add-circle-outline" size={18} color="#fff" />
             <Text style={styles.actionBtnText}>길드 만들기</Text>
           </TouchableOpacity>
         )}
@@ -287,8 +297,9 @@ export default function GuildScreen() {
         <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnSecondary]}
           onPress={() => router.push('/guild-join')}
+          activeOpacity={0.75}
         >
-          <Ionicons name="key-outline" size={20} color="#6750A4" />
+          <Ionicons name="key-outline" size={18} color="#6750A4" />
           <Text style={[styles.actionBtnText, styles.actionBtnTextSecondary]}>
             초대 코드로 참여
           </Text>
@@ -297,8 +308,9 @@ export default function GuildScreen() {
         <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnSecondary]}
           onPress={() => router.push({ pathname: '/guild-join', params: { tab: 'search' } })}
+          activeOpacity={0.75}
         >
-          <Ionicons name="search-outline" size={20} color="#6750A4" />
+          <Ionicons name="search-outline" size={18} color="#6750A4" />
           <Text style={[styles.actionBtnText, styles.actionBtnTextSecondary]}>
             공개 길드 둘러보기
           </Text>
@@ -320,28 +332,31 @@ export default function GuildScreen() {
       {/* 길드 헤더 */}
       <View style={styles.guildHeader}>
         <View style={styles.guildHeaderTop}>
-          <TouchableOpacity onPress={handleBack} hitSlop={8}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
+          <TouchableOpacity onPress={handleBack} hitSlop={8} style={styles.headerBackBtn}>
+            <Ionicons name="arrow-back" size={20} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.guildName}>{guild?.name || '내 길드'}</Text>
-          <TouchableOpacity onPress={handleLeave} hitSlop={8}>
-            <Ionicons name="log-out-outline" size={20} color="#fff" />
+          <Text style={styles.guildName} numberOfLines={1}>{guild?.name || '내 길드'}</Text>
+          <TouchableOpacity onPress={handleLeave} hitSlop={8} style={styles.headerLeaveBtn}>
+            <Ionicons name="log-out-outline" size={19} color="rgba(255,255,255,0.75)" />
           </TouchableOpacity>
         </View>
         <View style={styles.guildMeta}>
-          <Text style={styles.guildMetaText}>
-            <Ionicons name="people-outline" size={13} /> 멤버 {guild?.memberCount || 0}명
-          </Text>
-          <TouchableOpacity onPress={copyCode} style={styles.codeBox}>
-            <Text style={styles.codeText}>코드: {guild?.inviteCode}</Text>
-            <Ionicons name="copy-outline" size={13} color="#D0BCFF" />
+          <View style={styles.metaChip}>
+            <Ionicons name="people-outline" size={12} color="#D0BCFF" />
+            <Text style={styles.metaChipText}>멤버 {guild?.memberCount || 0}명</Text>
+          </View>
+          <TouchableOpacity onPress={copyCode} style={styles.metaChip}>
+            <Ionicons name="copy-outline" size={12} color="#D0BCFF" />
+            <Text style={styles.metaChipText}>코드: {guild?.inviteCode}</Text>
           </TouchableOpacity>
+          {myRank && (
+            <View style={[styles.metaChip, styles.rankChip]}>
+              <Text style={styles.rankChipText}>
+                {myRank <= 3 ? MEDALS[myRank - 1] : `#${myRank}`} 대항전
+              </Text>
+            </View>
+          )}
         </View>
-        {myRank && (
-          <Text style={styles.rankBadge}>
-            {myRank <= 3 ? MEDALS[myRank - 1] : `#${myRank}`} 이번 주 길드 대항전
-          </Text>
-        )}
       </View>
 
       {/* 세그먼트 탭 */}
@@ -540,23 +555,24 @@ export default function GuildScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9F5FF',
+    backgroundColor: '#F4F2F8',
   },
   centerBox: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
+    backgroundColor: '#F4F2F8',
   },
   syncText: {
     fontSize: 13,
-    color: '#888',
+    color: '#9B93B0',
   },
   errorText: {
     fontSize: 14,
-    color: '#E65100',
+    color: '#B45309',
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: 8,
     marginHorizontal: 32,
     lineHeight: 22,
   },
@@ -566,37 +582,52 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 16,
     paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
     borderRadius: 10,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#6750A4',
   },
 
   // ── 길드 목록 ─────────────────────────────────────────────────
   listContainer: {
     paddingHorizontal: 20,
-    paddingTop: 28,
-    paddingBottom: 40,
+    paddingTop: 24,
+    paddingBottom: 48,
     gap: 10,
   },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 6,
+    gap: 12,
+    marginBottom: 10,
+  },
+  listHeaderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#EDE7F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#6750A4',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#2D2440',
+    letterSpacing: -0.3,
+  },
+  listSubtitle: {
+    fontSize: 12,
+    color: '#9B93B0',
+    marginTop: 2,
   },
   sectionLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#888',
-    letterSpacing: 0.5,
-    marginTop: 8,
-    marginBottom: 2,
+    color: '#A09AB0',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginTop: 6,
+    marginBottom: 4,
   },
   guildCard: {
     flexDirection: 'row',
@@ -604,12 +635,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 14,
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingRight: 16,
+    paddingLeft: 0,
+    borderWidth: 1,
+    borderColor: '#EBE6F4',
+    overflow: 'hidden',
     elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowColor: '#7C6FA0',
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
+  },
+  guildCardAccent: {
+    width: 4,
+    alignSelf: 'stretch',
+    backgroundColor: '#6750A4',
+    marginRight: 14,
+    borderRadius: 2,
   },
   guildCardInfo: {
     flex: 1,
@@ -618,57 +660,82 @@ const styles = StyleSheet.create({
   guildCardName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#333',
+    color: '#2D2440',
   },
   guildCardMeta: {
     fontSize: 12,
-    color: '#888',
+    color: '#9B93B0',
   },
   emptyGuide: {
     alignItems: 'center',
-    paddingVertical: 24,
-    gap: 12,
+    paddingVertical: 28,
+    gap: 8,
+  },
+  emptyGuideIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: '#EDE7F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyGuideTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#4A3870',
   },
   emptyGuideText: {
-    fontSize: 14,
-    color: '#888',
+    fontSize: 13,
+    color: '#9B93B0',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   warnBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    backgroundColor: '#FFF3E0',
-    borderRadius: 10,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
     padding: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
     width: '100%',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   warnText: {
     fontSize: 12,
-    color: '#E65100',
+    color: '#92400E',
     flex: 1,
     lineHeight: 18,
   },
   actionBtn: {
     backgroundColor: '#6750A4',
-    borderRadius: 14,
+    borderRadius: 13,
     paddingVertical: 14,
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     width: '100%',
     justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#6750A4',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
   actionBtnSecondary: {
-    backgroundColor: '#F0EAFB',
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#D4C8F0',
+    elevation: 0,
+    shadowOpacity: 0,
   },
   actionBtnText: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   actionBtnTextSecondary: {
     color: '#6750A4',
@@ -676,45 +743,67 @@ const styles = StyleSheet.create({
 
   // ── 길드 헤더 ─────────────────────────────────────────────────
   guildHeader: {
-    backgroundColor: '#6750A4',
+    backgroundColor: '#5B4397',
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-    gap: 6,
+    paddingTop: 14,
+    paddingBottom: 14,
+    gap: 10,
   },
   guildHeaderTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerBackBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  headerLeaveBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   guildName: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '800',
     color: '#fff',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+    marginHorizontal: 8,
   },
   guildMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 8,
+    flexWrap: 'wrap',
   },
-  guildMetaText: {
-    fontSize: 13,
-    color: '#D0BCFF',
-  },
-  codeBox: {
+  metaChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderRadius: 20,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
   },
-  codeText: {
-    fontSize: 13,
-    color: '#D0BCFF',
-    letterSpacing: 1,
-  },
-  rankBadge: {
+  metaChipText: {
     fontSize: 12,
-    color: '#E8DEF8',
-    marginTop: 2,
+    color: '#DDD5F5',
+    letterSpacing: 0.3,
+  },
+  rankChip: {
+    backgroundColor: 'rgba(255,220,100,0.18)',
+  },
+  rankChipText: {
+    fontSize: 12,
+    color: '#FFE082',
+    fontWeight: '700',
   },
 
   // ── 세그먼트 탭 ───────────────────────────────────────────────
@@ -722,21 +811,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0D6F0',
+    borderBottomColor: '#EBE6F4',
   },
   segItem: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center',
-    borderBottomWidth: 2,
+    borderBottomWidth: 2.5,
     borderBottomColor: 'transparent',
   },
   segItemActive: {
     borderBottomColor: '#6750A4',
   },
   segLabel: {
-    fontSize: 13,
-    color: '#888',
+    fontSize: 12,
+    color: '#A09AB0',
     fontWeight: '600',
   },
   segLabelActive: {
@@ -748,76 +837,85 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 18,
-    marginBottom: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#EBE6F4',
     elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowColor: '#7C6FA0',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#6750A4',
     marginBottom: 14,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 
   // ── 주간 목표 ─────────────────────────────────────────────────
   goalNumbers: {
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+    marginTop: 4,
   },
   goalCurrent: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#6750A4',
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#5B4397',
+    letterSpacing: -1,
   },
   goalSlash: {
-    fontSize: 22,
-    color: '#ccc',
+    fontSize: 24,
+    color: '#D4C8F0',
   },
   goalTarget: {
-    fontSize: 22,
-    color: '#888',
+    fontSize: 24,
+    color: '#9B93B0',
   },
   progressBg: {
-    height: 10,
-    backgroundColor: '#E8E0F0',
-    borderRadius: 5,
+    height: 12,
+    backgroundColor: '#EBE6F4',
+    borderRadius: 6,
     overflow: 'hidden',
     marginBottom: 6,
   },
   progressFill: {
     height: '100%',
     backgroundColor: '#6750A4',
-    borderRadius: 5,
+    borderRadius: 6,
   },
   goalPct: {
-    fontSize: 13,
-    color: '#888',
+    fontSize: 12,
+    color: '#9B93B0',
     textAlign: 'right',
+    fontWeight: '600',
   },
   contribRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3EEF8',
+    borderBottomColor: '#F2EEF8',
   },
   contribRank: {
     width: 28,
     fontSize: 13,
-    color: '#888',
-    fontWeight: 'bold',
+    color: '#B0AAC0',
+    fontWeight: '700',
+    textAlign: 'center',
   },
   contribName: {
     flex: 1,
     fontSize: 14,
-    color: '#333',
+    color: '#2D2440',
+    fontWeight: '500',
   },
   contribBooks: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#6750A4',
   },
 
@@ -825,22 +923,21 @@ const styles = StyleSheet.create({
   rankRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3EEF8',
+    borderBottomColor: '#F2EEF8',
     gap: 10,
+    borderRadius: 10,
+    paddingHorizontal: 4,
   },
   rankRowFirst: {
-    backgroundColor: '#FFFDE7',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    marginHorizontal: -8,
+    backgroundColor: '#FFFBEB',
+    borderBottomColor: 'transparent',
+    marginBottom: 2,
   },
   rankRowHighlight: {
     backgroundColor: '#EDE7F6',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    marginHorizontal: -8,
+    borderBottomColor: 'transparent',
   },
   rankNum: {
     width: 34,
@@ -851,15 +948,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#2D2440',
   },
   rankMeta: {
     fontSize: 11,
-    color: '#aaa',
+    color: '#B0AAC0',
+    marginTop: 2,
   },
   rankScore: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#6750A4',
   },
 
@@ -874,13 +972,14 @@ const styles = StyleSheet.create({
   refreshText: {
     fontSize: 13,
     color: '#6750A4',
+    fontWeight: '600',
   },
   emptyText: {
     fontSize: 13,
-    color: '#bbb',
+    color: '#C4BDD4',
     textAlign: 'center',
     paddingVertical: 20,
-    lineHeight: 20,
+    lineHeight: 21,
   },
 
   // ── 게시판 ───────────────────────────────────────────────────────
@@ -894,6 +993,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     marginBottom: 10,
+    elevation: 2,
+    shadowColor: '#6750A4',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
   writeBtnText: {
     color: '#fff',
@@ -904,9 +1008,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 14,
     padding: 14,
-    marginBottom: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EBE6F4',
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: '#7C6FA0',
     shadowOpacity: 0.05,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
@@ -920,55 +1026,55 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '700',
-    color: '#333',
+    color: '#2D2440',
   },
   postMeta: {
     fontSize: 11,
-    color: '#aaa',
-    marginTop: 4,
+    color: '#B0AAC0',
+    marginTop: 5,
   },
   postContent: {
     fontSize: 13,
-    color: '#444',
-    lineHeight: 20,
+    color: '#5F5870',
+    lineHeight: 21,
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F3EEF8',
+    borderTopColor: '#F2EEF8',
   },
 
   // ── 글쓰기 모달 ──────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(20,15,35,0.45)',
     justifyContent: 'flex-end',
   },
   modalBox: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 24,
     gap: 12,
   },
   modalTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#6750A4',
-    marginBottom: 4,
+    fontWeight: '800',
+    color: '#2D2440',
+    marginBottom: 2,
   },
   modalInput: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E0D6F0',
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
     fontSize: 14,
-    color: '#333',
-    backgroundColor: '#FAFAFA',
+    color: '#2D2440',
+    backgroundColor: '#FAF8FE',
   },
   modalTextarea: {
     height: 120,
-    paddingTop: 10,
+    paddingTop: 11,
   },
   modalBtns: {
     flexDirection: 'row',
@@ -977,10 +1083,10 @@ const styles = StyleSheet.create({
   },
   modalCancelBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#D0BCFF',
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#D4C8F0',
     alignItems: 'center',
   },
   modalCancelText: {
@@ -990,10 +1096,15 @@ const styles = StyleSheet.create({
   },
   modalSubmitBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: 13,
+    borderRadius: 12,
     backgroundColor: '#6750A4',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#6750A4',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
   modalSubmitText: {
     color: '#fff',
