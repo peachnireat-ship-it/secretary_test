@@ -281,6 +281,20 @@ export default function GuildScreen() {
           </View>
         )}
 
+        <View style={styles.xpBanner}>
+          <View style={styles.xpBannerIcon}>
+            <Ionicons name="flash" size={18} color="#7C3AED" />
+          </View>
+          <View style={styles.xpBannerBody}>
+            <Text style={styles.xpBannerTitle}>길드 활동으로 개인 XP 획득!</Text>
+            <Text style={styles.xpBannerDesc}>
+              길드 기여 점수가 오를 때마다 개인 경험치를 받아요.{'\n'}
+              <Text style={styles.xpBannerHighlight}>기여 점수 10점 → 1 XP</Text>
+              {'  ·  XP 2배 이벤트도 적용돼요'}
+            </Text>
+          </View>
+        </View>
+
         <Text style={styles.sectionLabel}>길드 찾기</Text>
 
         {!myGuilds.some((g) => g.creatorId === getUserId()) && (
@@ -708,6 +722,44 @@ const styles = StyleSheet.create({
     color: '#92400E',
     flex: 1,
     lineHeight: 18,
+  },
+  xpBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: '#F3EEFF',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#DDD0F8',
+    marginTop: 4,
+  },
+  xpBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EDE7F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  xpBannerBody: {
+    flex: 1,
+    gap: 4,
+  },
+  xpBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4A3870',
+  },
+  xpBannerDesc: {
+    fontSize: 12,
+    color: '#7B6FAA',
+    lineHeight: 18,
+  },
+  xpBannerHighlight: {
+    fontWeight: '700',
+    color: '#6750A4',
   },
   actionBtn: {
     backgroundColor: '#6750A4',
