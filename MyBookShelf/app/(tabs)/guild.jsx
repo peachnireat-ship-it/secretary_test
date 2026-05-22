@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator,
+  Alert, ActivityIndicator, Modal, TextInput,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -12,11 +12,22 @@ import {
 import {
   getGuildInfo, getGuildWeeklyScores, getGuildRankings,
   syncWeeklyScore, removeMemberFromGuild, getUserGuilds,
+  getGuildPosts, createGuildPost, deleteGuildPost,
 } from '../../database/guildDatabase';
 import { isFirebaseReady } from '../../database/firebaseConfig';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
-const SEGMENT_TABS = ['주간 목표', '멤버 순위', '길드 대항전'];
+const SEGMENT_TABS = ['주간 목표', '멤버 순위', '길드 대항전', '게시판'];
+
+function formatPostDate(createdAt) {
+  if (!createdAt) return '';
+  const date = createdAt.toDate ? createdAt.toDate() : new Date((createdAt.seconds || 0) * 1000);
+  const diff = Date.now() - date.getTime();
+  if (diff < 60000) return '방금 전';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}분 전`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}시간 전`;
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
 
 export default function GuildScreen() {
   const router = useRouter();
@@ -30,6 +41,13 @@ export default function GuildScreen() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [posts, setPosts] = useState([]);
+  const [expandedPostId, setExpandedPostId] = useState(null);
+  const [showWriteForm, setShowWriteForm] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newContent, setNewContent] = useState('');
+  const [postLoading, setPostLoading] = useState(false);
+  const [postLoaded, setPostLoaded] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -95,6 +113,63 @@ export default function GuildScreen() {
     setSelectedGuildId('');
     setGuild(null);
     setLoadError('');
+    setPosts([]);
+    setPostLoaded(false);
+    setExpandedPostId(null);
+  };
+
+  const loadPosts = async (guildId) => {
+    setPostLoading(true);
+    try {
+      const data = await getGuildPosts(guildId);
+      setPosts(data);
+      setPostLoaded(true);
+    } catch (e) {
+      Alert.alert('오류', e.message || '게시글을 불러오지 못했습니다.');
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
+  const handleTabChange = (i) => {
+    setActiveTab(i);
+    if (i === 3 && !postLoaded && !postLoading) {
+      loadPosts(selectedGuildId);
+    }
+  };
+
+  const handleDeletePost = (postId) => {
+    Alert.alert('삭제', '이 게시글을 삭제하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteGuildPost(postId);
+            setPosts((prev) => prev.filter((p) => p.id !== postId));
+          } catch (e) {
+            Alert.alert('오류', e.message || '삭제에 실패했습니다.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleSubmitPost = async () => {
+    if (!newTitle.trim()) { Alert.alert('알림', '제목을 입력해주세요.'); return; }
+    if (!newContent.trim()) { Alert.alert('알림', '내용을 입력해주세요.'); return; }
+    try {
+      const userId = getUserId();
+      const displayName = getUsername() || '독서가';
+      await createGuildPost(selectedGuildId, userId, displayName, newTitle, newContent);
+      setShowWriteForm(false);
+      setNewTitle('');
+      setNewContent('');
+      await loadPosts(selectedGuildId);
+    } catch (e) {
+      Alert.alert('오류', e.message || '게시글 등록에 실패했습니다.');
+    }
   };
 
   const handleLeave = () => {
@@ -273,7 +348,7 @@ export default function GuildScreen() {
           <TouchableOpacity
             key={i}
             style={[styles.segItem, activeTab === i && styles.segItemActive]}
-            onPress={() => setActiveTab(i)}
+            onPress={() => handleTabChange(i)}
           >
             <Text style={[styles.segLabel, activeTab === i && styles.segLabelActive]}>
               {label}
@@ -368,7 +443,94 @@ export default function GuildScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* ── 게시판 ── */}
+        {activeTab === 3 && (
+          <View>
+            <TouchableOpacity style={styles.writeBtn} onPress={() => setShowWriteForm(true)}>
+              <Ionicons name="pencil-outline" size={16} color="#fff" />
+              <Text style={styles.writeBtnText}>글쓰기</Text>
+            </TouchableOpacity>
+
+            {postLoading ? (
+              <ActivityIndicator style={{ marginTop: 24 }} color="#6750A4" />
+            ) : posts.length === 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.emptyText}>아직 게시글이 없습니다.{'\n'}첫 글을 남겨보세요!</Text>
+              </View>
+            ) : (
+              posts.map((p) => {
+                const isExpanded = expandedPostId === p.id;
+                const isOwn = p.userId === getUserId();
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={styles.postCard}
+                    onPress={() => setExpandedPostId(isExpanded ? null : p.id)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.postHeader}>
+                      <Text style={styles.postTitle} numberOfLines={isExpanded ? 0 : 1}>
+                        {p.title}
+                      </Text>
+                      {isOwn && (
+                        <TouchableOpacity onPress={() => handleDeletePost(p.id)} hitSlop={8}>
+                          <Ionicons name="trash-outline" size={15} color="#ccc" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <Text style={styles.postMeta}>
+                      {p.displayName} · {formatPostDate(p.createdAt)}
+                    </Text>
+                    {isExpanded && (
+                      <Text style={styles.postContent}>{p.content}</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+        )}
       </ScrollView>
+
+      {/* 글쓰기 모달 */}
+      <Modal visible={showWriteForm} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>새 게시글</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="제목"
+              placeholderTextColor="#bbb"
+              value={newTitle}
+              onChangeText={setNewTitle}
+              maxLength={50}
+            />
+            <TextInput
+              style={[styles.modalInput, styles.modalTextarea]}
+              placeholder="내용을 입력하세요"
+              placeholderTextColor="#bbb"
+              value={newContent}
+              onChangeText={setNewContent}
+              multiline
+              numberOfLines={5}
+              maxLength={500}
+              textAlignVertical="top"
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => { setShowWriteForm(false); setNewTitle(''); setNewContent(''); }}
+              >
+                <Text style={styles.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleSubmitPost}>
+                <Text style={styles.modalSubmitText}>등록</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -716,5 +878,124 @@ const styles = StyleSheet.create({
     color: '#bbb',
     textAlign: 'center',
     paddingVertical: 20,
+    lineHeight: 20,
+  },
+
+  // ── 게시판 ───────────────────────────────────────────────────────
+  writeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-end',
+    backgroundColor: '#6750A4',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  writeBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  postCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  postTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+  },
+  postMeta: {
+    fontSize: 11,
+    color: '#aaa',
+    marginTop: 4,
+  },
+  postContent: {
+    fontSize: 13,
+    color: '#444',
+    lineHeight: 20,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F3EEF8',
+  },
+
+  // ── 글쓰기 모달 ──────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#6750A4',
+    marginBottom: 4,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#E0D6F0',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: '#FAFAFA',
+  },
+  modalTextarea: {
+    height: 120,
+    paddingTop: 10,
+  },
+  modalBtns: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D0BCFF',
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: '#6750A4',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalSubmitBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#6750A4',
+    alignItems: 'center',
+  },
+  modalSubmitText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

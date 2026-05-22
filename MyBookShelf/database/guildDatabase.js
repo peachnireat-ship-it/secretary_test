@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+  collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
   query, where, limit, serverTimestamp, increment,
 } from 'firebase/firestore';
 import { firestoreDb, isFirebaseReady } from './firebaseConfig';
@@ -212,4 +212,39 @@ export async function getUserGuilds(userId) {
   if (guildIds.length === 0) return [];
   const guilds = await Promise.all(guildIds.map((id) => getGuildInfo(id)));
   return guilds.filter(Boolean);
+}
+
+// ── 게시판 글 목록 ────────────────────────────────────────────────
+
+export async function getGuildPosts(guildId) {
+  if (!isFirebaseReady()) return [];
+  const q = query(
+    collection(firestoreDb, 'guild_posts'),
+    where('guildId', '==', guildId),
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+}
+
+// ── 게시판 글 작성 ────────────────────────────────────────────────
+
+export async function createGuildPost(guildId, userId, displayName, title, content) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  await addDoc(collection(firestoreDb, 'guild_posts'), {
+    guildId,
+    userId,
+    displayName,
+    title: title.trim(),
+    content: content.trim(),
+    createdAt: serverTimestamp(),
+  });
+}
+
+// ── 게시판 글 삭제 ────────────────────────────────────────────────
+
+export async function deleteGuildPost(postId) {
+  if (!isFirebaseReady()) return;
+  await deleteDoc(doc(firestoreDb, 'guild_posts', postId));
 }
