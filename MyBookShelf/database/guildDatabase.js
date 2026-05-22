@@ -15,6 +15,14 @@ function generateInviteCode() {
 export async function createGuild({ name, isPublic, weeklyGoal, userId, displayName, school, schoolLevel }) {
   if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
 
+  const existingQ = query(
+    collection(firestoreDb, 'guilds'),
+    where('creatorId', '==', userId),
+    limit(1),
+  );
+  const existingSnap = await getDocs(existingQ);
+  if (!existingSnap.empty) throw new Error('길드는 1인당 1개만 생성할 수 있습니다.');
+
   const guildId = `g_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const inviteCode = generateInviteCode();
 
