@@ -22,7 +22,8 @@ function fmtDate(ts) {
 
 function calcStepIdx(book, totalSteps) {
   if (book.status !== 'reading') return 0;
-  const { startDate, goalDate } = book;
+  const { goalDate } = book;
+  const startDate = book.startDate || book.createdAt;
   if (!startDate || !goalDate) return 0;
   const startMidnight = new Date(startDate).setHours(0, 0, 0, 0);
   const goalMidnight = new Date(goalDate).setHours(0, 0, 0, 0);
@@ -206,13 +207,14 @@ function ChallengeCard({ book, onPress, isSuccess }) {
   const todayTs = new Date().setHours(0, 0, 0, 0);
   const alreadyCheckedIn = checkins.includes(todayTs);
 
+  const maxCheckinStep = useSnake ? totalSteps - 2 : STEPS - 2;
   const checkedInSteps = new Set(
     checkins.flatMap((ts) => {
       if (!startMidnight || !goalMidnight || goalMidnight <= startMidnight) return [];
       const ratio = Math.min(1, Math.max(0, (ts - startMidnight) / (goalMidnight - startMidnight)));
       const step = Math.round(ratio * (totalSteps - 1));
-      const clamped = Math.min(Math.max(1, step), totalSteps - 2);
-      return [clamped];
+      const clamped = Math.min(Math.max(1, step), maxCheckinStep);
+      return clamped >= 1 ? [clamped] : [];
     })
   );
 
