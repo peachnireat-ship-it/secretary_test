@@ -198,3 +198,18 @@ export async function removeMemberFromGuild(guildId, userId) {
     memberCount: increment(-1),
   });
 }
+
+// ── 사용자가 가입한 길드 목록 ─────────────────────────────────────
+
+export async function getUserGuilds(userId) {
+  if (!isFirebaseReady()) return [];
+  const q = query(
+    collection(firestoreDb, 'guild_members'),
+    where('userId', '==', userId),
+  );
+  const snap = await getDocs(q);
+  const guildIds = snap.docs.map((d) => d.data().guildId);
+  if (guildIds.length === 0) return [];
+  const guilds = await Promise.all(guildIds.map((id) => getGuildInfo(id)));
+  return guilds.filter(Boolean);
+}

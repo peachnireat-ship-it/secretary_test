@@ -7,11 +7,11 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  getUserId, getUsername, getGuildId, leaveGuild,
+  getUserId, getUsername, leaveGuild,
 } from '../../database/database';
 import {
   getGuildInfo, getGuildWeeklyScores, getGuildRankings,
-  syncWeeklyScore, removeMemberFromGuild,
+  syncWeeklyScore, removeMemberFromGuild, getUserGuilds,
 } from '../../database/guildDatabase';
 import { isFirebaseReady } from '../../database/firebaseConfig';
 
@@ -20,7 +20,9 @@ const SEGMENT_TABS = ['주간 목표', '멤버 순위', '길드 대항전'];
 
 export default function GuildScreen() {
   const router = useRouter();
-  const [guildId, setGuildId] = useState('');
+  const [viewMode, setViewMode] = useState('list');  // 'list' | 'detail'
+  const [myGuilds, setMyGuilds] = useState([]);
+  const [selectedGuildId, setSelectedGuildId] = useState('');
   const [guild, setGuild] = useState(null);
   const [memberScores, setMemberScores] = useState([]);
   const [guildRankings, setGuildRankings] = useState([]);
@@ -38,43 +40,61 @@ export default function GuildScreen() {
   const load = async () => {
     setLoading(true);
     setLoadError('');
-    const id = getGuildId();
-    setGuildId(id);
-
-    if (!id) {
-      setLoading(false);
-      return;
-    }
+    setViewMode('list');
 
     if (!isFirebaseReady()) {
       setLoading(false);
-      setLoadError('서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.');
       return;
     }
+
+    try {
+      const userId = getUserId();
+      const guilds = await getUserGuilds(userId);
+      setMyGuilds(guilds);
+    } catch (e) {
+      setLoadError(e.message || '길드 목록을 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadGuildDetail = async (guildId) => {
+    setLoading(true);
+    setLoadError('');
+    setSelectedGuildId(guildId);
+    setActiveTab(0);
 
     try {
       const userId = getUserId();
       const displayName = getUsername() || '독서가';
 
       setSyncing(true);
-      await syncWeeklyScore(id, userId, displayName);
+      await syncWeeklyScore(guildId, userId, displayName);
       setSyncing(false);
 
       const [info, scores, rankings] = await Promise.all([
-        getGuildInfo(id),
-        getGuildWeeklyScores(id),
+        getGuildInfo(guildId),
+        getGuildWeeklyScores(guildId),
         getGuildRankings(),
       ]);
 
       setGuild(info);
       setMemberScores(scores);
       setGuildRankings(rankings);
+      setViewMode('detail');
     } catch (e) {
       setLoadError(e.message || '길드 정보를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
       setSyncing(false);
     }
+  };
+
+  const handleBack = () => {
+    setViewMode('list');
+    setSelectedGuildId('');
+    setGuild(null);
+    setLoadError('');
   };
 
   const handleLeave = () => {
@@ -86,10 +106,10 @@ export default function GuildScreen() {
         onPress: async () => {
           try {
             const userId = getUserId();
-            await removeMemberFromGuild(guildId, userId);
+            await removeMemberFromGuild(selectedGuildId, userId);
             leaveGuild();
-            setGuildId('');
-            setGuild(null);
+            setMyGuilds((prev) => prev.filter((g) => g.id !== selectedGuildId));
+            handleBack();
           } catch (e) {
             Alert.alert('오류', e.message || '탈퇴에 실패했습니다.');
           }
@@ -103,16 +123,40 @@ export default function GuildScreen() {
     Alert.alert('복사 완료', '초대 코드가 클립보드에 복사되었습니다.');
   };
 
-  // ── 길드 미가입 화면 ────────────────────────────────────────────
-
-  if (!loading && !guildId) {
+  if (loading) {
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.landingContainer}>
-        <Ionicons name="people" size={64} color="#D0BCFF" />
-        <Text style={styles.landingTitle}>독서 길드</Text>
-        <Text style={styles.landingDesc}>
-          길드원과 함께 주간 독서 목표를 달성하고{'\n'}길드 대항전에서 실력을 겨뤄보세요!
-        </Text>
+      <View style={styles.centerBox}>
+        <ActivityIndicator size="large" color="#6750A4" />
+        {syncing && <Text style={styles.syncText}>점수 동기화 중...</Text>}
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.centerBox}>
+        <Ionicons name="warning-outline" size={40} color="#E65100" />
+        <Text style={styles.errorText}>{loadError}</Text>
+        <TouchableOpacity
+          style={styles.retryBtn}
+          onPress={viewMode === 'detail' ? () => loadGuildDetail(selectedGuildId) : load}
+        >
+          <Ionicons name="refresh-outline" size={16} color="#6750A4" />
+          <Text style={styles.refreshText}>다시 시도</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // ── 길드 목록 화면 ───────────────────────────────────────────────
+
+  if (viewMode === 'list') {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.listContainer}>
+        <View style={styles.listHeader}>
+          <Ionicons name="people" size={36} color="#6750A4" />
+          <Text style={styles.listTitle}>독서 길드</Text>
+        </View>
 
         {!isFirebaseReady() && (
           <View style={styles.warnBox}>
@@ -123,6 +167,37 @@ export default function GuildScreen() {
             </Text>
           </View>
         )}
+
+        {myGuilds.length > 0 ? (
+          <>
+            <Text style={styles.sectionLabel}>가입한 길드</Text>
+            {myGuilds.map((g) => (
+              <TouchableOpacity
+                key={g.id}
+                style={styles.guildCard}
+                onPress={() => loadGuildDetail(g.id)}
+              >
+                <View style={styles.guildCardInfo}>
+                  <Text style={styles.guildCardName}>{g.name}</Text>
+                  <Text style={styles.guildCardMeta}>
+                    멤버 {g.memberCount || 0}명 · 주간 목표 {g.weeklyGoal || 0}권
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#aaa" />
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : (
+          <View style={styles.emptyGuide}>
+            <Ionicons name="people-outline" size={48} color="#D0BCFF" />
+            <Text style={styles.emptyGuideText}>
+              아직 가입한 길드가 없습니다.{'\n'}
+              길드원과 함께 주간 독서 목표를 달성하고{'\n'}길드 대항전에서 실력을 겨뤄보세요!
+            </Text>
+          </View>
+        )}
+
+        <Text style={styles.sectionLabel}>길드 찾기</Text>
 
         <TouchableOpacity
           style={styles.actionBtn}
@@ -155,34 +230,12 @@ export default function GuildScreen() {
     );
   }
 
-  if (loading) {
-    return (
-      <View style={styles.centerBox}>
-        <ActivityIndicator size="large" color="#6750A4" />
-        {syncing && <Text style={styles.syncText}>점수 동기화 중...</Text>}
-      </View>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <View style={styles.centerBox}>
-        <Ionicons name="warning-outline" size={40} color="#E65100" />
-        <Text style={styles.errorText}>{loadError}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={load}>
-          <Ionicons name="refresh-outline" size={16} color="#6750A4" />
-          <Text style={styles.refreshText}>다시 시도</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   // ── 길드 홈 화면 ────────────────────────────────────────────────
 
   const totalWeeklyBooks = memberScores.reduce((sum, m) => sum + (m.booksCompleted || 0), 0);
   const weeklyGoal = guild?.weeklyGoal || 0;
   const goalPct = weeklyGoal > 0 ? Math.min(1, totalWeeklyBooks / weeklyGoal) : 0;
-  const myRankIndex = guildRankings.findIndex((g) => g.guildId === guildId);
+  const myRankIndex = guildRankings.findIndex((g) => g.guildId === selectedGuildId);
   const myRank = myRankIndex >= 0 ? myRankIndex + 1 : null;
 
   return (
@@ -190,6 +243,9 @@ export default function GuildScreen() {
       {/* 길드 헤더 */}
       <View style={styles.guildHeader}>
         <View style={styles.guildHeaderTop}>
+          <TouchableOpacity onPress={handleBack} hitSlop={8}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
           <Text style={styles.guildName}>{guild?.name || '내 길드'}</Text>
           <TouchableOpacity onPress={handleLeave} hitSlop={8}>
             <Ionicons name="log-out-outline" size={20} color="#fff" />
@@ -290,7 +346,7 @@ export default function GuildScreen() {
               guildRankings.map((g, i) => (
                 <View
                   key={g.guildId}
-                  style={[styles.rankRow, g.guildId === guildId && styles.rankRowHighlight]}
+                  style={[styles.rankRow, g.guildId === selectedGuildId && styles.rankRowHighlight]}
                 >
                   <Text style={styles.rankNum}>
                     {i < 3 ? MEDALS[i] : `${i + 1}위`}
@@ -298,7 +354,7 @@ export default function GuildScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rankName}>
                       {g.name}
-                      {g.guildId === guildId ? ' 👈' : ''}
+                      {g.guildId === selectedGuildId ? ' 👈' : ''}
                     </Text>
                     <Text style={styles.rankMeta}>{g.memberCount}명 참여</Text>
                   </View>
@@ -306,7 +362,7 @@ export default function GuildScreen() {
                 </View>
               ))
             )}
-            <TouchableOpacity style={styles.refreshBtn} onPress={load}>
+            <TouchableOpacity style={styles.refreshBtn} onPress={() => loadGuildDetail(selectedGuildId)}>
               <Ionicons name="refresh-outline" size={15} color="#6750A4" />
               <Text style={styles.refreshText}>새로고침</Text>
             </TouchableOpacity>
@@ -352,25 +408,68 @@ const styles = StyleSheet.create({
     borderColor: '#6750A4',
   },
 
-  // ── 랜딩 ─────────────────────────────────────────────────────
-  landingContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingTop: 60,
+  // ── 길드 목록 ─────────────────────────────────────────────────
+  listContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 28,
     paddingBottom: 40,
-    gap: 14,
+    gap: 10,
   },
-  landingTitle: {
-    fontSize: 26,
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  listTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#6750A4',
   },
-  landingDesc: {
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#888',
+    letterSpacing: 0.5,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  guildCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  guildCardInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  guildCardName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
+  },
+  guildCardMeta: {
+    fontSize: 12,
+    color: '#888',
+  },
+  emptyGuide: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 12,
+  },
+  emptyGuideText: {
     fontSize: 14,
-    color: '#666',
+    color: '#888',
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 10,
   },
   warnBox: {
     flexDirection: 'row',
