@@ -27,6 +27,7 @@ export default function GuildScreen() {
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -36,6 +37,7 @@ export default function GuildScreen() {
 
   const load = async () => {
     setLoading(true);
+    setLoadError('');
     const id = getGuildId();
     setGuildId(id);
 
@@ -46,10 +48,7 @@ export default function GuildScreen() {
 
     if (!isFirebaseReady()) {
       setLoading(false);
-      Alert.alert(
-        '연결 오류',
-        '서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.',
-      );
+      setLoadError('서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.');
       return;
     }
 
@@ -71,7 +70,7 @@ export default function GuildScreen() {
       setMemberScores(scores);
       setGuildRankings(rankings);
     } catch (e) {
-      Alert.alert('오류', e.message || '길드 정보를 불러오지 못했습니다.');
+      setLoadError(e.message || '길드 정보를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
       setSyncing(false);
@@ -161,6 +160,19 @@ export default function GuildScreen() {
       <View style={styles.centerBox}>
         <ActivityIndicator size="large" color="#6750A4" />
         {syncing && <Text style={styles.syncText}>점수 동기화 중...</Text>}
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.centerBox}>
+        <Ionicons name="warning-outline" size={40} color="#E65100" />
+        <Text style={styles.errorText}>{loadError}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={load}>
+          <Ionicons name="refresh-outline" size={16} color="#6750A4" />
+          <Text style={styles.refreshText}>다시 시도</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -319,6 +331,25 @@ const styles = StyleSheet.create({
   syncText: {
     fontSize: 13,
     color: '#888',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#E65100',
+    textAlign: 'center',
+    marginTop: 12,
+    marginHorizontal: 32,
+    lineHeight: 22,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#6750A4',
   },
 
   // ── 랜딩 ─────────────────────────────────────────────────────
