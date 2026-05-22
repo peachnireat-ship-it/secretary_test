@@ -43,7 +43,7 @@ export default function GuildJoinScreen() {
       );
       saveGuildId(guildId);
       Alert.alert('길드 가입 완료!', `'${guildName}'에 가입했습니다.`, [
-        { text: '확인', onPress: () => router.back() },
+        { text: '확인', onPress: () => router.navigate('/(tabs)/guild') },
       ]);
     } catch (e) {
       Alert.alert('오류', e.message || '가입에 실패했습니다.');
@@ -77,7 +77,7 @@ export default function GuildJoinScreen() {
       );
       saveGuildId(guildId);
       Alert.alert('길드 가입 완료!', `'${guild.name}'에 가입했습니다.`, [
-        { text: '확인', onPress: () => router.back() },
+        { text: '확인', onPress: () => router.navigate('/(tabs)/guild') },
       ]);
     } catch (e) {
       Alert.alert('오류', e.message || '가입에 실패했습니다.');

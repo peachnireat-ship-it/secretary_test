@@ -47,7 +47,7 @@ export default function GuildCreateScreen() {
       Alert.alert(
         '길드 생성 완료!',
         `초대 코드: ${inviteCode}\n친구들에게 코드를 알려주세요.`,
-        [{ text: '확인', onPress: () => router.back() }],
+        [{ text: '확인', onPress: () => router.navigate('/(tabs)/guild') }],
       );
     } catch (e) {
       Alert.alert('오류', e.message || '길드 생성에 실패했습니다.');
