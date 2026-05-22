@@ -324,7 +324,7 @@ export default function HomeScreen() {
             <Text style={styles.profileName}>{username}</Text>
             <View style={[styles.levelBadge, { borderColor: userStats.tierColor, backgroundColor: userStats.tierColor + '22' }]}>
               <MaterialCommunityIcons name="diamond" size={13} color={userStats.tierColor} />
-              <Text style={[styles.levelText, { color: userStats.tierColor }]}>{userStats.tier} Lv.{userStats.tierLevel}</Text>
+              <Text style={[styles.levelText, { color: userStats.tierColor }]}> Lv.{userStats.tierLevel}</Text>
             </View>
           </View>
           <View style={styles.xpRow}>
