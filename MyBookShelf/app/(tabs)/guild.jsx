@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Clipboard,
+  Alert, ActivityIndicator,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -98,8 +99,8 @@ export default function GuildScreen() {
     ]);
   };
 
-  const copyCode = () => {
-    Clipboard.setString(guild?.inviteCode || '');
+  const copyCode = async () => {
+    await Clipboard.setStringAsync(guild?.inviteCode || '');
     Alert.alert('복사 완료', '초대 코드가 클립보드에 복사되었습니다.');
   };
 
