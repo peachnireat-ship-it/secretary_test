@@ -342,8 +342,14 @@ export default function GuildScreen() {
   };
 
   const selectReadingBook = (item) => {
+    const isAdultBook = item.adult === 1 || item.adult === '1';
+    if (isAdultBook && guild?.agePolicy === 'minor') {
+      Alert.alert('선정 불가', '성인 도서는 미성년자 전용 길드에서 선정할 수 없습니다.');
+      return;
+    }
     setReadingTitle(item.title || '');
     setReadingAuthor(cleanAladinAuthor(item.author));
+    setReadingIsAdult(isAdultBook);
     setReadingSearchResults([]);
     setReadingSearchQuery('');
   };
