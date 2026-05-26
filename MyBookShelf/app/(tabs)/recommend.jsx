@@ -60,7 +60,7 @@ function todayCatIndex() {
   return dayOfYear % CATEGORIES.length;
 }
 
-const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
+const ALADIN_TTB_KEY = process.env.EXPO_PUBLIC_ALADIN_TTB_KEY;
 
 async function fetchAladinBooks(keyword, target = 'Book', ageGroup = null) {
   const catParam = (target === 'Book' && ageGroup) ? (AGE_ALADIN_CATEGORY[ageGroup] ?? '') : '';
