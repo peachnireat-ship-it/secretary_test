@@ -57,7 +57,14 @@ export default function GuildScreen() {
   const [editIsPublic, setEditIsPublic] = useState(true);
   const [editKeywords, setEditKeywords] = useState([]);
   const [editKeywordInput, setEditKeywordInput] = useState('');
+  const [editAgePolicy, setEditAgePolicy] = useState('all');
   const [editSaving, setEditSaving] = useState(false);
+
+  const AGE_POLICIES = [
+    { value: 'all',   label: '전체 이용',    icon: 'people-outline', color: '#4CAF50', bg: '#E8F5E9' },
+    { value: 'adult', label: '성인 전용',     icon: 'person-outline', color: '#E57373', bg: '#FEEBEE' },
+    { value: 'minor', label: '미성년자 전용', icon: 'happy-outline',  color: '#42A5F5', bg: '#E3F2FD' },
+  ];
   const [themeMissionSubs, setThemeMissionSubs] = useState([]);
   const [guildReading, setGuildReading] = useState(null);
   const [showReadingModal, setShowReadingModal] = useState(false);
@@ -225,6 +232,7 @@ export default function GuildScreen() {
     setEditIsPublic(guild?.isPublic ?? true);
     setEditKeywords(guild?.keywords || []);
     setEditKeywordInput('');
+    setEditAgePolicy(guild?.agePolicy || 'all');
     setShowEditModal(true);
   };
 
@@ -250,6 +258,7 @@ export default function GuildScreen() {
         weeklyGoal: parseInt(editWeeklyGoal) || 5,
         isPublic: editIsPublic,
         keywords: editKeywords,
+        agePolicy: editAgePolicy,
       });
       setGuild((prev) => ({
         ...prev,
@@ -257,6 +266,7 @@ export default function GuildScreen() {
         weeklyGoal: parseInt(editWeeklyGoal) || 5,
         isPublic: editIsPublic,
         keywords: editKeywords,
+        agePolicy: editAgePolicy,
       }));
       setShowEditModal(false);
     } catch (e) {
@@ -1005,6 +1015,29 @@ export default function GuildScreen() {
                 </View>
               )}
               <Text style={styles.editHint}>최대 5개 · 탭하면 삭제</Text>
+
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>연령 정책</Text>
+              <View style={styles.editAgePolicyRow}>
+                {AGE_POLICIES.map((p) => {
+                  const active = editAgePolicy === p.value;
+                  return (
+                    <TouchableOpacity
+                      key={p.value}
+                      style={[styles.editAgePolicyBtn, active && { borderColor: p.color, backgroundColor: p.bg }]}
+                      onPress={() => setEditAgePolicy(p.value)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name={p.icon} size={16} color={active ? p.color : '#bbb'} />
+                      <Text style={[styles.editAgePolicyText, active && { color: p.color }]}>{p.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.editHint}>
+                {editAgePolicy === 'adult' && '성인(19세 이상)만 가입 가능합니다.'}
+                {editAgePolicy === 'minor' && '미성년자(18세 이하)만 가입 가능합니다.'}
+                {editAgePolicy === 'all' && '나이 제한 없이 누구나 가입 가능합니다.'}
+              </Text>
 
               <View style={[styles.modalBtns, { marginTop: 16, marginBottom: 8 }]}>
                 <TouchableOpacity
@@ -1772,6 +1805,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  editAgePolicyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  editAgePolicyBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E0D6F0',
+    backgroundColor: '#FAFAFA',
+  },
+  editAgePolicyText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#bbb',
+    textAlign: 'center',
   },
   editKwAddBtn: {
     backgroundColor: '#6750A4',

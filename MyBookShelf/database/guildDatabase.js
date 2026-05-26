@@ -239,13 +239,14 @@ export async function getGuildRankings() {
 
 // ── 길드 정보 수정 ───────────────────────────────────────────────
 
-export async function updateGuildInfo(guildId, { name, isPublic, weeklyGoal, keywords }) {
+export async function updateGuildInfo(guildId, { name, isPublic, weeklyGoal, keywords, agePolicy }) {
   if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
   await updateDoc(doc(firestoreDb, 'guilds', guildId), {
     name: name.trim(),
     isPublic: !!isPublic,
     weeklyGoal: Number(weeklyGoal) || 0,
     keywords: Array.isArray(keywords) ? keywords : [],
+    agePolicy: agePolicy || 'all',
   });
 }
 
