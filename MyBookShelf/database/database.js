@@ -160,7 +160,18 @@ export function setPref(key, value) {
   );
 }
 
-export const MISSION_POOL = [
+// 어린이 (~12세): 쉬운 난이도
+const MISSION_POOL_CHILD = [
+  { id: 'complete_1', label: '책 1권 완독하기', icon: 'trophy-outline', type: 'complete', target: 1, xp: 80 },
+  { id: 'memo_2', label: '메모 2개 작성하기', icon: 'create-outline', type: 'memo', target: 2, xp: 40 },
+  { id: 'memo_3', label: '메모 3개 작성하기', icon: 'create-outline', type: 'memo', target: 3, xp: 50 },
+  { id: 'add_1', label: '새 책 1권 추가하기', icon: 'add-circle-outline', type: 'add', target: 1, xp: 30 },
+  { id: 'streak_2', label: '2일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 2, xp: 40 },
+  { id: 'streak_3', label: '3일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 3, xp: 60 },
+];
+
+// 청소년 (13~18세): 중간 난이도
+const MISSION_POOL_TEEN = [
   { id: 'complete_1', label: '책 1권 완독하기', icon: 'trophy-outline', type: 'complete', target: 1, xp: 80 },
   { id: 'complete_2', label: '책 2권 완독하기', icon: 'trophy-outline', type: 'complete', target: 2, xp: 160 },
   { id: 'memo_3', label: '메모 3개 작성하기', icon: 'create-outline', type: 'memo', target: 3, xp: 50 },
@@ -170,6 +181,90 @@ export const MISSION_POOL = [
   { id: 'streak_3', label: '3일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 3, xp: 60 },
   { id: 'streak_5', label: '5일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 5, xp: 100 },
 ];
+
+// 성인 (19세+): 어려운 난이도
+const MISSION_POOL_ADULT = [
+  { id: 'complete_1', label: '책 1권 완독하기', icon: 'trophy-outline', type: 'complete', target: 1, xp: 80 },
+  { id: 'complete_2', label: '책 2권 완독하기', icon: 'trophy-outline', type: 'complete', target: 2, xp: 160 },
+  { id: 'complete_3', label: '책 3권 완독하기', icon: 'trophy-outline', type: 'complete', target: 3, xp: 240 },
+  { id: 'memo_5', label: '메모 5개 작성하기', icon: 'create-outline', type: 'memo', target: 5, xp: 80 },
+  { id: 'memo_7', label: '메모 7개 작성하기', icon: 'create-outline', type: 'memo', target: 7, xp: 110 },
+  { id: 'add_2', label: '새 책 2권 추가하기', icon: 'add-circle-outline', type: 'add', target: 2, xp: 60 },
+  { id: 'streak_5', label: '5일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 5, xp: 100 },
+  { id: 'streak_7', label: '7일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 7, xp: 140 },
+];
+
+// 연령 미설정 시 기본값(청소년 풀)으로 fallback
+export const MISSION_POOL = MISSION_POOL_TEEN;
+
+// ── 길드 키워드 → 테마 매핑 ──────────────────────────────────────
+const KEYWORD_THEME_MAP = [
+  { theme: 'fantasy',  patterns: ['판타지', '마법', 'sf', '공상과학', '모험', '드래곤', '히어로', '판타'] },
+  { theme: 'selfHelp', patterns: ['자기계발', '성장', '동기부여', '목표', '습관', '리더십', '마인드', '계발'] },
+  { theme: 'history',  patterns: ['역사', '인문', '고전', '전기', '위인전', '문명', '사학'] },
+  { theme: 'science',  patterns: ['과학', '기술', '공학', '수학', '물리', '화학', '생물', '우주', '프로그래밍'] },
+  { theme: 'literature', patterns: ['문학', '소설', '시', '에세이', '수필', '글쓰기', '문예'] },
+  { theme: 'kids',     patterns: ['동화', '그림책', '어린이', '만화', '학습만화'] },
+];
+
+const THEMED_MISSIONS = {
+  fantasy: [
+    { id: 'th_fantasy_complete_1', label: '판타지 탐험 - 책 1권 완독하기', icon: 'planet-outline', type: 'complete', target: 1, xp: 110 },
+    { id: 'th_fantasy_memo_3',     label: '모험 일지 - 메모 3개 작성하기', icon: 'document-text-outline', type: 'memo', target: 3, xp: 65 },
+    { id: 'th_fantasy_streak_3',   label: '영웅의 여정 - 3일 연속 독서하기', icon: 'shield-outline', type: 'streak', target: 3, xp: 75 },
+  ],
+  selfHelp: [
+    { id: 'th_self_complete_1', label: '자기 성장 - 책 1권 완독하기', icon: 'trending-up-outline', type: 'complete', target: 1, xp: 110 },
+    { id: 'th_self_memo_5',     label: '인사이트 기록 - 메모 5개 작성하기', icon: 'bulb-outline', type: 'memo', target: 5, xp: 90 },
+    { id: 'th_self_streak_5',   label: '성장 루틴 - 5일 연속 독서하기', icon: 'barbell-outline', type: 'streak', target: 5, xp: 110 },
+  ],
+  history: [
+    { id: 'th_history_complete_2', label: '역사 탐구 - 책 2권 완독하기', icon: 'library-outline', type: 'complete', target: 2, xp: 190 },
+    { id: 'th_history_memo_5',     label: '역사 기록 - 메모 5개 작성하기', icon: 'pencil-outline', type: 'memo', target: 5, xp: 90 },
+    { id: 'th_history_add_2',      label: '지식 수집 - 새 책 2권 추가하기', icon: 'albums-outline', type: 'add', target: 2, xp: 75 },
+  ],
+  science: [
+    { id: 'th_science_complete_2', label: '지식 탐구 - 책 2권 완독하기', icon: 'flask-outline', type: 'complete', target: 2, xp: 190 },
+    { id: 'th_science_memo_5',     label: '발견 기록 - 메모 5개 작성하기', icon: 'eye-outline', type: 'memo', target: 5, xp: 90 },
+    { id: 'th_science_streak_4',   label: '탐구 정신 - 4일 연속 독서하기', icon: 'rocket-outline', type: 'streak', target: 4, xp: 90 },
+  ],
+  literature: [
+    { id: 'th_lit_complete_2', label: '문학 여행 - 책 2권 완독하기', icon: 'newspaper-outline', type: 'complete', target: 2, xp: 190 },
+    { id: 'th_lit_memo_7',     label: '독서 감상 - 메모 7개 작성하기', icon: 'chatbubble-outline', type: 'memo', target: 7, xp: 120 },
+    { id: 'th_lit_streak_5',   label: '작가의 삶 - 5일 연속 독서하기', icon: 'brush-outline', type: 'streak', target: 5, xp: 110 },
+  ],
+  kids: [
+    { id: 'th_kids_complete_1', label: '동화 나라 - 책 1권 완독하기', icon: 'happy-outline', type: 'complete', target: 1, xp: 90 },
+    { id: 'th_kids_memo_2',     label: '이야기 기록 - 메모 2개 작성하기', icon: 'color-wand-outline', type: 'memo', target: 2, xp: 45 },
+    { id: 'th_kids_add_1',      label: '책장 채우기 - 새 책 1권 추가하기', icon: 'gift-outline', type: 'add', target: 1, xp: 35 },
+  ],
+};
+
+function detectGuildTheme(keywords) {
+  if (!keywords || keywords.length === 0) return null;
+  for (const kw of keywords) {
+    const lower = kw.toLowerCase().replace(/\s/g, '');
+    for (const { theme, patterns } of KEYWORD_THEME_MAP) {
+      if (patterns.some(p => lower.includes(p) || p.includes(lower))) return theme;
+    }
+  }
+  return null;
+}
+
+export function getGuildThemeMissions(keywords, weekKey) {
+  const key = weekKey ?? getWeekKey();
+  const theme = detectGuildTheme(keywords);
+  if (!theme) return [];
+  const pool = THEMED_MISSIONS[theme];
+  const seed = parseInt(key.replace(/\D/g, ''), 10) + 77777;
+  return seededShuffle(pool, seed).slice(0, 1);
+}
+
+function getMissionPoolByAge(age) {
+  if (age > 0 && age <= 12) return MISSION_POOL_CHILD;
+  if (age > 0 && age <= 18) return MISSION_POOL_TEEN;
+  return MISSION_POOL_ADULT;
+}
 
 function seededShuffle(arr, seed) {
   const result = [...arr];
@@ -182,16 +277,21 @@ function seededShuffle(arr, seed) {
   return result;
 }
 
-export function getWeeklyMissions(weekKey) {
+export function getWeeklyMissions(weekKey, age) {
   const key = weekKey ?? getWeekKey();
+  const resolvedAge = age ?? getAge();
+  const pool = getMissionPoolByAge(resolvedAge);
   const seed = parseInt(key.replace('-W', ''), 10);
-  return seededShuffle(MISSION_POOL, seed).slice(0, 3);
+  return seededShuffle(pool, seed).slice(0, 3);
 }
 
-export function getExtraMissions(currentMissions, weekKey) {
+export function getExtraMissions(currentMissions, weekKey, age) {
+  const key = weekKey ?? getWeekKey();
+  const resolvedAge = age ?? getAge();
+  const pool = getMissionPoolByAge(resolvedAge);
   const currentIds = new Set(currentMissions.map(m => m.id));
-  const remaining = MISSION_POOL.filter(m => !currentIds.has(m.id));
-  const seed = parseInt((weekKey ?? getWeekKey()).replace('-W', ''), 10) + 31337;
+  const remaining = pool.filter(m => !currentIds.has(m.id));
+  const seed = parseInt(key.replace(/\D/g, ''), 10) + 31337;
   return seededShuffle(remaining, seed).slice(0, 2);
 }
 

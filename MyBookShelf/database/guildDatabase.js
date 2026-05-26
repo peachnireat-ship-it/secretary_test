@@ -285,3 +285,55 @@ export async function deleteGuildPost(postId) {
   if (!isFirebaseReady()) return;
   await deleteDoc(doc(firestoreDb, 'guild_posts', postId));
 }
+
+// ── 테마 미션 제출·승인 ───────────────────────────────────────────
+
+export async function submitThemeMission(guildId, userId, displayName, missionId, missionLabel, missionXp, weekKey) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  const docId = `${guildId}_${weekKey}_${userId}_${missionId}`;
+  await setDoc(doc(firestoreDb, 'guild_theme_missions', docId), {
+    guildId,
+    weekKey,
+    userId,
+    displayName: displayName || '독서가',
+    missionId,
+    missionLabel,
+    missionXp,
+    status: 'pending',
+    submittedAt: serverTimestamp(),
+  });
+}
+
+export async function getUserThemeMissionStatus(guildId, userId, weekKey, missionIds) {
+  if (!isFirebaseReady()) return {};
+  const statuses = {};
+  await Promise.all(
+    missionIds.map(async (missionId) => {
+      const docId = `${guildId}_${weekKey}_${userId}_${missionId}`;
+      const snap = await getDoc(doc(firestoreDb, 'guild_theme_missions', docId));
+      if (snap.exists()) statuses[missionId] = snap.data().status;
+    })
+  );
+  return statuses;
+}
+
+export async function getGuildThemeMissionSubmissions(guildId, weekKey) {
+  if (!isFirebaseReady()) return [];
+  const q = query(
+    collection(firestoreDb, 'guild_theme_missions'),
+    where('guildId', '==', guildId),
+    where('weekKey', '==', weekKey),
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.submittedAt?.seconds || 0) - (b.submittedAt?.seconds || 0));
+}
+
+export async function reviewThemeMission(docId, status) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  await updateDoc(doc(firestoreDb, 'guild_theme_missions', docId), {
+    status,
+    reviewedAt: serverTimestamp(),
+  });
+}

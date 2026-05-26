@@ -2,7 +2,8 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Alert }
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, cancelMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent, getWeeklyMissions, getExtraMissions, getMissionProgress } from '../../database/database';
+import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, cancelMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent, getWeeklyMissions, getExtraMissions, getMissionProgress, getAge, getGuildThemeMissions, getUserId } from '../../database/database';
+import { getUserGuilds, getUserThemeMissionStatus, submitThemeMission } from '../../database/guildDatabase';
 import { setPendingLibraryStatus } from './_libraryFilter';
 import { checkAndUnlockBadges, checkAndUnlockWeeklyAllMissionsBadge } from '../../database/badges';
 import BookCard from '../../components/BookCard';
@@ -108,11 +109,59 @@ function EncouragementBanner({ level }) {
 }
 
 
-function MissionItem({ mission, progress, claimed }) {
+function MissionItem({ mission, progress, claimed, themeStatus, onSubmit }) {
   const current = Math.min(getMissionProgress(mission, progress), mission.target);
   const pct = Math.min(100, Math.round((current / mission.target) * 100));
   const done = current >= mission.target;
   const isClaimed = claimed.includes(mission.id);
+
+  const renderRightSlot = () => {
+    if (onSubmit) {
+      // 테마 미션: 승인 기반 상태 표시
+      if (isClaimed) {
+        return (
+          <View style={[styles.missionXpTag, styles.missionXpTagDone]}>
+            <Text style={[styles.missionXpText, styles.missionXpTextDone]}>✓ 수령</Text>
+          </View>
+        );
+      }
+      if (themeStatus === 'rejected') {
+        return (
+          <View style={[styles.missionXpTag, styles.missionStatusRejected]}>
+            <Text style={[styles.missionXpText, styles.missionStatusRejectedText]}>거절됨</Text>
+          </View>
+        );
+      }
+      if (themeStatus === 'pending') {
+        return (
+          <View style={[styles.missionXpTag, styles.missionStatusPending]}>
+            <Text style={[styles.missionXpText, styles.missionStatusPendingText]}>승인 대기</Text>
+          </View>
+        );
+      }
+      if (done) {
+        return (
+          <TouchableOpacity style={styles.submitBtn} onPress={onSubmit}>
+            <Text style={styles.submitBtnText}>제출하기</Text>
+          </TouchableOpacity>
+        );
+      }
+      return (
+        <View style={styles.missionXpTag}>
+          <Text style={styles.missionXpText}>{`+${mission.xp} XP`}</Text>
+        </View>
+      );
+    }
+    // 일반 미션
+    return (
+      <View style={[styles.missionXpTag, done && styles.missionXpTagDone]}>
+        <Text style={[styles.missionXpText, done && styles.missionXpTextDone]}>
+          {isClaimed ? '✓ 수령' : `+${mission.xp} XP`}
+        </Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.missionItem}>
       <Ionicons name={mission.icon} size={20} color={done ? '#4CAF50' : '#6750A4'} style={styles.missionIcon} />
@@ -123,16 +172,12 @@ function MissionItem({ mission, progress, claimed }) {
         </View>
         <Text style={styles.missionProgressText}>{done ? '완료!' : `${current} / ${mission.target}`}</Text>
       </View>
-      <View style={[styles.missionXpTag, done && styles.missionXpTagDone]}>
-        <Text style={[styles.missionXpText, done && styles.missionXpTextDone]}>
-          {isClaimed ? '✓ 수령' : `+${mission.xp} XP`}
-        </Text>
-      </View>
+      {renderRightSlot()}
     </View>
   );
 }
 
-function WeeklyMissionCard({ missions, progress, claimed, extraMissions }) {
+function WeeklyMissionCard({ missions, progress, claimed, extraMissions, themeMissions, guildThemeLabel, themeStatus, onSubmitTheme }) {
   return (
     <View style={styles.missionCard}>
       <Text style={styles.missionTitle}>🎯 주간 미션</Text>
@@ -145,6 +190,22 @@ function WeeklyMissionCard({ missions, progress, claimed, extraMissions }) {
           <Text style={styles.missionExtraTitle}>⚡ 추가 미션</Text>
           {extraMissions.map((mission) => (
             <MissionItem key={mission.id} mission={mission} progress={progress} claimed={claimed} />
+          ))}
+        </>
+      )}
+      {themeMissions && themeMissions.length > 0 && (
+        <>
+          <View style={styles.missionDivider} />
+          <Text style={styles.missionGuildTitle}>🏰 {guildThemeLabel} 테마 미션</Text>
+          {themeMissions.map((mission) => (
+            <MissionItem
+              key={mission.id}
+              mission={mission}
+              progress={progress}
+              claimed={claimed}
+              themeStatus={themeStatus?.[mission.id] ?? null}
+              onSubmit={onSubmitTheme ? () => onSubmitTheme(mission) : undefined}
+            />
           ))}
         </>
       )}
@@ -179,8 +240,26 @@ export default function HomeScreen() {
   const [doubleXpEvent, setDoubleXpEvent] = useState(null);
   const [newBadges, setNewBadges] = useState([]);
   const [extraMissions, setExtraMissions] = useState([]);
+  const [guildThemeMissions, setGuildThemeMissions] = useState([]);
+  const [guildThemeLabel, setGuildThemeLabel] = useState('');
+  const [guildThemeId, setGuildThemeId] = useState('');
+  const [guildThemeStatus, setGuildThemeStatus] = useState({});
   const extraMissionsAcceptedRef = useRef(false);
+  const lastWeekKeyRef = useRef('');
+  const [weekTick, setWeekTick] = useState(0);
   const toastAnim = useRef(new Animated.Value(0)).current;
+
+  // 앱이 열린 채로 주차가 바뀌면 미션 즉시 갱신
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newKey = getWeekKey();
+      if (lastWeekKeyRef.current && lastWeekKeyRef.current !== newKey) {
+        extraMissionsAcceptedRef.current = false;
+        setWeekTick(t => t + 1);
+      }
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (newBadges.length === 0) return;
@@ -201,11 +280,19 @@ export default function HomeScreen() {
       setWishlistBooks(getBooksByStatus('want_to_read').slice(0, 3));
       setCompletedBooks(getBooksByStatus('completed').slice(0, 3));
 
-      const missions = getWeeklyMissions();
+      const weekKey = getWeekKey();
+
+      // 포커스 복귀 시 주차가 바뀌었으면 추가 미션 상태 초기화
+      if (lastWeekKeyRef.current && lastWeekKeyRef.current !== weekKey) {
+        extraMissionsAcceptedRef.current = false;
+      }
+      lastWeekKeyRef.current = weekKey;
+
+      const age = getAge();
+      const missions = getWeeklyMissions(weekKey, age);
       setWeeklyMissions(missions);
       const progress = getWeeklyProgress();
       setWeeklyProgress(progress);
-      const weekKey = getWeekKey();
       const claimed = missions.filter((m) => isMissionClaimed(m.id, weekKey)).map((m) => m.id);
 
       // Strict: 이미 수령했으나 진행도가 목표 미달로 떨어진 미션 취소
@@ -226,7 +313,7 @@ export default function HomeScreen() {
         }
       });
       // Extra missions: 이전에 수락했거나 이미 클레임한 게 있으면 계속 표시
-      const allExtra = getExtraMissions(missions);
+      const allExtra = getExtraMissions(missions, weekKey, age);
       const anyExtraClaimed = allExtra.some(m => isMissionClaimed(m.id, weekKey));
       if (anyExtraClaimed || extraMissionsAcceptedRef.current) {
         allExtra.forEach(m => {
@@ -248,6 +335,45 @@ export default function HomeScreen() {
       setUserStats(getUserStats());
       setSchoolLevel(getSchoolLevel());
       setDoubleXpEvent(getWeeklyDoubleXpEvent());
+
+      // 길드 테마 미션 로드 (운영자 승인 후에만 XP 지급)
+      (async () => {
+        try {
+          const userId = getUserId();
+          if (!userId) return;
+          const guilds = await getUserGuilds(userId);
+          if (!guilds || guilds.length === 0) {
+            setGuildThemeMissions([]); setGuildThemeLabel(''); setGuildThemeId(''); return;
+          }
+          const guild = guilds[0];
+          const keywords = guild.keywords || [];
+          const themeMissions = getGuildThemeMissions(keywords, weekKey);
+          if (themeMissions.length === 0) {
+            setGuildThemeMissions([]); setGuildThemeLabel(''); setGuildThemeId(''); return;
+          }
+          const statusMap = await getUserThemeMissionStatus(
+            guild.id, userId, weekKey, themeMissions.map(m => m.id)
+          );
+          // 운영자가 승인했고 아직 로컬에 수령 안 됐으면 XP 지급
+          const newClaimed = [];
+          themeMissions.forEach(m => {
+            if (statusMap[m.id] === 'approved' && !isMissionClaimed(m.id, weekKey)) {
+              claimMissionReward(m.id, weekKey, m.xp);
+              newClaimed.push(m.id);
+            }
+          });
+          setGuildThemeMissions(themeMissions);
+          setGuildThemeLabel(guild.name || '길드');
+          setGuildThemeId(guild.id);
+          setGuildThemeStatus(statusMap);
+          if (newClaimed.length > 0) {
+            setClaimedMissions(prev => [...new Set([...prev, ...newClaimed])]);
+            setUserStats(getUserStats());
+          }
+        } catch (_) {
+          setGuildThemeMissions([]); setGuildThemeLabel(''); setGuildThemeId('');
+        }
+      })();
 
       const weeklyBadge = checkAndUnlockWeeklyAllMissionsBadge(weekKey, missions);
       const unlocked = checkAndUnlockBadges();
@@ -281,8 +407,20 @@ export default function HomeScreen() {
           ]
         );
       }
-    }, [])
+    }, [weekTick])
   );
+
+  const handleSubmitThemeMission = async (mission) => {
+    const weekKey = getWeekKey();
+    try {
+      const userId = getUserId();
+      const displayName = getUsername() || '독서가';
+      await submitThemeMission(guildThemeId, userId, displayName, mission.id, mission.label, mission.xp, weekKey);
+      setGuildThemeStatus(prev => ({ ...prev, [mission.id]: 'pending' }));
+    } catch (e) {
+      Alert.alert('오류', e.message || '제출에 실패했습니다.');
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -326,7 +464,7 @@ export default function HomeScreen() {
         <StatCard icon="bookmark-outline" label="읽고 싶음" value={stats.want} color="#FF9800" />
       </View>
 
-      <WeeklyMissionCard missions={weeklyMissions} progress={weeklyProgress} claimed={claimedMissions} extraMissions={extraMissions} />
+      <WeeklyMissionCard missions={weeklyMissions} progress={weeklyProgress} claimed={claimedMissions} extraMissions={extraMissions} themeMissions={guildThemeMissions} guildThemeLabel={guildThemeLabel} themeStatus={guildThemeStatus} onSubmitTheme={handleSubmitThemeMission} />
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -634,6 +772,36 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#6750A4',
     marginBottom: 10,
+  },
+  missionGuildTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#7B5FA5',
+    marginBottom: 10,
+  },
+  submitBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginLeft: 8,
+  },
+  submitBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  missionStatusPending: {
+    backgroundColor: '#FFF3E0',
+  },
+  missionStatusPendingText: {
+    color: '#E65100',
+  },
+  missionStatusRejected: {
+    backgroundColor: '#FEEBEE',
+  },
+  missionStatusRejectedText: {
+    color: '#E57373',
   },
   doubleXpBannerActive: {
     backgroundColor: '#E65100',

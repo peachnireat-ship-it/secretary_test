@@ -7,12 +7,13 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  getUserId, getUsername, leaveGuild,
+  getUserId, getUsername, leaveGuild, getWeekKey,
 } from '../../database/database';
 import {
   getGuildInfo, getGuildWeeklyScores, getGuildRankings,
   syncWeeklyScore, removeMemberFromGuild, getUserGuilds,
   getGuildPosts, createGuildPost, deleteGuildPost, updateGuildInfo,
+  getGuildThemeMissionSubmissions, reviewThemeMission,
 } from '../../database/guildDatabase';
 import { isFirebaseReady } from '../../database/firebaseConfig';
 
@@ -55,6 +56,7 @@ export default function GuildScreen() {
   const [editKeywords, setEditKeywords] = useState([]);
   const [editKeywordInput, setEditKeywordInput] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [themeMissionSubs, setThemeMissionSubs] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -106,6 +108,15 @@ export default function GuildScreen() {
       setGuild(info);
       setMemberScores(scores);
       setGuildRankings(rankings);
+
+      // 운영자인 경우 테마 미션 제출 목록 로드
+      if (info?.creatorId === getUserId()) {
+        try {
+          const subs = await getGuildThemeMissionSubmissions(guildId, getWeekKey());
+          setThemeMissionSubs(subs);
+        } catch (_) {}
+      }
+
       setViewMode('detail');
     } catch (e) {
       setLoadError(e.message || '길드 정보를 불러오지 못했습니다.');
@@ -245,6 +256,29 @@ export default function GuildScreen() {
         },
       },
     ]);
+  };
+
+  const handleReviewMission = (docId, status, displayName, missionLabel) => {
+    const actionLabel = status === 'approved' ? '승인' : '거절';
+    Alert.alert(
+      `미션 ${actionLabel}`,
+      `${displayName}님의\n'${missionLabel}'\n을(를) ${actionLabel}하시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: actionLabel,
+          style: status === 'rejected' ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              await reviewThemeMission(docId, status);
+              setThemeMissionSubs(prev => prev.map(s => s.id === docId ? { ...s, status } : s));
+            } catch (e) {
+              Alert.alert('오류', e.message || '처리에 실패했습니다.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const copyCode = async () => {
@@ -488,6 +522,49 @@ export default function GuildScreen() {
                 ))
               )}
             </View>
+
+            {isOwner && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>🏰 테마 미션 승인</Text>
+                {themeMissionSubs.length === 0 ? (
+                  <Text style={styles.emptyText}>이번 주 제출된 테마 미션이 없습니다.</Text>
+                ) : (
+                  themeMissionSubs.map(sub => (
+                    <View key={sub.id} style={styles.missionSubRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.subMissionLabel}>{sub.missionLabel}</Text>
+                        <Text style={styles.subMemberName}>{sub.displayName}</Text>
+                      </View>
+                      {sub.status === 'pending' ? (
+                        <View style={styles.subActionRow}>
+                          <TouchableOpacity
+                            style={styles.approveBtn}
+                            onPress={() => handleReviewMission(sub.id, 'approved', sub.displayName, sub.missionLabel)}
+                          >
+                            <Text style={styles.approveBtnText}>승인</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.rejectBtn}
+                            onPress={() => handleReviewMission(sub.id, 'rejected', sub.displayName, sub.missionLabel)}
+                          >
+                            <Text style={styles.rejectBtnText}>거절</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={[
+                          styles.subStatusBadge,
+                          sub.status === 'approved' ? styles.subStatusApproved : styles.subStatusRejected,
+                        ]}>
+                          <Text style={sub.status === 'approved' ? styles.subStatusApprovedText : styles.subStatusRejectedText}>
+                            {sub.status === 'approved' ? '승인됨' : '거절됨'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
           </View>
         )}
 
@@ -1429,5 +1506,72 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+
+  // ── 테마 미션 승인 ─────────────────────────────────────────────
+  missionSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F0EBF8',
+  },
+  subMissionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1C1B1F',
+    marginBottom: 2,
+  },
+  subMemberName: {
+    fontSize: 12,
+    color: '#9E9E9E',
+  },
+  subActionRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  approveBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  approveBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  rejectBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#E57373',
+  },
+  rejectBtnText: {
+    color: '#E57373',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  subStatusBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  subStatusApproved: {
+    backgroundColor: '#E8F5E9',
+  },
+  subStatusRejected: {
+    backgroundColor: '#FEEBEE',
+  },
+  subStatusApprovedText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4CAF50',
+  },
+  subStatusRejectedText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#E57373',
   },
 });
