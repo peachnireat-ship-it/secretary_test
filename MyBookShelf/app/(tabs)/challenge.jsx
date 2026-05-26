@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Image } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Image, ActivityIndicator } from 'react-native';
 import { useState, useCallback, useRef, Fragment } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -223,6 +223,33 @@ function DynamicSnakeTrack({ stepIdx, totalSteps, checkedInSteps }) {
   );
 }
 
+async function checkBookInPhoto(base64) {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  if (!apiKey) return true;
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: '이 사진에 책(book)이 보입니까? 책의 표지, 페이지, 텍스트 인쇄물이 있으면 YES, 없으면 NO만 대답하세요.' },
+              { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+            ],
+          }],
+        }),
+      }
+    );
+    const json = await resp.json();
+    const answer = json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    return answer.trim().toUpperCase().startsWith('YES');
+  } catch {
+    return true;
+  }
+}
+
 function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
   const [checkins, setCheckins] = useState(() => {
     try { return JSON.parse(book.checkins || '[]'); } catch { return []; }
@@ -266,6 +293,8 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
 
   const [cameraOpen, setCameraOpen] = useState(false);
   const [photoUri, setPhotoUri] = useState(null);
+  const [verifying, setVerifying] = useState(false);
+  const [bookDetected, setBookDetected] = useState(null);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
 
@@ -280,14 +309,25 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
 
   const takePicture = async () => {
     if (!cameraRef.current) return;
-    const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, skipProcessing: true });
+    const photo = await cameraRef.current.takePictureAsync({ quality: 0.5, skipProcessing: true, base64: true });
     setPhotoUri(photo.uri);
+    setVerifying(true);
+    setBookDetected(null);
+    const detected = await checkBookInPhoto(photo.base64);
+    setBookDetected(detected);
+    setVerifying(false);
   };
 
   const confirmCheckin = () => {
     handleCheckin();
     setPhotoUri(null);
     setCameraOpen(false);
+    setBookDetected(null);
+  };
+
+  const retake = () => {
+    setPhotoUri(null);
+    setBookDetected(null);
   };
 
   const handleCheckin = () => {
@@ -393,17 +433,33 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
         {photoUri ? (
           <>
             <Image source={{ uri: photoUri }} style={styles.previewImage} resizeMode="cover" />
-            <View style={styles.previewOverlay}>
-              <Text style={styles.previewHint}>이 사진으로 독서 인증할까요?</Text>
-              <View style={styles.previewButtons}>
-                <TouchableOpacity style={styles.retakeBtn} onPress={() => setPhotoUri(null)}>
+            {verifying ? (
+              <View style={styles.previewOverlay}>
+                <ActivityIndicator size="large" color="#fff" />
+                <Text style={styles.verifyingText}>책 인식 중...</Text>
+              </View>
+            ) : bookDetected === false ? (
+              <View style={styles.previewOverlay}>
+                <Text style={styles.noBookEmoji}>📵</Text>
+                <Text style={styles.noBookText}>책이 감지되지 않았습니다</Text>
+                <Text style={styles.noBookHint}>책이 잘 보이도록 다시 촬영해 주세요</Text>
+                <TouchableOpacity style={[styles.retakeBtn, { width: '60%' }]} onPress={retake}>
                   <Text style={styles.retakeBtnText}>다시 찍기</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.confirmBtn} onPress={confirmCheckin}>
-                  <Text style={styles.confirmBtnText}>인증하기 ✓</Text>
-                </TouchableOpacity>
               </View>
-            </View>
+            ) : (
+              <View style={styles.previewOverlay}>
+                <Text style={styles.previewHint}>이 사진으로 독서 인증할까요?</Text>
+                <View style={styles.previewButtons}>
+                  <TouchableOpacity style={styles.retakeBtn} onPress={retake}>
+                    <Text style={styles.retakeBtnText}>다시 찍기</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.confirmBtn} onPress={confirmCheckin}>
+                    <Text style={styles.confirmBtnText}>인증하기 ✓</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </>
         ) : (
           <>
@@ -677,6 +733,11 @@ const styles = StyleSheet.create({
     backgroundColor: PURPLE, alignItems: 'center',
   },
   confirmBtnText: { fontSize: 15, color: '#fff', fontWeight: '700' },
+
+  verifyingText: { fontSize: 16, color: '#fff', fontWeight: '600', marginTop: 16, textAlign: 'center' },
+  noBookEmoji: { fontSize: 48 },
+  noBookText: { fontSize: 17, color: '#fff', fontWeight: '800', textAlign: 'center', marginTop: 8 },
+  noBookHint: { fontSize: 13, color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginTop: 6, marginBottom: 16 },
 
   cardSuccess: { borderLeftWidth: 3, borderLeftColor: '#4CAF50' },
   successBadge: {
