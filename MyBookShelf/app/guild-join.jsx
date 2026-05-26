@@ -168,6 +168,15 @@ export default function GuildJoinScreen() {
                     <Text style={styles.guildMeta}>
                       멤버 {item.memberCount || 0}명 · 주간 목표 {item.weeklyGoal || 0}권
                     </Text>
+                    {item.keywords?.length > 0 && (
+                      <View style={styles.kwRow}>
+                        {item.keywords.map((kw) => (
+                          <View key={kw} style={styles.kwChip}>
+                            <Text style={styles.kwChipText}>#{kw}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                   <TouchableOpacity
                     style={styles.joinSmallBtn}
@@ -300,7 +309,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     elevation: 1,
     shadowColor: '#000',
     shadowOpacity: 0.05,
@@ -318,6 +327,23 @@ const styles = StyleSheet.create({
   guildMeta: {
     fontSize: 12,
     color: '#888',
+  },
+  kwRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+    marginTop: 7,
+  },
+  kwChip: {
+    backgroundColor: '#EDE7F6',
+    borderRadius: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  kwChipText: {
+    fontSize: 11,
+    color: '#6750A4',
+    fontWeight: '600',
   },
   joinSmallBtn: {
     backgroundColor: '#6750A4',

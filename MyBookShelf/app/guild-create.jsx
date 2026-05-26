@@ -13,7 +13,21 @@ export default function GuildCreateScreen() {
   const [name, setName] = useState('');
   const [weeklyGoal, setWeeklyGoal] = useState('5');
   const [isPublic, setIsPublic] = useState(true);
+  const [keywords, setKeywords] = useState([]);
+  const [keywordInput, setKeywordInput] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const addKeyword = () => {
+    const kw = keywordInput.trim();
+    if (!kw) return;
+    if (kw.length > 10) { Alert.alert('알림', '키워드는 10자 이내로 입력해주세요.'); return; }
+    if (keywords.length >= 5) { Alert.alert('알림', '키워드는 최대 5개까지 추가할 수 있습니다.'); return; }
+    if (keywords.includes(kw)) { setKeywordInput(''); return; }
+    setKeywords([...keywords, kw]);
+    setKeywordInput('');
+  };
+
+  const removeKeyword = (kw) => setKeywords(keywords.filter((k) => k !== kw));
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -40,6 +54,7 @@ export default function GuildCreateScreen() {
         displayName,
         school,
         schoolLevel,
+        keywords,
       });
 
       saveGuildId(guildId);
@@ -104,6 +119,36 @@ export default function GuildCreateScreen() {
             trackColor={{ false: '#e0e0e0', true: '#D0BCFF' }}
           />
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.label}>키워드 (선택)</Text>
+        <View style={styles.keywordInputRow}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            value={keywordInput}
+            onChangeText={setKeywordInput}
+            placeholder="ex) 판타지, 추리소설"
+            placeholderTextColor="#aaa"
+            maxLength={10}
+            onSubmitEditing={addKeyword}
+            returnKeyType="done"
+          />
+          <TouchableOpacity style={styles.kwAddBtn} onPress={addKeyword}>
+            <Text style={styles.kwAddBtnText}>추가</Text>
+          </TouchableOpacity>
+        </View>
+        {keywords.length > 0 && (
+          <View style={styles.kwChips}>
+            {keywords.map((kw) => (
+              <TouchableOpacity key={kw} style={styles.kwChip} onPress={() => removeKeyword(kw)}>
+                <Text style={styles.kwChipText}>{kw}</Text>
+                <Ionicons name="close" size={12} color="#6750A4" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        <Text style={styles.hint}>최대 5개 · 탭하면 삭제 · 공개 길드 검색 시 활용됩니다</Text>
       </View>
 
       <TouchableOpacity
@@ -207,5 +252,41 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  keywordInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  kwAddBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  kwAddBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  kwChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  kwChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EDE7F6',
+    borderRadius: 20,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  kwChipText: {
+    fontSize: 13,
+    color: '#6750A4',
+    fontWeight: '600',
   },
 });

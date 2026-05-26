@@ -12,7 +12,7 @@ function generateInviteCode() {
 
 // ── 길드 생성 ────────────────────────────────────────────────────
 
-export async function createGuild({ name, isPublic, weeklyGoal, userId, displayName, school, schoolLevel }) {
+export async function createGuild({ name, isPublic, weeklyGoal, userId, displayName, school, schoolLevel, keywords }) {
   if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
 
   const existingQ = query(
@@ -33,6 +33,7 @@ export async function createGuild({ name, isPublic, weeklyGoal, userId, displayN
     creatorId: userId,
     weeklyGoal: Number(weeklyGoal) || 0,
     memberCount: 1,
+    keywords: Array.isArray(keywords) ? keywords : [],
     createdAt: serverTimestamp(),
   });
 
@@ -101,7 +102,10 @@ export async function searchPublicGuilds(searchText) {
     .map((d) => ({ id: d.id, ...d.data() }))
     .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
   if (searchText && searchText.trim()) {
-    return guilds.filter((g) => g.name.includes(searchText.trim()));
+    const q = searchText.trim();
+    return guilds.filter(
+      (g) => g.name.includes(q) || (g.keywords || []).some((kw) => kw.includes(q)),
+    );
   }
   return guilds;
 }
@@ -208,6 +212,18 @@ export async function getGuildRankings() {
   );
 
   return withNames.sort((a, b) => b.totalScore - a.totalScore).slice(0, 20);
+}
+
+// ── 길드 정보 수정 ───────────────────────────────────────────────
+
+export async function updateGuildInfo(guildId, { name, isPublic, weeklyGoal, keywords }) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  await updateDoc(doc(firestoreDb, 'guilds', guildId), {
+    name: name.trim(),
+    isPublic: !!isPublic,
+    weeklyGoal: Number(weeklyGoal) || 0,
+    keywords: Array.isArray(keywords) ? keywords : [],
+  });
 }
 
 // ── 길드 탈퇴 ────────────────────────────────────────────────────

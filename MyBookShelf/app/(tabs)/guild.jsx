@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Modal, TextInput,
+  Alert, ActivityIndicator, Modal, TextInput, Switch,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -12,7 +12,7 @@ import {
 import {
   getGuildInfo, getGuildWeeklyScores, getGuildRankings,
   syncWeeklyScore, removeMemberFromGuild, getUserGuilds,
-  getGuildPosts, createGuildPost, deleteGuildPost,
+  getGuildPosts, createGuildPost, deleteGuildPost, updateGuildInfo,
 } from '../../database/guildDatabase';
 import { isFirebaseReady } from '../../database/firebaseConfig';
 
@@ -48,6 +48,13 @@ export default function GuildScreen() {
   const [newContent, setNewContent] = useState('');
   const [postLoading, setPostLoading] = useState(false);
   const [postLoaded, setPostLoaded] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editWeeklyGoal, setEditWeeklyGoal] = useState('5');
+  const [editIsPublic, setEditIsPublic] = useState(true);
+  const [editKeywords, setEditKeywords] = useState([]);
+  const [editKeywordInput, setEditKeywordInput] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -169,6 +176,53 @@ export default function GuildScreen() {
       await loadPosts(selectedGuildId);
     } catch (e) {
       Alert.alert('오류', e.message || '게시글 등록에 실패했습니다.');
+    }
+  };
+
+  const openEditModal = () => {
+    setEditName(guild?.name || '');
+    setEditWeeklyGoal(String(guild?.weeklyGoal || 5));
+    setEditIsPublic(guild?.isPublic ?? true);
+    setEditKeywords(guild?.keywords || []);
+    setEditKeywordInput('');
+    setShowEditModal(true);
+  };
+
+  const addEditKeyword = () => {
+    const kw = editKeywordInput.trim();
+    if (!kw) return;
+    if (kw.length > 10) { Alert.alert('알림', '키워드는 10자 이내로 입력해주세요.'); return; }
+    if (editKeywords.length >= 5) { Alert.alert('알림', '키워드는 최대 5개까지 추가할 수 있습니다.'); return; }
+    if (editKeywords.includes(kw)) { setEditKeywordInput(''); return; }
+    setEditKeywords([...editKeywords, kw]);
+    setEditKeywordInput('');
+  };
+
+  const removeEditKeyword = (kw) => setEditKeywords(editKeywords.filter((k) => k !== kw));
+
+  const handleSaveGuildInfo = async () => {
+    if (!editName.trim()) { Alert.alert('알림', '길드 이름을 입력해주세요.'); return; }
+    if (editName.trim().length > 20) { Alert.alert('알림', '길드 이름은 20자 이내로 입력해주세요.'); return; }
+    setEditSaving(true);
+    try {
+      await updateGuildInfo(selectedGuildId, {
+        name: editName.trim(),
+        weeklyGoal: parseInt(editWeeklyGoal) || 5,
+        isPublic: editIsPublic,
+        keywords: editKeywords,
+      });
+      setGuild((prev) => ({
+        ...prev,
+        name: editName.trim(),
+        weeklyGoal: parseInt(editWeeklyGoal) || 5,
+        isPublic: editIsPublic,
+        keywords: editKeywords,
+      }));
+      setShowEditModal(false);
+    } catch (e) {
+      Alert.alert('오류', e.message || '수정에 실패했습니다.');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -337,6 +391,7 @@ export default function GuildScreen() {
 
   // ── 길드 홈 화면 ────────────────────────────────────────────────
 
+  const isOwner = guild?.creatorId === getUserId();
   const totalWeeklyBooks = memberScores.reduce((sum, m) => sum + (m.booksCompleted || 0), 0);
   const weeklyGoal = guild?.weeklyGoal || 0;
   const goalPct = weeklyGoal > 0 ? Math.min(1, totalWeeklyBooks / weeklyGoal) : 0;
@@ -352,9 +407,16 @@ export default function GuildScreen() {
             <Ionicons name="arrow-back" size={20} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.guildName} numberOfLines={1}>{guild?.name || '내 길드'}</Text>
-          <TouchableOpacity onPress={handleLeave} hitSlop={8} style={styles.headerLeaveBtn}>
-            <Ionicons name="log-out-outline" size={19} color="rgba(255,255,255,0.75)" />
-          </TouchableOpacity>
+          <View style={styles.headerRightBtns}>
+            {isOwner && (
+              <TouchableOpacity onPress={openEditModal} hitSlop={8}>
+                <Ionicons name="settings-outline" size={19} color="rgba(255,255,255,0.75)" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleLeave} hitSlop={8}>
+              <Ionicons name="log-out-outline" size={19} color="rgba(255,255,255,0.75)" />
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={styles.guildMeta}>
           <View style={styles.metaChip}>
@@ -372,6 +434,11 @@ export default function GuildScreen() {
               </Text>
             </View>
           )}
+          {(guild?.keywords || []).map((kw) => (
+            <View key={kw} style={[styles.metaChip, styles.kwTagChip]}>
+              <Text style={styles.kwTagChipText}>#{kw}</Text>
+            </View>
+          ))}
         </View>
       </View>
 
@@ -525,6 +592,102 @@ export default function GuildScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* 길드 정보 수정 모달 */}
+      <Modal visible={showEditModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModalBox}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>길드 정보 수정</Text>
+
+              <Text style={styles.editLabel}>길드 이름</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="길드 이름 (최대 20자)"
+                placeholderTextColor="#bbb"
+                maxLength={20}
+              />
+
+              <Text style={[styles.editLabel, { marginTop: 12 }]}>주간 목표 권수</Text>
+              <View style={styles.editGoalRow}>
+                <TouchableOpacity
+                  style={styles.editGoalBtn}
+                  onPress={() => setEditWeeklyGoal((v) => String(Math.max(1, parseInt(v) - 1)))}
+                >
+                  <Ionicons name="remove" size={18} color="#6750A4" />
+                </TouchableOpacity>
+                <Text style={styles.editGoalValue}>{editWeeklyGoal}권</Text>
+                <TouchableOpacity
+                  style={styles.editGoalBtn}
+                  onPress={() => setEditWeeklyGoal((v) => String(Math.min(100, parseInt(v) + 1)))}
+                >
+                  <Ionicons name="add" size={18} color="#6750A4" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.editSwitchRow}>
+                <Text style={styles.editLabel}>공개 길드</Text>
+                <Switch
+                  value={editIsPublic}
+                  onValueChange={setEditIsPublic}
+                  thumbColor={editIsPublic ? '#6750A4' : '#ccc'}
+                  trackColor={{ false: '#e0e0e0', true: '#D0BCFF' }}
+                />
+              </View>
+
+              <Text style={[styles.editLabel, { marginTop: 12 }]}>키워드</Text>
+              <View style={styles.editKwInputRow}>
+                <TextInput
+                  style={[styles.modalInput, { flex: 1 }]}
+                  value={editKeywordInput}
+                  onChangeText={setEditKeywordInput}
+                  placeholder="키워드 입력 (최대 10자)"
+                  placeholderTextColor="#bbb"
+                  maxLength={10}
+                  onSubmitEditing={addEditKeyword}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity style={styles.editKwAddBtn} onPress={addEditKeyword}>
+                  <Text style={styles.editKwAddBtnText}>추가</Text>
+                </TouchableOpacity>
+              </View>
+              {editKeywords.length > 0 && (
+                <View style={styles.editKwChips}>
+                  {editKeywords.map((kw) => (
+                    <TouchableOpacity key={kw} style={styles.kwChip} onPress={() => removeEditKeyword(kw)}>
+                      <Text style={styles.kwChipText}>{kw}</Text>
+                      <Ionicons name="close" size={12} color="#6750A4" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              <Text style={styles.editHint}>최대 5개 · 탭하면 삭제</Text>
+
+              <View style={[styles.modalBtns, { marginTop: 16, marginBottom: 8 }]}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setShowEditModal(false)}
+                >
+                  <Text style={styles.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSubmitBtn, editSaving && { opacity: 0.6 }]}
+                  onPress={handleSaveGuildInfo}
+                  disabled={editSaving}
+                >
+                  {editSaving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>저장</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* 글쓰기 모달 */}
       <Modal visible={showWriteForm} transparent animationType="slide">
@@ -827,11 +990,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  headerLeaveBtn: {
-    width: 32,
-    height: 32,
+  headerRightBtns: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
   },
   guildName: {
     flex: 1,
@@ -869,6 +1031,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#FFE082',
     fontWeight: '700',
+  },
+  kwTagChip: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  kwTagChipText: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 0.2,
   },
 
   // ── 세그먼트 탭 ───────────────────────────────────────────────
@@ -1106,6 +1276,90 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#F2EEF8',
+  },
+
+  // ── 길드 수정 모달 ───────────────────────────────────────────────
+  editModalBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '90%',
+  },
+  editLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4A3870',
+    marginBottom: 8,
+  },
+  editHint: {
+    fontSize: 11,
+    color: '#B0AAC0',
+    marginTop: 6,
+  },
+  editGoalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginBottom: 4,
+  },
+  editGoalBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F0EAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editGoalValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#6750A4',
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  editSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  editKwInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editKwAddBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  editKwAddBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  editKwChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  kwChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EDE7F6',
+    borderRadius: 20,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  kwChipText: {
+    fontSize: 13,
+    color: '#6750A4',
+    fontWeight: '600',
   },
 
   // ── 글쓰기 모달 ──────────────────────────────────────────────────
