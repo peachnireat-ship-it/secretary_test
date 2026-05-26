@@ -8,7 +8,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { getBookById, updateBook, trackDailyReading, onBookCompleted, onBookReverted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, getTierInfo, isDoubleXpActive } from '../../database/database';
+import { getBookById, updateBook, trackDailyReading, onBookCompleted, onBookReverted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, getTierInfo, isDoubleXpActive, getGuildId, getUserId, getUsername } from '../../database/database';
+import { syncWeeklyScore } from '../../database/guildDatabase';
 import { GENRES, checkAndUnlockBadges } from '../../database/badges';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
@@ -158,7 +159,18 @@ export default function BookDetailScreen() {
   const handleDeleteReview = (reviewId) => {
     Alert.alert('삭제', '이 메모를 삭제할까요?', [
       { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => { deleteBookReview(reviewId); loadReviews(); } },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => {
+          deleteBookReview(reviewId);
+          loadReviews();
+          const guildId = getGuildId();
+          if (guildId) {
+            syncWeeklyScore(guildId, getUserId(), getUsername() || '독서가').catch(() => {});
+          }
+        },
+      },
     ]);
   };
 
