@@ -15,7 +15,7 @@ import StarRating from '../../components/StarRating';
 import BookShareCard from '../../components/BookShareCard';
 import LevelUpModal from '../../components/LevelUpModal';
 
-const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
+const ALADIN_TTB_KEY = 'ttbplatonik0902001';
 const cleanAladinAuthor = (str) =>
   str ? str.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() || '저자 미상' : '저자 미상';
 
