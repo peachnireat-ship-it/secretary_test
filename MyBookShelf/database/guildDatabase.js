@@ -159,6 +159,11 @@ export async function syncWeeklyScore(guildId, userId, displayName) {
     { merge: true },
   );
 
+  try {
+    const memberRef = doc(firestoreDb, 'guild_members', `${guildId}_${userId}`);
+    await updateDoc(memberRef, { isAdult: getAge() >= 19 });
+  } catch (_) {}
+
   const delta = score - prevScore;
   if (delta > 0) {
     const xpGain = Math.floor(delta / 10);

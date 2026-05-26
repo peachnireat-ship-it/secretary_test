@@ -751,6 +751,15 @@ export default function GuildScreen() {
                         <Text style={styles.deputyBadgeText}>부운영자</Text>
                       </View>
                     )}
+                    {m.isAdult === true ? (
+                      <View style={styles.adultMemberBadge}>
+                        <Text style={styles.adultMemberBadgeText}>성인</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.minorMemberBadge}>
+                        <Text style={styles.minorMemberBadgeText}>미성년자</Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={styles.rankScore}>{(m.score || 0).toLocaleString()}점</Text>
                   {isOwner && !m.isOwner && (
@@ -2062,5 +2071,27 @@ const styles = StyleSheet.create({
   memberActionBtn: {
     padding: 4,
     marginLeft: 2,
+  },
+  adultMemberBadge: {
+    backgroundColor: '#FEEBEE',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  adultMemberBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#E57373',
+  },
+  minorMemberBadge: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  minorMemberBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1976D2',
   },
 });
