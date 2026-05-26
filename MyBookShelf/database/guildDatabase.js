@@ -67,6 +67,21 @@ export async function joinGuildByCode(inviteCode, userId, displayName, school, s
 
   const guildDoc = snap.docs[0];
   const guildId = guildDoc.id;
+  const guildData = guildDoc.data();
+
+  const userAge = getAge();
+  const userIsAdult = userAge >= 19;
+  const agePolicy = guildData.agePolicy || 'all';
+
+  if (agePolicy !== 'all' && userAge === 0) {
+    throw new Error('이 길드는 연령 제한이 있습니다.\n프로필에서 나이를 먼저 설정해주세요.');
+  }
+  if (agePolicy === 'adult' && !userIsAdult) {
+    throw new Error('이 길드는 성인(19세 이상)만 가입할 수 있습니다.');
+  }
+  if (agePolicy === 'minor' && userIsAdult) {
+    throw new Error('이 길드는 미성년자(18세 이하)만 가입할 수 있습니다.');
+  }
 
   const memberRef = doc(firestoreDb, 'guild_members', `${guildId}_${userId}`);
   const memberSnap = await getDoc(memberRef);

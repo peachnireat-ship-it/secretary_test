@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getUserId, getUsername, getSchool, getSchoolLevel, saveGuildId } from '../database/database';
+import { getUserId, getUsername, getSchool, getSchoolLevel, saveGuildId, getAge } from '../database/database';
 import { joinGuildByCode, searchPublicGuilds } from '../database/guildDatabase';
 
 export default function GuildJoinScreen() {
@@ -67,6 +67,23 @@ export default function GuildJoinScreen() {
   };
 
   const handleJoinPublic = async (guild) => {
+    const userAge = getAge();
+    const userIsAdult = userAge >= 19;
+    const agePolicy = guild.agePolicy || 'all';
+
+    if (agePolicy !== 'all' && userAge === 0) {
+      Alert.alert('연령 확인 필요', '이 길드는 연령 제한이 있습니다.\n프로필에서 나이를 먼저 설정해주세요.');
+      return;
+    }
+    if (agePolicy === 'adult' && !userIsAdult) {
+      Alert.alert('가입 불가', '이 길드는 성인(19세 이상)만 가입할 수 있습니다.');
+      return;
+    }
+    if (agePolicy === 'minor' && userIsAdult) {
+      Alert.alert('가입 불가', '이 길드는 미성년자(18세 이하)만 가입할 수 있습니다.');
+      return;
+    }
+
     const userId = getUserId();
     try {
       const displayName = getUsername() || '독서가';
