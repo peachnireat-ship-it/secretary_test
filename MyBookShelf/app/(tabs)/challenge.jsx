@@ -418,7 +418,7 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
               onPress={openCamera}
               disabled={alreadyCheckedIn}
             >
-              <Text style={styles.checkinBtnText}>
+              <Text style={styles.checkinBtnText} numberOfLines={1}>
                 {alreadyCheckedIn ? '✓ 인증완료' : '📷 독서인증'}
               </Text>
             </TouchableOpacity>
@@ -653,13 +653,15 @@ const styles = StyleSheet.create({
 
   checkinBtn: {
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     backgroundColor: PURPLE,
     flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   checkinBtnDone: { backgroundColor: '#4CAF50' },
-  checkinBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  checkinBtnText: { fontSize: 11, fontWeight: '700', color: '#fff', includeFontPadding: false },
 
   bonusLabel: {
     fontSize: 12,
