@@ -411,7 +411,7 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
           <Text style={styles.bookTitle} numberOfLines={1}>{book.title}</Text>
           {book.author ? <Text style={styles.bookAuthor} numberOfLines={1}>{book.author}</Text> : null}
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           {!isSuccess && book.status === 'reading' && (
             <TouchableOpacity
               style={[styles.checkinBtn, alreadyCheckedIn && styles.checkinBtnDone]}
@@ -656,6 +656,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     backgroundColor: PURPLE,
+    flexShrink: 0,
   },
   checkinBtnDone: { backgroundColor: '#4CAF50' },
   checkinBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
