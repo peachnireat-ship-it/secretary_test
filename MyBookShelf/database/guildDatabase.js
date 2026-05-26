@@ -372,7 +372,10 @@ export async function isGuildAllAdult(guildId) {
 
 export async function setGuildReading(guildId, { bookTitle, bookAuthor, isAdult, startDate, endDate }, userId) {
   if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  const guildSnap = await getDoc(doc(firestoreDb, 'guilds', guildId));
+  const agePolicy = guildSnap.exists() ? (guildSnap.data().agePolicy || 'all') : 'all';
   if (isAdult) {
+    if (agePolicy === 'minor') throw new Error('미성년자 전용 길드에서는 성인 도서를 선정할 수 없습니다.');
     const allAdult = await isGuildAllAdult(guildId);
     if (!allAdult) throw new Error('성인 도서는 모든 멤버가 성인(19세 이상)인 길드에서만 선정할 수 있습니다.');
   }

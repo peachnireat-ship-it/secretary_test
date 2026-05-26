@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Modal, TextInput, Switch,
+  Alert, ActivityIndicator, Modal, TextInput, Switch, Image,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -21,6 +21,10 @@ import { isFirebaseReady } from '../../database/firebaseConfig';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 const SEGMENT_TABS = ['주간 목표', '멤버 순위', '길드 대항전', '게시판', '함께 읽기'];
+
+const ALADIN_TTB_KEY = process.env.EXPO_PUBLIC_ALADIN_TTB_KEY;
+const cleanAladinAuthor = (str) =>
+  str ? str.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() || '저자 미상' : '저자 미상';
 
 function formatPostDate(createdAt) {
   if (!createdAt) return '';
@@ -71,6 +75,9 @@ export default function GuildScreen() {
   const [readingTitle, setReadingTitle] = useState('');
   const [readingAuthor, setReadingAuthor] = useState('');
   const [readingIsAdult, setReadingIsAdult] = useState(false);
+  const [readingSearchQuery, setReadingSearchQuery] = useState('');
+  const [readingIsSearching, setReadingIsSearching] = useState(false);
+  const [readingSearchResults, setReadingSearchResults] = useState([]);
   const [readingStartDate, setReadingStartDate] = useState('');
   const [readingEndDate, setReadingEndDate] = useState('');
   const [readingSaving, setReadingSaving] = useState(false);
@@ -305,7 +312,40 @@ export default function GuildScreen() {
     setReadingIsAdult(guildReading?.status === 'active' ? guildReading.isAdult : false);
     setReadingStartDate(guildReading?.status === 'active' ? guildReading.startDate : today);
     setReadingEndDate(guildReading?.status === 'active' ? guildReading.endDate : nextMonth);
+    setReadingSearchQuery('');
+    setReadingSearchResults([]);
     setShowReadingModal(true);
+  };
+
+  const handleReadingSearch = async () => {
+    const q = readingSearchQuery.trim();
+    if (!q) { Alert.alert('알림', '검색어를 입력해주세요.'); return; }
+    setReadingIsSearching(true);
+    setReadingSearchResults([]);
+    try {
+      const res = await fetch(
+        `https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?ttbkey=${ALADIN_TTB_KEY}&Query=${encodeURIComponent(q)}&QueryType=Keyword&SearchTarget=Book&MaxResults=10&output=js&Version=20131101&Cover=Big&OptResult=subInfo`
+      );
+      if (!res.ok) throw new Error('fetch error');
+      const data = await res.json();
+      const items = (data.item || []).filter(item => item.cover && !item.cover.includes('noimg'));
+      if (items.length === 0) {
+        Alert.alert('검색 결과 없음', '일치하는 책 정보가 없습니다.\n다른 검색어를 시도해보세요.');
+        return;
+      }
+      setReadingSearchResults(items);
+    } catch {
+      Alert.alert('오류', '책 정보를 가져오지 못했습니다. 네트워크를 확인해주세요.');
+    } finally {
+      setReadingIsSearching(false);
+    }
+  };
+
+  const selectReadingBook = (item) => {
+    setReadingTitle(item.title || '');
+    setReadingAuthor(cleanAladinAuthor(item.author));
+    setReadingSearchResults([]);
+    setReadingSearchQuery('');
   };
 
   const handleSetReading = async () => {
@@ -1070,7 +1110,47 @@ export default function GuildScreen() {
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Text style={styles.modalTitle}>함께 읽기 도서 선정</Text>
 
-              <Text style={styles.editLabel}>책 제목 *</Text>
+              <Text style={[styles.editLabel, { marginBottom: 8 }]}>도서 검색 <Text style={{ fontWeight: '400', color: '#B0AAC0' }}>(알라딘)</Text></Text>
+              <View style={styles.readingSearchRow}>
+                <TextInput
+                  style={[styles.modalInput, { flex: 1 }]}
+                  value={readingSearchQuery}
+                  onChangeText={setReadingSearchQuery}
+                  placeholder="책 제목, 저자 또는 ISBN 입력"
+                  placeholderTextColor="#bbb"
+                  returnKeyType="search"
+                  onSubmitEditing={handleReadingSearch}
+                />
+                <TouchableOpacity
+                  style={[styles.readingSearchBtn, readingIsSearching && { backgroundColor: '#CAC4D0' }]}
+                  onPress={handleReadingSearch}
+                  disabled={readingIsSearching}
+                >
+                  {readingIsSearching
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={styles.readingSearchBtnText}>검색</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+              {readingSearchResults.length > 0 && (
+                <View style={styles.readingSearchResults}>
+                  {readingSearchResults.map((item) => (
+                    <TouchableOpacity
+                      key={String(item.itemId)}
+                      style={styles.readingSearchResultItem}
+                      onPress={() => selectReadingBook(item)}
+                    >
+                      <Image source={{ uri: item.cover }} style={styles.readingSearchResultCover} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.readingSearchResultTitle} numberOfLines={2}>{item.title}</Text>
+                        <Text style={styles.readingSearchResultAuthor} numberOfLines={1}>{cleanAladinAuthor(item.author)}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>책 제목 *</Text>
               <TextInput
                 style={styles.modalInput}
                 value={readingTitle}
@@ -1092,13 +1172,18 @@ export default function GuildScreen() {
 
               <View style={[styles.editSwitchRow, { marginTop: 16 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.editLabel}>성인 도서</Text>
-                  <Text style={styles.editHint}>전원 19세 이상인 길드에서만 선정 가능</Text>
+                  <Text style={[styles.editLabel, guild?.agePolicy === 'minor' && { color: '#aaa' }]}>성인 도서</Text>
+                  <Text style={styles.editHint}>
+                    {guild?.agePolicy === 'minor'
+                      ? '미성년자 전용 길드에서는 선정 불가'
+                      : '전원 19세 이상인 길드에서만 선정 가능'}
+                  </Text>
                 </View>
                 <Switch
-                  value={readingIsAdult}
-                  onValueChange={setReadingIsAdult}
-                  thumbColor={readingIsAdult ? '#E57373' : '#ccc'}
+                  value={guild?.agePolicy === 'minor' ? false : readingIsAdult}
+                  onValueChange={guild?.agePolicy === 'minor' ? undefined : setReadingIsAdult}
+                  disabled={guild?.agePolicy === 'minor'}
+                  thumbColor={readingIsAdult && guild?.agePolicy !== 'minor' ? '#E57373' : '#ccc'}
                   trackColor={{ false: '#e0e0e0', true: '#FFCDD2' }}
                 />
               </View>
@@ -1928,6 +2013,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+
+  // ── 함께 읽기 검색 ───────────────────────────────────────────────
+  readingSearchRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 0 },
+  readingSearchBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 58,
+  },
+  readingSearchBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  readingSearchResults: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E0D6F0',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  readingSearchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EBF8',
+  },
+  readingSearchResultCover: {
+    width: 38,
+    height: 54,
+    borderRadius: 4,
+    resizeMode: 'cover',
+    backgroundColor: '#EDE9F6',
+  },
+  readingSearchResultTitle: { fontSize: 13, fontWeight: '600', color: '#1C1B1F', marginBottom: 2 },
+  readingSearchResultAuthor: { fontSize: 12, color: '#49454F' },
 
   // ── 함께 읽기 ────────────────────────────────────────────────────
   readingBookRow: {
