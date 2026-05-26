@@ -1,5 +1,6 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { useState, useCallback, Fragment } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Image } from 'react-native';
+import { useState, useCallback, useRef, Fragment } from 'react';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getBooksByStatus, addCheckin, getSuccessfulChallengeBooks, getAllBooks, addXp, getPref, setPref, getReadStreak, getCheckinDays } from '../../database/database';
@@ -263,6 +264,32 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
     })
   );
 
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [photoUri, setPhotoUri] = useState(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef(null);
+
+  const openCamera = async () => {
+    if (alreadyCheckedIn) return;
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) return;
+    }
+    setCameraOpen(true);
+  };
+
+  const takePicture = async () => {
+    if (!cameraRef.current) return;
+    const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, skipProcessing: true });
+    setPhotoUri(photo.uri);
+  };
+
+  const confirmCheckin = () => {
+    handleCheckin();
+    setPhotoUri(null);
+    setCameraOpen(false);
+  };
+
   const handleCheckin = () => {
     if (alreadyCheckedIn) return;
     const newCheckins = [...checkins, todayTs];
@@ -314,6 +341,7 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
     : '목표일 미설정 — 책 상세에서 설정';
 
   return (
+    <>
     <TouchableOpacity style={[styles.card, isSuccess && styles.cardSuccess]} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.cardTop}>
         <View style={{ flex: 1, marginRight: 8 }}>
@@ -324,11 +352,11 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
           {!isSuccess && book.status === 'reading' && (
             <TouchableOpacity
               style={[styles.checkinBtn, alreadyCheckedIn && styles.checkinBtnDone]}
-              onPress={handleCheckin}
+              onPress={openCamera}
               disabled={alreadyCheckedIn}
             >
               <Text style={styles.checkinBtnText}>
-                {alreadyCheckedIn ? '✓ 인증완료' : '오늘 독서인증'}
+                {alreadyCheckedIn ? '✓ 인증완료' : '📷 독서인증'}
               </Text>
             </TouchableOpacity>
           )}
@@ -354,6 +382,49 @@ function ChallengeCard({ book, onPress, isSuccess, onCheckin }) {
         <Text style={styles.perfectBonusLabel}>🌟 매일 인증 달성! 보너스 +{perfectBonus} XP</Text>
       )}
     </TouchableOpacity>
+
+    <Modal
+      visible={cameraOpen}
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={() => { setPhotoUri(null); setCameraOpen(false); }}
+    >
+      <View style={styles.cameraContainer}>
+        {photoUri ? (
+          <>
+            <Image source={{ uri: photoUri }} style={styles.previewImage} resizeMode="cover" />
+            <View style={styles.previewOverlay}>
+              <Text style={styles.previewHint}>이 사진으로 독서 인증할까요?</Text>
+              <View style={styles.previewButtons}>
+                <TouchableOpacity style={styles.retakeBtn} onPress={() => setPhotoUri(null)}>
+                  <Text style={styles.retakeBtnText}>다시 찍기</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.confirmBtn} onPress={confirmCheckin}>
+                  <Text style={styles.confirmBtnText}>인증하기 ✓</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        ) : (
+          <>
+            <CameraView ref={cameraRef} style={styles.camera} facing="back" />
+            <View style={styles.cameraOverlay}>
+              <Text style={styles.cameraHint}>📚 책과 함께 독서 중인 모습을 찍어주세요</Text>
+              <View style={styles.cameraButtonRow}>
+                <TouchableOpacity style={styles.cancelCameraBtn} onPress={() => setCameraOpen(false)}>
+                  <Text style={styles.cancelCameraBtnText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
+                  <View style={styles.captureBtnInner} />
+                </TouchableOpacity>
+                <View style={{ width: 64 }} />
+              </View>
+            </View>
+          </>
+        )}
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -562,6 +633,50 @@ const styles = StyleSheet.create({
 
   empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 14, color: '#9E9E9E', textAlign: 'center' },
+
+  cameraContainer: { flex: 1, backgroundColor: '#000' },
+  camera: { flex: 1 },
+  cameraOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    paddingBottom: 48, paddingHorizontal: 24, alignItems: 'center', gap: 24,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  cameraHint: { fontSize: 15, color: '#fff', fontWeight: '600', textAlign: 'center' },
+  cameraButtonRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+  },
+  captureBtn: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: '#fff',
+  },
+  captureBtnInner: {
+    width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff',
+  },
+  cancelCameraBtn: {
+    width: 64, alignItems: 'center', paddingVertical: 8,
+  },
+  cancelCameraBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
+  previewImage: { flex: 1, width: '100%' },
+  previewOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    paddingBottom: 48, paddingHorizontal: 24, alignItems: 'center', gap: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  previewHint: { fontSize: 16, color: '#fff', fontWeight: '700', textAlign: 'center' },
+  previewButtons: { flexDirection: 'row', gap: 16, width: '100%' },
+  retakeBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#fff',
+  },
+  retakeBtnText: { fontSize: 15, color: '#fff', fontWeight: '700' },
+  confirmBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 12,
+    backgroundColor: PURPLE, alignItems: 'center',
+  },
+  confirmBtnText: { fontSize: 15, color: '#fff', fontWeight: '700' },
 
   cardSuccess: { borderLeftWidth: 3, borderLeftColor: '#4CAF50' },
   successBadge: {
