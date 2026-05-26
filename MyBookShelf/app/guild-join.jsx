@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, FlatList,
+  View, Text, TextInput, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Keyboard,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -19,6 +19,7 @@ export default function GuildJoinScreen() {
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [selectedKeyword, setSelectedKeyword] = useState(null);
 
   useEffect(() => {
     if (tab === 'search') handleSearch();
@@ -54,6 +55,7 @@ export default function GuildJoinScreen() {
 
   const handleSearch = async () => {
     setSearchLoading(true);
+    setSelectedKeyword(null);
     try {
       const results = await searchPublicGuilds(searchText);
       setSearchResults(results);
@@ -138,7 +140,7 @@ export default function GuildJoinScreen() {
               style={styles.searchInput}
               value={searchText}
               onChangeText={setSearchText}
-              placeholder="길드 이름 검색"
+              placeholder="길드 이름 또는 키워드 검색"
               placeholderTextColor="#aaa"
               onSubmitEditing={handleSearch}
               returnKeyType="search"
@@ -148,11 +150,37 @@ export default function GuildJoinScreen() {
             </TouchableOpacity>
           </View>
 
+          {(() => {
+            const allKeywords = [...new Set(searchResults.flatMap((g) => g.keywords || []))];
+            return allKeywords.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.kwFilterRow}
+                contentContainerStyle={{ gap: 6, paddingVertical: 2 }}
+              >
+                {allKeywords.map((kw) => (
+                  <TouchableOpacity
+                    key={kw}
+                    style={[styles.kwFilterChip, selectedKeyword === kw && styles.kwFilterChipActive]}
+                    onPress={() => setSelectedKeyword((prev) => (prev === kw ? null : kw))}
+                  >
+                    <Text style={[styles.kwFilterText, selectedKeyword === kw && styles.kwFilterTextActive]}>
+                      #{kw}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : null;
+          })()}
+
           {searchLoading ? (
             <ActivityIndicator color="#6750A4" style={{ marginTop: 40 }} />
           ) : (
             <FlatList
-              data={searchResults}
+              data={selectedKeyword
+                ? searchResults.filter((g) => (g.keywords || []).includes(selectedKeyword))
+                : searchResults}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ paddingTop: 4 }}
               ListEmptyComponent={
@@ -355,6 +383,26 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  kwFilterRow: {
+    marginBottom: 8,
+  },
+  kwFilterChip: {
+    backgroundColor: '#EDE7F6',
+    borderRadius: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  kwFilterChipActive: {
+    backgroundColor: '#6750A4',
+  },
+  kwFilterText: {
+    fontSize: 12,
+    color: '#6750A4',
+    fontWeight: '600',
+  },
+  kwFilterTextActive: {
+    color: '#fff',
   },
   emptyBox: {
     alignItems: 'center',

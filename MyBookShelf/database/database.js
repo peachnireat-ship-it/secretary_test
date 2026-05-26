@@ -127,6 +127,12 @@ try {
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN xpEarned INTEGER DEFAULT 0`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN isAdult INTEGER DEFAULT 0`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE guild_members ADD COLUMN isAdult INTEGER DEFAULT 0`);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS user_prefs (
@@ -438,8 +444,8 @@ export const getBookById = (id) =>
 export const insertBook = (book) => {
   const now = Date.now();
   db.runSync(
-    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, endDate, createdAt, bookType, genre, cover)
-     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO books (title, author, totalPages, currentPage, status, rating, review, startDate, endDate, createdAt, bookType, genre, cover, isAdult)
+     VALUES (?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       book.title,
       book.author || '',
@@ -452,6 +458,7 @@ export const insertBook = (book) => {
       book.bookType || 'physical',
       book.genre || '',
       book.cover || '',
+      book.isAdult ? 1 : 0,
     ]
   );
 };
@@ -468,7 +475,7 @@ export const updateBook = (book) => {
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
      status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?,
-     bookType = ?, progressPct = ?, genre = ?, cover = ?, updatedAt = ?, goalSetAt = ?, ratedAt = ? WHERE id = ?`,
+     bookType = ?, progressPct = ?, genre = ?, cover = ?, updatedAt = ?, goalSetAt = ?, ratedAt = ?, isAdult = ? WHERE id = ?`,
     [
       book.title,
       book.author || '',
@@ -487,6 +494,7 @@ export const updateBook = (book) => {
       now,
       newGoalSetAt,
       newRatedAt,
+      book.isAdult ? 1 : 0,
       book.id,
     ]
   );
