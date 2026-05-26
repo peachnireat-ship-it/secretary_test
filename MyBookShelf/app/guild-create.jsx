@@ -13,9 +13,16 @@ export default function GuildCreateScreen() {
   const [name, setName] = useState('');
   const [weeklyGoal, setWeeklyGoal] = useState('5');
   const [isPublic, setIsPublic] = useState(true);
+  const [agePolicy, setAgePolicy] = useState('all');
   const [keywords, setKeywords] = useState([]);
   const [keywordInput, setKeywordInput] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const AGE_POLICIES = [
+    { value: 'all',   label: '전체 이용',      icon: 'people-outline',  color: '#4CAF50', bg: '#E8F5E9' },
+    { value: 'adult', label: '성인 전용',       icon: 'person-outline',  color: '#E57373', bg: '#FEEBEE' },
+    { value: 'minor', label: '미성년자 전용',   icon: 'happy-outline',   color: '#42A5F5', bg: '#E3F2FD' },
+  ];
 
   const addKeyword = () => {
     const kw = keywordInput.trim();
@@ -55,6 +62,7 @@ export default function GuildCreateScreen() {
         school,
         schoolLevel,
         keywords,
+        agePolicy,
       });
 
       saveGuildId(guildId);
@@ -119,6 +127,31 @@ export default function GuildCreateScreen() {
             trackColor={{ false: '#e0e0e0', true: '#D0BCFF' }}
           />
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.label}>연령 정책</Text>
+        <View style={styles.agePolicyRow}>
+          {AGE_POLICIES.map((p) => {
+            const active = agePolicy === p.value;
+            return (
+              <TouchableOpacity
+                key={p.value}
+                style={[styles.agePolicyBtn, active && { borderColor: p.color, backgroundColor: p.bg }]}
+                onPress={() => setAgePolicy(p.value)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name={p.icon} size={18} color={active ? p.color : '#aaa'} />
+                <Text style={[styles.agePolicyText, active && { color: p.color }]}>{p.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={styles.hint}>
+          {agePolicy === 'adult' && '성인(19세 이상)만 가입할 수 있는 길드입니다.'}
+          {agePolicy === 'minor' && '미성년자(18세 이하)만 가입할 수 있는 길드입니다.'}
+          {agePolicy === 'all' && '나이 제한 없이 누구나 가입할 수 있습니다.'}
+        </Text>
       </View>
 
       <View style={styles.section}>
@@ -288,5 +321,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6750A4',
     fontWeight: '600',
+  },
+  agePolicyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 6,
+  },
+  agePolicyBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E0D6F0',
+    backgroundColor: '#FAFAFA',
+  },
+  agePolicyText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#aaa',
+    textAlign: 'center',
   },
 });

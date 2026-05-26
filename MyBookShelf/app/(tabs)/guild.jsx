@@ -622,6 +622,13 @@ export default function GuildScreen() {
               </Text>
             </View>
           )}
+          {guild?.agePolicy && guild.agePolicy !== 'all' && (
+            <View style={[styles.metaChip, guild.agePolicy === 'adult' ? styles.agePolicyAdultChip : styles.agePolicyMinorChip]}>
+              <Text style={guild.agePolicy === 'adult' ? styles.agePolicyAdultText : styles.agePolicyMinorText}>
+                {guild.agePolicy === 'adult' ? '성인 전용' : '미성년자 전용'}
+              </Text>
+            </View>
+          )}
           {(guild?.keywords || []).map((kw) => (
             <View key={kw} style={[styles.metaChip, styles.kwTagChip]}>
               <Text style={styles.kwTagChipText}>#{kw}</Text>
@@ -1459,6 +1466,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: 'rgba(255,255,255,0.85)',
     letterSpacing: 0.2,
+  },
+  agePolicyAdultChip: {
+    backgroundColor: 'rgba(229,115,115,0.25)',
+  },
+  agePolicyAdultText: {
+    fontSize: 11,
+    color: '#FFCDD2',
+    fontWeight: '700',
+  },
+  agePolicyMinorChip: {
+    backgroundColor: 'rgba(66,165,245,0.25)',
+  },
+  agePolicyMinorText: {
+    fontSize: 11,
+    color: '#BBDEFB',
+    fontWeight: '700',
   },
 
   // ── 세그먼트 탭 ───────────────────────────────────────────────

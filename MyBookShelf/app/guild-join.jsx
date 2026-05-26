@@ -192,7 +192,19 @@ export default function GuildJoinScreen() {
               renderItem={({ item }) => (
                 <View style={styles.guildCard}>
                   <View style={styles.guildInfo}>
-                    <Text style={styles.guildName}>{item.name}</Text>
+                    <View style={styles.guildNameRow}>
+                      <Text style={styles.guildName}>{item.name}</Text>
+                      {item.agePolicy === 'adult' && (
+                        <View style={styles.agePolicyBadgeAdult}>
+                          <Text style={styles.agePolicyBadgeAdultText}>성인 전용</Text>
+                        </View>
+                      )}
+                      {item.agePolicy === 'minor' && (
+                        <View style={styles.agePolicyBadgeMinor}>
+                          <Text style={styles.agePolicyBadgeMinorText}>미성년자 전용</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.guildMeta}>
                       멤버 {item.memberCount || 0}명 · 주간 목표 {item.weeklyGoal || 0}권
                     </Text>
@@ -346,11 +358,39 @@ const styles = StyleSheet.create({
   guildInfo: {
     flex: 1,
   },
+  guildNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 3,
+    flexWrap: 'wrap',
+  },
   guildName: {
     fontSize: 15,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 3,
+  },
+  agePolicyBadgeAdult: {
+    backgroundColor: '#FEEBEE',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  agePolicyBadgeAdultText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#E57373',
+  },
+  agePolicyBadgeMinor: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  agePolicyBadgeMinorText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#42A5F5',
   },
   guildMeta: {
     fontSize: 12,

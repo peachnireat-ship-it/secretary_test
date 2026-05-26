@@ -12,7 +12,7 @@ function generateInviteCode() {
 
 // ── 길드 생성 ────────────────────────────────────────────────────
 
-export async function createGuild({ name, isPublic, weeklyGoal, userId, displayName, school, schoolLevel, keywords }) {
+export async function createGuild({ name, isPublic, weeklyGoal, userId, displayName, school, schoolLevel, keywords, agePolicy }) {
   if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
 
   const existingQ = query(
@@ -34,6 +34,7 @@ export async function createGuild({ name, isPublic, weeklyGoal, userId, displayN
     weeklyGoal: Number(weeklyGoal) || 0,
     memberCount: 1,
     keywords: Array.isArray(keywords) ? keywords : [],
+    agePolicy: agePolicy || 'all',
     createdAt: serverTimestamp(),
   });
 
