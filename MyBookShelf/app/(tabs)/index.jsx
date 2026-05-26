@@ -2,8 +2,9 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getAllBooks, getBooksByStatus, deleteBook } from '../../database/database';
+import { getAllBooks, getBooksByStatus, deleteBook, getGuildId, getUserId, getUsername } from '../../database/database';
 import { revokeInvalidBadges } from '../../database/badges';
+import { syncWeeklyScore } from '../../database/guildDatabase';
 import BookCard from '../../components/BookCard';
 import { takePendingLibraryStatus } from './_libraryFilter';
 
@@ -56,6 +57,10 @@ export default function LibraryScreen() {
             deleteBook(book.id);
             revokeInvalidBadges();
             loadBooks();
+            const guildId = getGuildId();
+            if (guildId) {
+              syncWeeklyScore(guildId, getUserId(), getUsername() || '독서가').catch(() => {});
+            }
           },
         },
       ]

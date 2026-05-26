@@ -339,6 +339,10 @@ export default function BookDetailScreen() {
               progressPct: parseInt(progressPct) || 0,
             });
             onBookReverted(book.id, fallbackXp);
+            const guildId = getGuildId();
+            if (guildId) {
+              syncWeeklyScore(guildId, getUserId(), getUsername() || '독서가').catch(() => {});
+            }
             router.back();
           },
         },
