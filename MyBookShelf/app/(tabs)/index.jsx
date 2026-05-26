@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllBooks, getBooksByStatus, deleteBook } from '../../database/database';
+import { revokeInvalidBadges } from '../../database/badges';
 import BookCard from '../../components/BookCard';
 import { takePendingLibraryStatus } from './_libraryFilter';
 
@@ -53,6 +54,7 @@ export default function LibraryScreen() {
           style: 'destructive',
           onPress: () => {
             deleteBook(book.id);
+            revokeInvalidBadges();
             loadBooks();
           },
         },

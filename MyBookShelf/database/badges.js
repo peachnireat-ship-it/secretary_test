@@ -252,6 +252,55 @@ export function getWeeklyCompletionBadges() {
   });
 }
 
+export function revokeInvalidBadges() {
+  const revoked = [];
+  // 전제 뱃지 취소 시 하위 뱃지도 연쇄 취소되므로 변동 없을 때까지 반복
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const unlockedIds = new Set(db.getAllSync('SELECT badgeId FROM user_badges').map(r => r.badgeId));
+    for (const badge of BADGE_DEFS) {
+      if (!unlockedIds.has(badge.id)) continue;
+      const prerequisiteRevoked = badge.prerequisite && !unlockedIds.has(badge.prerequisite);
+      const { current, max } = getBadgeProgress(badge);
+      if (prerequisiteRevoked || current < max) {
+        db.runSync('DELETE FROM user_badges WHERE badgeId = ?', [badge.id]);
+        revoked.push(badge);
+        changed = true;
+      }
+    }
+  }
+  // 챌린지 마일스톤 뱃지 취소
+  const challengeCount = getChallengeSuccessCount();
+  const milestoneRows = db.getAllSync(
+    "SELECT badgeId FROM user_badges WHERE badgeId LIKE 'challenge_milestone_%'"
+  );
+  for (const row of milestoneRows) {
+    const n = parseInt(row.badgeId.replace('challenge_milestone_', ''), 10);
+    if (challengeCount < n) {
+      db.runSync('DELETE FROM user_badges WHERE badgeId = ?', [row.badgeId]);
+      revoked.push({ id: row.badgeId, ...challengeMilestoneMeta(n) });
+    }
+  }
+  // weekly_complete 뱃지: 해당 주 수령 미션 수가 3개 미만이면 취소
+  const weeklyRows = db.getAllSync(
+    "SELECT badgeId FROM user_badges WHERE badgeId LIKE 'weekly_complete_%'"
+  );
+  for (const row of weeklyRows) {
+    const weekKey = row.badgeId.replace('weekly_complete_', '');
+    const claimedCount = db.getFirstSync(
+      'SELECT COUNT(*) as c FROM completed_missions WHERE weekKey = ?',
+      [weekKey]
+    )?.c ?? 0;
+    if (claimedCount < 3) {
+      db.runSync('DELETE FROM user_badges WHERE badgeId = ?', [row.badgeId]);
+      const label = weekKeyToLabel(weekKey);
+      revoked.push({ id: row.badgeId, emoji: '🏆', name: `${label} 미션 왕`, type: 'weekly' });
+    }
+  }
+  return revoked;
+}
+
 export function checkAndUnlockBadges() {
   const newlyUnlocked = [];
   const unlockedIds = new Set(

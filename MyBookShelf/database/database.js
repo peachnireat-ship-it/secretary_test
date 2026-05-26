@@ -121,6 +121,12 @@ try {
 try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN guildId TEXT DEFAULT ''`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE book_reviews ADD COLUMN xpEarned INTEGER DEFAULT 10`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN xpEarned INTEGER DEFAULT 0`);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS user_prefs (
@@ -152,6 +158,49 @@ export function setPref(key, value) {
     'INSERT OR REPLACE INTO user_prefs (key, value) VALUES (?, ?)',
     [key, String(value)],
   );
+}
+
+export const MISSION_POOL = [
+  { id: 'complete_1', label: '책 1권 완독하기', icon: 'trophy-outline', type: 'complete', target: 1, xp: 80 },
+  { id: 'complete_2', label: '책 2권 완독하기', icon: 'trophy-outline', type: 'complete', target: 2, xp: 160 },
+  { id: 'memo_3', label: '메모 3개 작성하기', icon: 'create-outline', type: 'memo', target: 3, xp: 50 },
+  { id: 'memo_5', label: '메모 5개 작성하기', icon: 'create-outline', type: 'memo', target: 5, xp: 80 },
+  { id: 'add_1', label: '새 책 1권 추가하기', icon: 'add-circle-outline', type: 'add', target: 1, xp: 30 },
+  { id: 'add_2', label: '새 책 2권 추가하기', icon: 'add-circle-outline', type: 'add', target: 2, xp: 60 },
+  { id: 'streak_3', label: '3일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 3, xp: 60 },
+  { id: 'streak_5', label: '5일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 5, xp: 100 },
+];
+
+function seededShuffle(arr, seed) {
+  const result = [...arr];
+  let s = seed;
+  for (let i = result.length - 1; i > 0; i--) {
+    s = ((s * 1664525) + 1013904223) & 0x7fffffff;
+    const j = s % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+export function getWeeklyMissions(weekKey) {
+  const key = weekKey ?? getWeekKey();
+  const seed = parseInt(key.replace('-W', ''), 10);
+  return seededShuffle(MISSION_POOL, seed).slice(0, 3);
+}
+
+export function getExtraMissions(currentMissions, weekKey) {
+  const currentIds = new Set(currentMissions.map(m => m.id));
+  const remaining = MISSION_POOL.filter(m => !currentIds.has(m.id));
+  const seed = parseInt((weekKey ?? getWeekKey()).replace('-W', ''), 10) + 31337;
+  return seededShuffle(remaining, seed).slice(0, 2);
+}
+
+export function getMissionProgress(mission, progress) {
+  if (mission.type === 'complete') return progress.completed;
+  if (mission.type === 'memo') return progress.memos;
+  if (mission.type === 'add') return progress.added;
+  if (mission.type === 'streak') return progress.streak;
+  return 0;
 }
 
 export function getWeekKey() {
@@ -343,8 +392,30 @@ export const updateBook = (book) => {
   );
 };
 
-export const deleteBook = (id) =>
+export const deleteBook = (id) => {
+  const book = db.getFirstSync('SELECT xpEarned, status, review FROM books WHERE id = ?', [id]);
+  if (book) {
+    const memoXp = db.getFirstSync(
+      'SELECT COALESCE(SUM(xpEarned), 0) as total FROM book_reviews WHERE bookId = ?', [id]
+    )?.total ?? 0;
+    const reviewXp = (book.status === 'completed' && book.review) ? XP_REWARDS.BOOK_REVIEW : 0;
+    const totalDeduct = (book.xpEarned ?? 0) + memoXp + reviewXp;
+    if (totalDeduct > 0) addXp(-totalDeduct);
+  }
+  db.runSync('DELETE FROM book_reviews WHERE bookId = ?', [id]);
   db.runSync('DELETE FROM books WHERE id = ?', [id]);
+
+  // 삭제 후 현재 주 미션 진행도 재검증 → 목표 미달 미션 즉시 취소
+  const weekKey = getWeekKey();
+  const progress = getWeeklyProgress();
+  const missions = getWeeklyMissions();
+  const extra = getExtraMissions(missions);
+  [...missions, ...extra].forEach(m => {
+    if (isMissionClaimed(m.id, weekKey) && getMissionProgress(m, progress) < m.target) {
+      cancelMissionReward(m.id, weekKey);
+    }
+  });
+};
 
 export const trackDailyReading = (pagesRead = 0) => {
   const multiplier = isDoubleXpActive() ? 2 : 1;
@@ -378,12 +449,22 @@ export const trackDailyReading = (pagesRead = 0) => {
 
 export const onBookCompleted = (book) => {
   const multiplier = isDoubleXpActive() ? 2 : 1;
-  addXp(XP_REWARDS.BOOK_COMPLETE * multiplier);
+  let totalXp = XP_REWARDS.BOOK_COMPLETE * multiplier;
   if (book.goalDate && book.endDate) {
     const endDay = new Date(book.endDate).setHours(0, 0, 0, 0);
     const goalDay = new Date(book.goalDate).setHours(0, 0, 0, 0);
-    if (endDay <= goalDay) addXp(XP_REWARDS.CHALLENGE_SUCCESS * multiplier);
+    if (endDay <= goalDay) totalXp += XP_REWARDS.CHALLENGE_SUCCESS * multiplier;
   }
+  addXp(totalXp);
+  if (book.id) db.runSync('UPDATE books SET xpEarned = ? WHERE id = ?', [totalXp, book.id]);
+};
+
+export const onBookReverted = (bookId, fallbackXp) => {
+  const row = db.getFirstSync('SELECT xpEarned FROM books WHERE id = ?', [bookId]);
+  const xp = (row?.xpEarned > 0) ? row.xpEarned : fallbackXp;
+  db.runSync('UPDATE books SET xpEarned = 0 WHERE id = ?', [bookId]);
+  addXp(-xp);
+  return xp;
 };
 
 export const getReadStreak = () =>
@@ -515,6 +596,20 @@ export const claimMissionReward = (missionId, weekKey, xpAmount) => {
   }
 };
 
+export const cancelMissionReward = (missionId, weekKey) => {
+  const row = db.getFirstSync(
+    'SELECT xp FROM completed_missions WHERE missionId = ? AND weekKey = ?',
+    [missionId, weekKey]
+  );
+  if (!row) return false;
+  db.runSync(
+    'DELETE FROM completed_missions WHERE missionId = ? AND weekKey = ?',
+    [missionId, weekKey]
+  );
+  addXp(-row.xp);
+  return true;
+};
+
 export const getBookReviews = (bookId) =>
   db.getAllSync('SELECT * FROM book_reviews WHERE bookId = ? ORDER BY sequence ASC', [bookId]);
 
@@ -524,17 +619,20 @@ export const insertBookReview = (bookId, content, type = 'memo') => {
     [bookId]
   );
   const nextSeq = row?.nextSeq ?? 1;
-  db.runSync(
-    'INSERT INTO book_reviews (bookId, sequence, content, type, createdAt) VALUES (?, ?, ?, ?, ?)',
-    [bookId, nextSeq, content, type, Date.now()]
-  );
   const multiplier = isDoubleXpActive() ? 2 : 1;
-  addXp(XP_REWARDS.MEMO_ADD * multiplier);
+  const xpEarned = XP_REWARDS.MEMO_ADD * multiplier;
+  db.runSync(
+    'INSERT INTO book_reviews (bookId, sequence, content, type, createdAt, xpEarned) VALUES (?, ?, ?, ?, ?, ?)',
+    [bookId, nextSeq, content, type, Date.now(), xpEarned]
+  );
+  addXp(xpEarned);
 };
 
 export const deleteBookReview = (id) => {
+  const row = db.getFirstSync('SELECT xpEarned FROM book_reviews WHERE id = ?', [id]);
+  const xpEarned = row?.xpEarned ?? XP_REWARDS.MEMO_ADD;
   db.runSync('DELETE FROM book_reviews WHERE id = ?', [id]);
-  addXp(-XP_REWARDS.MEMO_ADD);
+  addXp(-xpEarned);
 };
 
 export const getSchool = () => {

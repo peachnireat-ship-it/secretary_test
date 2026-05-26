@@ -2,45 +2,11 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Alert }
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent } from '../../database/database';
+import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, cancelMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent, getWeeklyMissions, getExtraMissions, getMissionProgress } from '../../database/database';
 import { setPendingLibraryStatus } from './_libraryFilter';
 import { checkAndUnlockBadges, checkAndUnlockWeeklyAllMissionsBadge } from '../../database/badges';
 import BookCard from '../../components/BookCard';
 
-const MISSION_POOL = [
-  { id: 'complete_1', label: '책 1권 완독하기', icon: 'trophy-outline', type: 'complete', target: 1, xp: 80 },
-  { id: 'complete_2', label: '책 2권 완독하기', icon: 'trophy-outline', type: 'complete', target: 2, xp: 160 },
-  { id: 'memo_3', label: '메모 3개 작성하기', icon: 'create-outline', type: 'memo', target: 3, xp: 50 },
-  { id: 'memo_5', label: '메모 5개 작성하기', icon: 'create-outline', type: 'memo', target: 5, xp: 80 },
-  { id: 'add_1', label: '새 책 1권 추가하기', icon: 'add-circle-outline', type: 'add', target: 1, xp: 30 },
-  { id: 'add_2', label: '새 책 2권 추가하기', icon: 'add-circle-outline', type: 'add', target: 2, xp: 60 },
-  { id: 'streak_3', label: '3일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 3, xp: 60 },
-  { id: 'streak_5', label: '5일 연속 독서하기', icon: 'flame-outline', type: 'streak', target: 5, xp: 100 },
-];
-
-function seededShuffle(arr, seed) {
-  const result = [...arr];
-  let s = seed;
-  for (let i = result.length - 1; i > 0; i--) {
-    s = ((s * 1664525) + 1013904223) & 0x7fffffff;
-    const j = s % (i + 1);
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
-function getWeeklyMissions() {
-  const key = getWeekKey();
-  const seed = parseInt(key.replace('-W', ''), 10);
-  return seededShuffle(MISSION_POOL, seed).slice(0, 3);
-}
-
-function getExtraMissions(currentMissions) {
-  const currentIds = new Set(currentMissions.map(m => m.id));
-  const remaining = MISSION_POOL.filter(m => !currentIds.has(m.id));
-  const seed = parseInt(getWeekKey().replace('-W', ''), 10) + 31337;
-  return seededShuffle(remaining, seed).slice(0, 2);
-}
 
 const ENCOURAGEMENT = {
   '초등': [
@@ -141,13 +107,6 @@ function EncouragementBanner({ level }) {
   );
 }
 
-function getMissionProgress(mission, progress) {
-  if (mission.type === 'complete') return progress.completed;
-  if (mission.type === 'memo') return progress.memos;
-  if (mission.type === 'add') return progress.added;
-  if (mission.type === 'streak') return progress.streak;
-  return 0;
-}
 
 function MissionItem({ mission, progress, claimed }) {
   const current = Math.min(getMissionProgress(mission, progress), mission.target);
@@ -248,6 +207,17 @@ export default function HomeScreen() {
       setWeeklyProgress(progress);
       const weekKey = getWeekKey();
       const claimed = missions.filter((m) => isMissionClaimed(m.id, weekKey)).map((m) => m.id);
+
+      // Strict: 이미 수령했으나 진행도가 목표 미달로 떨어진 미션 취소
+      claimed.slice().forEach((id) => {
+        const m = missions.find(x => x.id === id);
+        if (!m) return;
+        if (getMissionProgress(m, progress) < m.target) {
+          cancelMissionReward(m.id, weekKey);
+          claimed.splice(claimed.indexOf(id), 1);
+        }
+      });
+
       missions.forEach((m) => {
         const current = getMissionProgress(m, progress);
         if (current >= m.target && !claimed.includes(m.id)) {
@@ -261,7 +231,10 @@ export default function HomeScreen() {
       if (anyExtraClaimed || extraMissionsAcceptedRef.current) {
         allExtra.forEach(m => {
           const cur = getMissionProgress(m, progress);
-          if (cur >= m.target && !isMissionClaimed(m.id, weekKey)) {
+          // Strict: 추가 미션도 진행도 미달 시 취소
+          if (isMissionClaimed(m.id, weekKey) && cur < m.target) {
+            cancelMissionReward(m.id, weekKey);
+          } else if (!isMissionClaimed(m.id, weekKey) && cur >= m.target) {
             claimMissionReward(m.id, weekKey, m.xp);
           }
           if (isMissionClaimed(m.id, weekKey)) claimed.push(m.id);

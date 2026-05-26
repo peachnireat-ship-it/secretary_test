@@ -8,14 +8,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { getBookById, updateBook, trackDailyReading, onBookCompleted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, getTierInfo, isDoubleXpActive } from '../../database/database';
+import { getBookById, updateBook, trackDailyReading, onBookCompleted, onBookReverted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, getTierInfo, isDoubleXpActive } from '../../database/database';
 import { GENRES, checkAndUnlockBadges } from '../../database/badges';
 import StatusBadge from '../../components/StatusBadge';
 import StarRating from '../../components/StarRating';
 import BookShareCard from '../../components/BookShareCard';
 import LevelUpModal from '../../components/LevelUpModal';
 
-const ALADIN_TTB_KEY = 'ttbplatonik0902001';
+const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
 const cleanAladinAuthor = (str) =>
   str ? str.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() || '저자 미상' : '저자 미상';
 
@@ -300,10 +300,10 @@ export default function BookDetailScreen() {
 
   const handleRevertToReading = () => {
     if (!book) return;
-    let xpToDeduct = XP_REWARDS.BOOK_COMPLETE;
     const endDay = book.endDate ? new Date(book.endDate).setHours(0, 0, 0, 0) : null;
     const goalDay = book.goalDate ? new Date(book.goalDate).setHours(0, 0, 0, 0) : null;
-    if (endDay && goalDay && endDay <= goalDay) xpToDeduct += XP_REWARDS.CHALLENGE_SUCCESS;
+    const fallbackXp = XP_REWARDS.BOOK_COMPLETE + (endDay && goalDay && endDay <= goalDay ? XP_REWARDS.CHALLENGE_SUCCESS : 0);
+    const xpToDeduct = (book.xpEarned > 0) ? book.xpEarned : fallbackXp;
     Alert.alert(
       '읽는 중으로 변경',
       `이 책을 읽는 중으로 되돌릴까요?\n완독 기록이 취소되고 XP ${xpToDeduct}점이 차감됩니다.`,
@@ -326,7 +326,7 @@ export default function BookDetailScreen() {
               genre,
               progressPct: parseInt(progressPct) || 0,
             });
-            addXp(-xpToDeduct);
+            onBookReverted(book.id, fallbackXp);
             router.back();
           },
         },

@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDQTR8y3nDxBpYQIVtxVVJYROLg_cR_48U",
+  apiKey: "***FIREBASE_API_KEY_REMOVED***",
   authDomain: "mybookshelf-32b29.firebaseapp.com",
   databaseURL: "https://mybookshelf-32b29-default-rtdb.firebaseio.com",
   projectId: "mybookshelf-32b29",
