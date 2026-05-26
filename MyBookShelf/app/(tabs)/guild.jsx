@@ -123,8 +123,9 @@ export default function GuildScreen() {
       setGuildRankings(rankings);
       setMembers(memberList);
 
-      // 운영자인 경우 테마 미션 제출 목록 로드
-      if (info?.creatorId === getUserId()) {
+      // 운영자/부운영자인 경우 테마 미션 제출 목록 로드
+      const myMemberData = memberList.find(m => m.userId === getUserId());
+      if (info?.creatorId === getUserId() || myMemberData?.isDeputy) {
         try {
           const subs = await getGuildThemeMissionSubmissions(guildId, getWeekKey());
           setThemeMissionSubs(subs);
@@ -568,6 +569,7 @@ export default function GuildScreen() {
   // ── 길드 홈 화면 ────────────────────────────────────────────────
 
   const isOwner = guild?.creatorId === getUserId();
+  const isDeputy = members.find(m => m.userId === getUserId())?.isDeputy || false;
 
   const mergedMembers = (() => {
     if (members.length === 0) return memberScores;
@@ -675,7 +677,7 @@ export default function GuildScreen() {
               )}
             </View>
 
-            {isOwner && (
+            {(isOwner || isDeputy) && (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>🏰 테마 미션 승인</Text>
                 {themeMissionSubs.length === 0 ? (
