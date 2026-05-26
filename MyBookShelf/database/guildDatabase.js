@@ -3,7 +3,7 @@ import {
   query, where, limit, serverTimestamp, increment,
 } from 'firebase/firestore';
 import { firestoreDb, isFirebaseReady } from './firebaseConfig';
-import { getWeeklyScore, getWeeklyProgress, getWeekKey, addXp, isDoubleXpActive } from './database';
+import { getWeeklyScore, getWeeklyProgress, getWeekKey, addXp, isDoubleXpActive, getAge } from './database';
 
 function generateInviteCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -45,6 +45,7 @@ export async function createGuild({ name, isPublic, weeklyGoal, userId, displayN
     schoolLevel: schoolLevel || '',
     joinedAt: serverTimestamp(),
     isOwner: true,
+    isAdult: getAge() >= 19,
   });
 
   return { guildId, inviteCode };
@@ -78,6 +79,7 @@ export async function joinGuildByCode(inviteCode, userId, displayName, school, s
     schoolLevel: schoolLevel || '',
     joinedAt: serverTimestamp(),
     isOwner: false,
+    isAdult: getAge() >= 19,
   });
 
   await updateDoc(doc(firestoreDb, 'guilds', guildId), {
@@ -336,4 +338,57 @@ export async function reviewThemeMission(docId, status) {
     status,
     reviewedAt: serverTimestamp(),
   });
+}
+
+// ── 길드 함께 읽기 ────────────────────────────────────────────────
+
+export async function isGuildAllAdult(guildId) {
+  const members = await getGuildMembers(guildId);
+  if (members.length === 0) return false;
+  return members.every((m) => m.isAdult === true);
+}
+
+export async function setGuildReading(guildId, { bookTitle, bookAuthor, isAdult, startDate, endDate }, userId) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  if (isAdult) {
+    const allAdult = await isGuildAllAdult(guildId);
+    if (!allAdult) throw new Error('성인 도서는 모든 멤버가 성인(19세 이상)인 길드에서만 선정할 수 있습니다.');
+  }
+  await setDoc(doc(firestoreDb, 'guild_reading', guildId), {
+    guildId,
+    bookTitle: bookTitle.trim(),
+    bookAuthor: (bookAuthor || '').trim(),
+    isAdult: !!isAdult,
+    startDate,
+    endDate,
+    createdBy: userId,
+    createdAt: serverTimestamp(),
+    status: 'active',
+  });
+}
+
+export async function getGuildReading(guildId) {
+  if (!isFirebaseReady()) return null;
+  const snap = await getDoc(doc(firestoreDb, 'guild_reading', guildId));
+  if (!snap.exists()) return null;
+  return snap.data();
+}
+
+export async function endGuildReading(guildId) {
+  if (!isFirebaseReady()) return;
+  await updateDoc(doc(firestoreDb, 'guild_reading', guildId), {
+    status: 'ended',
+  });
+}
+
+// ── 부운영자 임명 / 해제 ──────────────────────────────────────────
+
+export async function appointDeputy(guildId, userId) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  await updateDoc(doc(firestoreDb, 'guild_members', `${guildId}_${userId}`), { isDeputy: true });
+}
+
+export async function revokeDeputy(guildId, userId) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  await updateDoc(doc(firestoreDb, 'guild_members', `${guildId}_${userId}`), { isDeputy: false });
 }

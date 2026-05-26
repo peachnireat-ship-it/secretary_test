@@ -14,11 +14,13 @@ import {
   syncWeeklyScore, removeMemberFromGuild, getUserGuilds,
   getGuildPosts, createGuildPost, deleteGuildPost, updateGuildInfo,
   getGuildThemeMissionSubmissions, reviewThemeMission,
+  getGuildReading, setGuildReading, endGuildReading,
+  getGuildMembers, appointDeputy, revokeDeputy,
 } from '../../database/guildDatabase';
 import { isFirebaseReady } from '../../database/firebaseConfig';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
-const SEGMENT_TABS = ['주간 목표', '멤버 순위', '길드 대항전', '게시판'];
+const SEGMENT_TABS = ['주간 목표', '멤버 순위', '길드 대항전', '게시판', '함께 읽기'];
 
 function formatPostDate(createdAt) {
   if (!createdAt) return '';
@@ -57,6 +59,16 @@ export default function GuildScreen() {
   const [editKeywordInput, setEditKeywordInput] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [themeMissionSubs, setThemeMissionSubs] = useState([]);
+  const [guildReading, setGuildReading] = useState(null);
+  const [showReadingModal, setShowReadingModal] = useState(false);
+  const [readingTitle, setReadingTitle] = useState('');
+  const [readingAuthor, setReadingAuthor] = useState('');
+  const [readingIsAdult, setReadingIsAdult] = useState(false);
+  const [readingStartDate, setReadingStartDate] = useState('');
+  const [readingEndDate, setReadingEndDate] = useState('');
+  const [readingSaving, setReadingSaving] = useState(false);
+  const [readingLoaded, setReadingLoaded] = useState(false);
+  const [members, setMembers] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -99,15 +111,17 @@ export default function GuildScreen() {
       await syncWeeklyScore(guildId, userId, displayName);
       setSyncing(false);
 
-      const [info, scores, rankings] = await Promise.all([
+      const [info, scores, rankings, memberList] = await Promise.all([
         getGuildInfo(guildId),
         getGuildWeeklyScores(guildId),
         getGuildRankings(),
+        getGuildMembers(guildId),
       ]);
 
       setGuild(info);
       setMemberScores(scores);
       setGuildRankings(rankings);
+      setMembers(memberList);
 
       // 운영자인 경우 테마 미션 제출 목록 로드
       if (info?.creatorId === getUserId()) {
@@ -134,6 +148,9 @@ export default function GuildScreen() {
     setPosts([]);
     setPostLoaded(false);
     setExpandedPostId(null);
+    setGuildReading(null);
+    setReadingLoaded(false);
+    setMembers([]);
   };
 
   const loadPosts = async (guildId) => {
@@ -149,10 +166,21 @@ export default function GuildScreen() {
     }
   };
 
+  const loadReading = async (guildId) => {
+    try {
+      const data = await getGuildReading(guildId);
+      setGuildReading(data);
+      setReadingLoaded(true);
+    } catch (_) {}
+  };
+
   const handleTabChange = (i) => {
     setActiveTab(i);
     if (i === 3 && !postLoaded && !postLoading) {
       loadPosts(selectedGuildId);
+    }
+    if (i === 4 && !readingLoaded) {
+      loadReading(selectedGuildId);
     }
   };
 
@@ -258,6 +286,58 @@ export default function GuildScreen() {
     ]);
   };
 
+  const openReadingModal = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const nextMonth = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    setReadingTitle(guildReading?.status === 'active' ? guildReading.bookTitle : '');
+    setReadingAuthor(guildReading?.status === 'active' ? guildReading.bookAuthor : '');
+    setReadingIsAdult(guildReading?.status === 'active' ? guildReading.isAdult : false);
+    setReadingStartDate(guildReading?.status === 'active' ? guildReading.startDate : today);
+    setReadingEndDate(guildReading?.status === 'active' ? guildReading.endDate : nextMonth);
+    setShowReadingModal(true);
+  };
+
+  const handleSetReading = async () => {
+    if (!readingTitle.trim()) { Alert.alert('알림', '책 제목을 입력해주세요.'); return; }
+    if (!readingStartDate.trim() || !readingEndDate.trim()) {
+      Alert.alert('알림', '시작일과 종료일을 입력해주세요.'); return;
+    }
+    setReadingSaving(true);
+    try {
+      const userId = getUserId();
+      await setGuildReading(
+        selectedGuildId,
+        { bookTitle: readingTitle, bookAuthor: readingAuthor, isAdult: readingIsAdult, startDate: readingStartDate, endDate: readingEndDate },
+        userId,
+      );
+      const updated = await getGuildReading(selectedGuildId);
+      setGuildReading(updated);
+      setShowReadingModal(false);
+    } catch (e) {
+      Alert.alert('오류', e.message || '도서 선정에 실패했습니다.');
+    } finally {
+      setReadingSaving(false);
+    }
+  };
+
+  const handleEndReading = () => {
+    Alert.alert('함께 읽기 종료', '현재 선정된 도서를 종료하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '종료',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await endGuildReading(selectedGuildId);
+            setGuildReading((prev) => ({ ...prev, status: 'ended' }));
+          } catch (e) {
+            Alert.alert('오류', e.message || '종료에 실패했습니다.');
+          }
+        },
+      },
+    ]);
+  };
+
   const handleReviewMission = (docId, status, displayName, missionLabel) => {
     const actionLabel = status === 'approved' ? '승인' : '거절';
     Alert.alert(
@@ -278,6 +358,68 @@ export default function GuildScreen() {
           },
         },
       ]
+    );
+  };
+
+  const handleMemberAction = (member) => {
+    const isDeputy = member.isDeputy;
+    Alert.alert(
+      member.displayName,
+      '멤버 관리',
+      [
+        {
+          text: isDeputy ? '부운영자 해제' : '부운영자로 임명',
+          onPress: () => isDeputy ? handleRevokeDeputy(member.userId) : handleAppointDeputy(member.userId),
+        },
+        {
+          text: '길드에서 해고',
+          style: 'destructive',
+          onPress: () => handleKickMember(member.userId, member.displayName),
+        },
+        { text: '취소', style: 'cancel' },
+      ],
+    );
+  };
+
+  const handleAppointDeputy = async (userId) => {
+    try {
+      await appointDeputy(selectedGuildId, userId);
+      setMembers((prev) => prev.map((m) => m.userId === userId ? { ...m, isDeputy: true } : m));
+    } catch (e) {
+      Alert.alert('오류', e.message || '임명에 실패했습니다.');
+    }
+  };
+
+  const handleRevokeDeputy = async (userId) => {
+    try {
+      await revokeDeputy(selectedGuildId, userId);
+      setMembers((prev) => prev.map((m) => m.userId === userId ? { ...m, isDeputy: false } : m));
+    } catch (e) {
+      Alert.alert('오류', e.message || '해제에 실패했습니다.');
+    }
+  };
+
+  const handleKickMember = (userId, displayName) => {
+    Alert.alert(
+      '멤버 해고',
+      `${displayName}님을 길드에서 내보내시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '해고',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeMemberFromGuild(selectedGuildId, userId);
+              setMembers((prev) => prev.filter((m) => m.userId !== userId));
+              setMemberScores((prev) => prev.filter((m) => m.userId !== userId));
+              setGuild((prev) => ({ ...prev, memberCount: Math.max(0, (prev?.memberCount || 1) - 1) }));
+            } catch (e) {
+              Alert.alert('오류', e.message || '해고에 실패했습니다.');
+            }
+          },
+        },
+      ],
     );
   };
 
@@ -426,6 +568,16 @@ export default function GuildScreen() {
   // ── 길드 홈 화면 ────────────────────────────────────────────────
 
   const isOwner = guild?.creatorId === getUserId();
+
+  const mergedMembers = (() => {
+    if (members.length === 0) return memberScores;
+    const scoreMap = {};
+    memberScores.forEach((s) => { scoreMap[s.userId] = s; });
+    return members
+      .map((m) => ({ ...m, score: scoreMap[m.userId]?.score || 0, booksCompleted: scoreMap[m.userId]?.booksCompleted || 0 }))
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+  })();
+
   const totalWeeklyBooks = memberScores.reduce((sum, m) => sum + (m.booksCompleted || 0), 0);
   const weeklyGoal = guild?.weeklyGoal || 0;
   const goalPct = weeklyGoal > 0 ? Math.min(1, totalWeeklyBooks / weeklyGoal) : 0;
@@ -572,16 +724,42 @@ export default function GuildScreen() {
         {activeTab === 1 && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>멤버 이번 주 점수</Text>
-            {memberScores.length === 0 ? (
+            {mergedMembers.length === 0 ? (
               <Text style={styles.emptyText}>아직 점수 기록이 없습니다.</Text>
             ) : (
-              memberScores.map((m, i) => (
+              mergedMembers.map((m, i) => (
                 <View key={m.userId} style={[styles.rankRow, i === 0 && styles.rankRowFirst]}>
                   <Text style={styles.rankNum}>
                     {i < 3 ? MEDALS[i] : `${i + 1}위`}
                   </Text>
-                  <Text style={styles.rankName}>{m.displayName}</Text>
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text
+                      style={{ fontSize: 14, fontWeight: '600', color: '#2D2440', flexShrink: 1 }}
+                      numberOfLines={1}
+                    >
+                      {m.displayName}
+                    </Text>
+                    {m.isOwner && (
+                      <View style={styles.ownerBadge}>
+                        <Text style={styles.ownerBadgeText}>운영자</Text>
+                      </View>
+                    )}
+                    {!m.isOwner && m.isDeputy && (
+                      <View style={styles.deputyBadge}>
+                        <Text style={styles.deputyBadgeText}>부운영자</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.rankScore}>{(m.score || 0).toLocaleString()}점</Text>
+                  {isOwner && !m.isOwner && (
+                    <TouchableOpacity
+                      onPress={() => handleMemberAction(m)}
+                      hitSlop={8}
+                      style={styles.memberActionBtn}
+                    >
+                      <Ionicons name="ellipsis-vertical" size={16} color="#B0AAC0" />
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))
             )}
@@ -618,6 +796,74 @@ export default function GuildScreen() {
               <Ionicons name="refresh-outline" size={15} color="#6750A4" />
               <Text style={styles.refreshText}>새로고침</Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── 함께 읽기 ── */}
+        {activeTab === 4 && (
+          <View>
+            {!readingLoaded ? (
+              <ActivityIndicator style={{ marginTop: 24 }} color="#6750A4" />
+            ) : guildReading?.status === 'active' ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>이번 함께 읽기</Text>
+                <View style={styles.readingBookRow}>
+                  <View style={styles.readingIconBox}>
+                    <Ionicons name="book" size={28} color="#6750A4" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.readingTitleRow}>
+                      <Text style={styles.readingBookTitle} numberOfLines={2}>{guildReading.bookTitle}</Text>
+                      {guildReading.isAdult && (
+                        <View style={styles.adultBadge}>
+                          <Text style={styles.adultBadgeText}>성인</Text>
+                        </View>
+                      )}
+                    </View>
+                    {!!guildReading.bookAuthor && (
+                      <Text style={styles.readingBookAuthor}>{guildReading.bookAuthor}</Text>
+                    )}
+                    <View style={styles.readingPeriodRow}>
+                      <Ionicons name="calendar-outline" size={13} color="#9B93B0" />
+                      <Text style={styles.readingPeriodText}>
+                        {guildReading.startDate} ~ {guildReading.endDate}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                {isOwner && (
+                  <View style={styles.readingOwnerBtns}>
+                    <TouchableOpacity style={styles.readingChangeBtn} onPress={openReadingModal}>
+                      <Ionicons name="swap-horizontal-outline" size={14} color="#6750A4" />
+                      <Text style={styles.readingChangeBtnText}>도서 변경</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.readingEndBtn} onPress={handleEndReading}>
+                      <Ionicons name="stop-circle-outline" size={14} color="#E57373" />
+                      <Text style={styles.readingEndBtnText}>함께 읽기 종료</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View style={styles.card}>
+                <Text style={styles.emptyText}>
+                  현재 선정된 도서가 없습니다.{isOwner ? '\n아래 버튼으로 도서를 선정해보세요.' : ''}
+                </Text>
+                {isOwner && (
+                  <TouchableOpacity style={styles.readingSelectBtn} onPress={openReadingModal}>
+                    <Ionicons name="add-circle-outline" size={16} color="#fff" />
+                    <Text style={styles.readingSelectBtnText}>도서 선정하기</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+            <View style={styles.readingInfoBox}>
+              <Ionicons name="information-circle-outline" size={14} color="#9B93B0" />
+              <Text style={styles.readingInfoText}>
+                길드 운영자가 기간을 정해 함께 읽을 도서를 선정합니다.{'\n'}
+                성인 도서는 모든 멤버가 19세 이상인 길드에서만 선정 가능합니다.
+              </Text>
+            </View>
           </View>
         )}
 
@@ -758,6 +1004,92 @@ export default function GuildScreen() {
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
                     <Text style={styles.modalSubmitText}>저장</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 도서 선정 모달 */}
+      <Modal visible={showReadingModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModalBox}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>함께 읽기 도서 선정</Text>
+
+              <Text style={styles.editLabel}>책 제목 *</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={readingTitle}
+                onChangeText={setReadingTitle}
+                placeholder="책 제목을 입력하세요"
+                placeholderTextColor="#bbb"
+                maxLength={100}
+              />
+
+              <Text style={[styles.editLabel, { marginTop: 12 }]}>저자</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={readingAuthor}
+                onChangeText={setReadingAuthor}
+                placeholder="저자명 (선택)"
+                placeholderTextColor="#bbb"
+                maxLength={50}
+              />
+
+              <View style={[styles.editSwitchRow, { marginTop: 16 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.editLabel}>성인 도서</Text>
+                  <Text style={styles.editHint}>전원 19세 이상인 길드에서만 선정 가능</Text>
+                </View>
+                <Switch
+                  value={readingIsAdult}
+                  onValueChange={setReadingIsAdult}
+                  thumbColor={readingIsAdult ? '#E57373' : '#ccc'}
+                  trackColor={{ false: '#e0e0e0', true: '#FFCDD2' }}
+                />
+              </View>
+
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>시작일</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={readingStartDate}
+                onChangeText={setReadingStartDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#bbb"
+                maxLength={10}
+                keyboardType="numeric"
+              />
+
+              <Text style={[styles.editLabel, { marginTop: 12 }]}>종료일</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={readingEndDate}
+                onChangeText={setReadingEndDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#bbb"
+                maxLength={10}
+                keyboardType="numeric"
+              />
+
+              <View style={[styles.modalBtns, { marginTop: 20, marginBottom: 8 }]}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setShowReadingModal(false)}
+                >
+                  <Text style={styles.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSubmitBtn, readingSaving && { opacity: 0.6 }]}
+                  onPress={handleSetReading}
+                  disabled={readingSaving}
+                >
+                  {readingSaving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>선정</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -1508,6 +1840,133 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  // ── 함께 읽기 ────────────────────────────────────────────────────
+  readingBookRow: {
+    flexDirection: 'row',
+    gap: 14,
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  readingIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#EDE7F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  readingTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
+  readingBookTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#2D2440',
+    flex: 1,
+  },
+  readingBookAuthor: {
+    fontSize: 13,
+    color: '#9B93B0',
+    marginBottom: 6,
+  },
+  readingPeriodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  readingPeriodText: {
+    fontSize: 12,
+    color: '#9B93B0',
+  },
+  adultBadge: {
+    backgroundColor: '#FEEBEE',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  adultBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#E57373',
+  },
+  readingOwnerBtns: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  readingChangeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#D4C8F0',
+  },
+  readingChangeBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6750A4',
+  },
+  readingEndBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#FFCDD2',
+  },
+  readingEndBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#E57373',
+  },
+  readingSelectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#6750A4',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 12,
+    elevation: 2,
+    shadowColor: '#6750A4',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  readingSelectBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  readingInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#F4F2F8',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+  },
+  readingInfoText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#9B93B0',
+    lineHeight: 18,
+  },
+
   // ── 테마 미션 승인 ─────────────────────────────────────────────
   missionSubRow: {
     flexDirection: 'row',
@@ -1573,5 +2032,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#E57373',
+  },
+
+  // ── 멤버 역할 배지 / 관리 ──────────────────────────────────────
+  ownerBadge: {
+    backgroundColor: '#EDE7F6',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  ownerBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#6750A4',
+  },
+  deputyBadge: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  deputyBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1976D2',
+  },
+  memberActionBtn: {
+    padding: 4,
+    marginLeft: 2,
   },
 });
