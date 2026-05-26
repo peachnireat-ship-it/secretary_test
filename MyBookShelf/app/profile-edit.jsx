@@ -1,4 +1,4 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Modal } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,9 @@ export default function ProfileEditScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [ageText, setAgeText] = useState('');
+  const [showAdultVerify, setShowAdultVerify] = useState(false);
+  const [birthYear, setBirthYear] = useState('');
+  const [birthYearError, setBirthYearError] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -32,11 +35,36 @@ export default function ProfileEditScreen() {
   const ageValid = ageText === '' || (!isNaN(parsedAge) && parsedAge >= 1 && parsedAge <= 120);
   const canSave = name.trim().length > 0 && ageValid;
 
-  const handleSave = () => {
-    if (!canSave) return;
+  const doSave = () => {
     saveUsername(name.trim());
     saveAge(ageText === '' ? 0 : parsedAge);
     router.back();
+  };
+
+  const handleSave = () => {
+    if (!canSave) return;
+    if (!isNaN(parsedAge) && parsedAge >= 19) {
+      setBirthYear('');
+      setBirthYearError('');
+      setShowAdultVerify(true);
+      return;
+    }
+    doSave();
+  };
+
+  const handleVerifyAdult = () => {
+    const year = parseInt(birthYear, 10);
+    const thisYear = new Date().getFullYear();
+    if (isNaN(year) || year < 1900 || year > thisYear) {
+      setBirthYearError('올바른 출생연도를 입력해주세요');
+      return;
+    }
+    if (thisYear - year < 19) {
+      setBirthYearError('출생연도 기준 만 19세 미만입니다');
+      return;
+    }
+    setShowAdultVerify(false);
+    doSave();
   };
 
   const ageGroup = ageValid && parsedAge > 0 ? getAgeGroup(parsedAge) : null;
@@ -111,6 +139,53 @@ export default function ProfileEditScreen() {
           <Text style={styles.saveBtnText}>저장하기</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal visible={showAdultVerify} transparent animationType="fade">
+        <View style={styles.verifyOverlay}>
+          <View style={styles.verifyBox}>
+            <View style={styles.verifyIconRow}>
+              <Ionicons name="shield-checkmark-outline" size={32} color="#6750A4" />
+            </View>
+            <Text style={styles.verifyTitle}>성인 인증</Text>
+            <Text style={styles.verifyDesc}>
+              19세 이상 연령대 설정 시 본인 확인이 필요합니다.{'\n'}
+              출생연도를 입력해 만 나이를 검증합니다.
+            </Text>
+
+            <Text style={styles.verifyLabel}>출생연도 (예: 1995)</Text>
+            <TextInput
+              style={[styles.verifyInput, birthYearError ? styles.verifyInputError : null]}
+              placeholder="YYYY"
+              placeholderTextColor="#B0A8C0"
+              value={birthYear}
+              onChangeText={(t) => { setBirthYear(t); setBirthYearError(''); }}
+              keyboardType="number-pad"
+              maxLength={4}
+              returnKeyType="done"
+              onSubmitEditing={handleVerifyAdult}
+              autoFocus
+            />
+            {!!birthYearError && (
+              <Text style={styles.verifyError}>{birthYearError}</Text>
+            )}
+
+            <View style={styles.verifyBtns}>
+              <TouchableOpacity
+                style={styles.verifyCancelBtn}
+                onPress={() => setShowAdultVerify(false)}
+              >
+                <Text style={styles.verifyCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.verifyConfirmBtn}
+                onPress={handleVerifyAdult}
+              >
+                <Text style={styles.verifyConfirmText}>인증 완료</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -206,4 +281,93 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   saveBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+  verifyOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  verifyBox: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    gap: 8,
+  },
+  verifyIconRow: {
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  verifyTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1C1B1F',
+    textAlign: 'center',
+  },
+  verifyDesc: {
+    fontSize: 13,
+    color: '#6B6278',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  verifyLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#49454F',
+    marginTop: 4,
+  },
+  verifyInput: {
+    backgroundColor: '#FAF8FE',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    fontSize: 18,
+    color: '#1C1B1F',
+    borderWidth: 1.5,
+    borderColor: '#E8DEF8',
+    textAlign: 'center',
+    letterSpacing: 4,
+    marginTop: 4,
+  },
+  verifyInputError: {
+    borderColor: '#B3261E',
+  },
+  verifyError: {
+    fontSize: 12,
+    color: '#B3261E',
+    textAlign: 'center',
+  },
+  verifyBtns: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  verifyCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E8DEF8',
+    alignItems: 'center',
+  },
+  verifyCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B6278',
+  },
+  verifyConfirmBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: '#6750A4',
+    alignItems: 'center',
+  },
+  verifyConfirmText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+  },
 });
