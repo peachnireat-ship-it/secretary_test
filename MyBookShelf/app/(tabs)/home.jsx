@@ -276,9 +276,11 @@ export default function HomeScreen() {
       scrollViewRef.current?.scrollTo({ y: 0, animated: false });
       setStats(getStats());
       setUsername(getUsername());
-      setReadingBooks(getBooksByStatus('reading').slice(0, 3));
-      setWishlistBooks(getBooksByStatus('want_to_read').slice(0, 3));
-      setCompletedBooks(getBooksByStatus('completed').slice(0, 3));
+      const age = getAge();
+      const adultFilter = (b) => !(age > 0 && age < 19 && b.isAdult);
+      setReadingBooks(getBooksByStatus('reading').filter(adultFilter).slice(0, 3));
+      setWishlistBooks(getBooksByStatus('want_to_read').filter(adultFilter).slice(0, 3));
+      setCompletedBooks(getBooksByStatus('completed').filter(adultFilter).slice(0, 3));
 
       const weekKey = getWeekKey();
 
@@ -288,7 +290,6 @@ export default function HomeScreen() {
       }
       lastWeekKeyRef.current = weekKey;
 
-      const age = getAge();
       const missions = getWeeklyMissions(weekKey, age);
       setWeeklyMissions(missions);
       const progress = getWeeklyProgress();
