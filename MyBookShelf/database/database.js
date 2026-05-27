@@ -1047,3 +1047,44 @@ export const saveGuildId = (guildId) => {
 export const leaveGuild = () => {
   db.runSync("UPDATE user_stats SET guildId = '' WHERE id = 1");
 };
+
+// ── 독서 토론 ──────────────────────────────────────────────────────────────
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS book_discussions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bookId INTEGER DEFAULT NULL,
+    bookTitle TEXT DEFAULT '',
+    topic TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    questions TEXT DEFAULT '[]',
+    createdAt INTEGER,
+    updatedAt INTEGER
+  );
+`);
+
+export const getDiscussions = () =>
+  db.getAllSync('SELECT * FROM book_discussions ORDER BY createdAt DESC');
+
+export const getDiscussionById = (id) =>
+  db.getFirstSync('SELECT * FROM book_discussions WHERE id = ?', [id]);
+
+export const addDiscussion = ({ bookId, bookTitle, topic, content, questions }) => {
+  const now = Date.now();
+  const result = db.runSync(
+    `INSERT INTO book_discussions (bookId, bookTitle, topic, content, questions, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [bookId || null, bookTitle || '', topic, content || '', JSON.stringify(questions || []), now, now],
+  );
+  return result.lastInsertRowId;
+};
+
+export const updateDiscussion = ({ id, topic, content, questions }) => {
+  db.runSync(
+    `UPDATE book_discussions SET topic = ?, content = ?, questions = ?, updatedAt = ? WHERE id = ?`,
+    [topic, content || '', JSON.stringify(questions || []), Date.now(), id],
+  );
+};
+
+export const deleteDiscussion = (id) => {
+  db.runSync('DELETE FROM book_discussions WHERE id = ?', [id]);
+};
