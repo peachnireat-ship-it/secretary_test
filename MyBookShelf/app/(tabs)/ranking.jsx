@@ -1,7 +1,7 @@
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Keyboard, Modal, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Keyboard, Modal, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { getWeeklyScore, getSchool, saveSchool, getWeekKey, getSchoolLevel, saveSchoolLevel, getWeeklyDoubleXpEvent, getCompany, saveCompany, getCompanyType, saveCompanyType } from '../../database/database';
+import { getWeeklyScore, getSchool, saveSchool, getWeekKey, getSchoolLevel, saveSchoolLevel, getWeeklyDoubleXpEvent, getCompany, saveCompany, getCompanyType, saveCompanyType, getAge } from '../../database/database';
 
 const SCHOOL_POOL = [
   '서울과학고등학교', '경기과학고등학교', '광주과학고등학교',
@@ -272,6 +272,7 @@ export default function RankingScreen() {
   const [companySearchModalVisible, setCompanySearchModalVisible] = useState(false);
   const [companySearchQuery, setCompanySearchQuery] = useState('');
   const [companySearchResults, setCompanySearchResults] = useState([]);
+  const [userAge, setUserAge] = useState(0);
 
   const handleSearch = async () => {
     Keyboard.dismiss();
@@ -298,10 +299,12 @@ export default function RankingScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const age = getAge();
+      const excludeAdult = age > 0 && age < 19;
       const saved = getSchool();
       const savedLevel = getSchoolLevel();
       const key = getWeekKey();
-      const score = getWeeklyScore();
+      const score = getWeeklyScore(excludeAdult);
       setSchool(saved);
       setInputSchool(saved);
       setSchoolLevel(savedLevel);
@@ -325,6 +328,7 @@ export default function RankingScreen() {
         setCompanyRank(companyBoard.find((e) => e.isUser)?.rank ?? null);
       }
       setDoubleXpEvent(getWeeklyDoubleXpEvent());
+      setUserAge(age);
     }, [])
   );
 
@@ -334,7 +338,7 @@ export default function RankingScreen() {
     saveSchool(trimmed);
     saveSchoolLevel(selectedLevel);
     const key = getWeekKey();
-    const score = getWeeklyScore();
+    const score = getWeeklyScore(userAge > 0 && userAge < 19);
     const board = buildLeaderboard(trimmed, score, key);
     setSchool(trimmed);
     setSchoolLevel(selectedLevel);
@@ -364,7 +368,7 @@ export default function RankingScreen() {
     saveCompany(trimmed);
     saveCompanyType(selectedCompanyType);
     const key = getWeekKey();
-    const score = getWeeklyScore();
+    const score = getWeeklyScore(userAge > 0 && userAge < 19);
     const board = buildCompanyLeaderboard(trimmed, score, key);
     setCompany(trimmed);
     setCompanyType(selectedCompanyType);
@@ -392,7 +396,13 @@ export default function RankingScreen() {
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.modeToggleBtn, battleMode === 'company' && styles.modeToggleBtnActive]}
-        onPress={() => setBattleMode('company')}
+        onPress={() => {
+          if (userAge > 0 && userAge < 19) {
+            Alert.alert('참여 불가', '회사 대항전은 성인(19세 이상)만 참여할 수 있습니다.');
+            return;
+          }
+          setBattleMode('company');
+        }}
       >
         <Text style={[styles.modeToggleBtnText, battleMode === 'company' && styles.modeToggleBtnTextActive]}>
           🏢 회사

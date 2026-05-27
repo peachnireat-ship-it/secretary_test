@@ -668,7 +668,7 @@ export const getMonthlyReadingStats = (excludeAdult = false) => {
   return result;
 };
 
-export const getWeeklyProgress = () => {
+export const getWeeklyProgress = (excludeAdult = false) => {
   const now = new Date();
   const day = now.getDay();
   const diff = day === 0 ? -6 : 1 - day;
@@ -677,16 +677,19 @@ export const getWeeklyProgress = () => {
   weekStart.setHours(0, 0, 0, 0);
   const weekStartTs = weekStart.getTime();
 
+  const ac = excludeAdult ? ' AND isAdult != 1' : '';
   const completed = db.getFirstSync(
-    `SELECT COUNT(*) as count FROM books WHERE status = 'completed' AND endDate >= ?`,
+    `SELECT COUNT(*) as count FROM books WHERE status = 'completed' AND endDate >= ?${ac}`,
     [weekStartTs]
   )?.count ?? 0;
   const memos = db.getFirstSync(
-    `SELECT COUNT(*) as count FROM book_reviews WHERE createdAt >= ?`,
+    excludeAdult
+      ? `SELECT COUNT(*) as count FROM book_reviews br INNER JOIN books b ON br.bookId = b.id WHERE br.createdAt >= ? AND b.isAdult != 1`
+      : `SELECT COUNT(*) as count FROM book_reviews WHERE createdAt >= ?`,
     [weekStartTs]
   )?.count ?? 0;
   const added = db.getFirstSync(
-    `SELECT COUNT(*) as count FROM books WHERE createdAt >= ?`,
+    `SELECT COUNT(*) as count FROM books WHERE createdAt >= ?${ac}`,
     [weekStartTs]
   )?.count ?? 0;
   const streak = db.getFirstSync(
@@ -799,8 +802,8 @@ export const saveAge = (age) => {
   db.runSync('UPDATE user_stats SET age = ? WHERE id = 1', [age]);
 };
 
-export const getWeeklyScore = () => {
-  const progress = getWeeklyProgress();
+export const getWeeklyScore = (excludeAdult = false) => {
+  const progress = getWeeklyProgress(excludeAdult);
   const key = getWeekKey();
   const missionXp = db.getFirstSync(
     `SELECT COALESCE(SUM(xp), 0) as total FROM completed_missions WHERE weekKey = ?`,
