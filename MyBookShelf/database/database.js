@@ -110,6 +110,12 @@ try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN schoolLevel TEXT DEFAULT ''`);
 } catch (_) {}
 try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN company TEXT DEFAULT ''`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN companyType TEXT DEFAULT ''`);
+} catch (_) {}
+try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN age INTEGER DEFAULT 0`);
 } catch (_) {}
 try {
@@ -763,6 +769,24 @@ export const getSchoolLevel = () => {
 
 export const saveSchoolLevel = (level) => {
   db.runSync('UPDATE user_stats SET schoolLevel = ? WHERE id = 1', [level]);
+};
+
+export const getCompany = () => {
+  const row = db.getFirstSync('SELECT company FROM user_stats WHERE id = 1');
+  return row?.company || '';
+};
+
+export const saveCompany = (name) => {
+  db.runSync('UPDATE user_stats SET company = ? WHERE id = 1', [name.trim()]);
+};
+
+export const getCompanyType = () => {
+  const row = db.getFirstSync('SELECT companyType FROM user_stats WHERE id = 1');
+  return row?.companyType || '';
+};
+
+export const saveCompanyType = (type) => {
+  db.runSync('UPDATE user_stats SET companyType = ? WHERE id = 1', [type]);
 };
 
 export const getAge = () => {

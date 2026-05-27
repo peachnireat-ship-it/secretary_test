@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Keyboard, Modal, FlatList, ActivityIndicator } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { getWeeklyScore, getSchool, saveSchool, getWeekKey, getSchoolLevel, saveSchoolLevel, getWeeklyDoubleXpEvent } from '../../database/database';
+import { getWeeklyScore, getSchool, saveSchool, getWeekKey, getSchoolLevel, saveSchoolLevel, getWeeklyDoubleXpEvent, getCompany, saveCompany, getCompanyType, saveCompanyType } from '../../database/database';
 
 const SCHOOL_POOL = [
   '서울과학고등학교', '경기과학고등학교', '광주과학고등학교',
@@ -11,6 +11,13 @@ const SCHOOL_POOL = [
   '용인외국어고등학교', '인천외국어고등학교',
 ];
 
+const COMPANY_POOL = [
+  '삼성전자', 'LG전자', 'SK하이닉스', '현대자동차', '카카오',
+  '네이버', '쿠팡', '토스', '당근마켓', '크래프톤',
+  '넥슨', '엔씨소프트', '하이브', 'SM엔터테인먼트', '셀트리온',
+  'KB국민은행', '신한은행', '우리은행', '롯데쇼핑', 'CJ제일제당',
+];
+const COMPANY_TYPES = ['스타트업', '중소기업', '대기업', '프리랜서'];
 const MEDALS = ['🥇', '🥈', '🥉'];
 const SCHOOL_LEVELS = ['초등', '중학', '고등', '성인'];
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
@@ -84,6 +91,19 @@ function buildLeaderboard(userSchool, userScore, weekKey) {
   return all.map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 }
 
+function buildCompanyLeaderboard(userCompany, userScore, weekKey) {
+  const weekNum = parseInt(weekKey.replace('-W', ''), 10);
+  const pool = COMPANY_POOL.filter((c) => c !== userCompany);
+  const others = pool.map((company, i) => ({
+    company,
+    score: seededScore(weekNum * 200 + i),
+    isUser: false,
+  }));
+  const all = [...others, { company: userCompany, score: userScore, isUser: true }];
+  all.sort((a, b) => b.score - a.score);
+  return all.map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+}
+
 function getDaysLeftInWeek() {
   const day = new Date().getDay();
   return day === 0 ? 0 : 7 - day;
@@ -119,6 +139,14 @@ export default function RankingScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [battleMode, setBattleMode] = useState('school');
+  const [company, setCompany] = useState('');
+  const [inputCompany, setInputCompany] = useState('');
+  const [companyLeaderboard, setCompanyLeaderboard] = useState([]);
+  const [companyRank, setCompanyRank] = useState(null);
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [companyType, setCompanyType] = useState('');
+  const [selectedCompanyType, setSelectedCompanyType] = useState('');
 
   const handleSearch = async () => {
     Keyboard.dismiss();
@@ -159,6 +187,17 @@ export default function RankingScreen() {
         setLeaderboard(board);
         setUserRank(board.find((e) => e.isUser)?.rank ?? null);
       }
+      const savedCompany = getCompany();
+      const savedCompanyType = getCompanyType();
+      setCompany(savedCompany);
+      setInputCompany(savedCompany);
+      setCompanyType(savedCompanyType);
+      setSelectedCompanyType(savedCompanyType);
+      if (savedCompany) {
+        const companyBoard = buildCompanyLeaderboard(savedCompany, score, key);
+        setCompanyLeaderboard(companyBoard);
+        setCompanyRank(companyBoard.find((e) => e.isUser)?.rank ?? null);
+      }
       setDoubleXpEvent(getWeeklyDoubleXpEvent());
     }, [])
   );
@@ -180,18 +219,54 @@ export default function RankingScreen() {
     Keyboard.dismiss();
   };
 
+  const handleSaveCompany = () => {
+    const trimmed = inputCompany.trim();
+    if (!trimmed || !selectedCompanyType) return;
+    saveCompany(trimmed);
+    saveCompanyType(selectedCompanyType);
+    const key = getWeekKey();
+    const score = getWeeklyScore();
+    const board = buildCompanyLeaderboard(trimmed, score, key);
+    setCompany(trimmed);
+    setCompanyType(selectedCompanyType);
+    setUserScore(score);
+    setCompanyLeaderboard(board);
+    setCompanyRank(board.find((e) => e.isUser)?.rank ?? null);
+    setEditingCompany(false);
+    Keyboard.dismiss();
+  };
+
   const showSetup = !school || editing;
+  const showCompanySetup = !company || editingCompany;
 
   return (
     <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.headerBox}>
-        <Text style={styles.headerTitle}>🏆 학교 대항전</Text>
+      <View style={styles.modeToggleRow}>
+      <TouchableOpacity
+        style={[styles.modeToggleBtn, battleMode === 'school' && styles.modeToggleBtnActive]}
+        onPress={() => setBattleMode('school')}
+      >
+        <Text style={[styles.modeToggleBtnText, battleMode === 'school' && styles.modeToggleBtnTextActive]}>
+          🏫 학교
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.modeToggleBtn, battleMode === 'company' && styles.modeToggleBtnActive]}
+        onPress={() => setBattleMode('company')}
+      >
+        <Text style={[styles.modeToggleBtnText, battleMode === 'company' && styles.modeToggleBtnTextActive]}>
+          🏢 회사
+        </Text>
+      </TouchableOpacity>
+    </View>
+    <View style={styles.headerBox}>
+        <Text style={styles.headerTitle}>{battleMode === 'school' ? '🏆 학교 대항전' : '🏢 회사 대항전'}</Text>
         <Text style={styles.headerWeek}>{weekKey}</Text>
         <Text style={styles.headerDays}>이번 주 마감까지 {getDaysLeftInWeek()}일 남음</Text>
       </View>
 
-      {showSetup ? (
+      {battleMode === 'school' && (showSetup ? (
         <View style={styles.setupCard}>
           <Text style={styles.setupTitle}>학교를 등록해주세요</Text>
           <Text style={styles.setupDesc}>
@@ -296,7 +371,104 @@ export default function RankingScreen() {
             ))}
           </View>
         </>
-      )}
+      ))}
+
+      {battleMode === 'company' && (showCompanySetup ? (
+        <View style={styles.setupCard}>
+          <Text style={styles.setupTitle}>회사를 등록해주세요</Text>
+          <Text style={styles.setupDesc}>
+            회사 이름을 입력하면 대항전 순위에 참여할 수 있습니다
+          </Text>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.schoolInput}
+              placeholder="회사 이름 입력"
+              placeholderTextColor="#9E8FB2"
+              value={inputCompany}
+              onChangeText={setInputCompany}
+              onSubmitEditing={handleSaveCompany}
+              returnKeyType="done"
+            />
+          </View>
+          <Text style={styles.levelLabel}>회사 유형 선택</Text>
+          <View style={styles.levelRow}>
+            {COMPANY_TYPES.map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[styles.levelBtn, selectedCompanyType === type && styles.levelBtnActive]}
+                onPress={() => setSelectedCompanyType(type)}
+              >
+                <Text style={[styles.levelBtnText, selectedCompanyType === type && styles.levelBtnTextActive]}>
+                  {type}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={[styles.setupButton, (!inputCompany.trim() || !selectedCompanyType) && styles.setupButtonDisabled]}
+            onPress={handleSaveCompany}
+          >
+            <Text style={styles.setupButtonText}>등록하기</Text>
+          </TouchableOpacity>
+          {editingCompany && (
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setEditingCompany(false)}>
+              <Text style={styles.cancelButtonText}>취소</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <>
+          <View style={styles.myScoreCard}>
+            <View style={styles.myScoreLeft}>
+              <Text style={styles.myRankText}>{companyRank}위</Text>
+              <View>
+                <Text style={styles.mySchoolName}>{company}</Text>
+                <Text style={styles.myLevelText}>{companyType}</Text>
+                <TouchableOpacity onPress={() => setEditingCompany(true)}>
+                  <Text style={styles.changeSchoolText}>회사 변경</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.myScoreRight}>
+              <Text style={styles.myScoreLabel}>이번 주 점수</Text>
+              <Text style={styles.myScoreValue}>{userScore}pt</Text>
+            </View>
+          </View>
+
+          <DoubleXpBanner event={doubleXpEvent} />
+
+          <View style={styles.scoreGuide}>
+            <Text style={styles.scoreGuideTitle}>점수 산정 기준</Text>
+            <Text style={styles.scoreGuideText}>
+              완독 ×100 · 메모 ×10 · 신규책 ×20 · 연속독서일 ×15 · 미션 XP
+            </Text>
+          </View>
+
+          <View style={styles.leaderboardCard}>
+            <Text style={styles.leaderboardTitle}>전체 순위</Text>
+            {companyLeaderboard.map((entry) => (
+              <View
+                key={entry.company}
+                style={[styles.rankRow, entry.isUser && styles.rankRowUser]}
+              >
+                <Text style={[styles.rankNum, entry.rank <= 3 && styles.rankNumTop]}>
+                  {entry.rank <= 3 ? MEDALS[entry.rank - 1] : `${entry.rank}위`}
+                </Text>
+                <Text
+                  style={[styles.rankSchool, entry.isUser && styles.rankSchoolUser]}
+                  numberOfLines={1}
+                >
+                  {entry.company}
+                  {entry.isUser ? ' ⭐' : ''}
+                </Text>
+                <Text style={[styles.rankScore, entry.isUser && styles.rankScoreUser]}>
+                  {entry.score}pt
+                </Text>
+              </View>
+            ))}
+          </View>
+        </>
+      ))}
     </ScrollView>
 
     <Modal
@@ -571,4 +743,25 @@ const styles = StyleSheet.create({
   },
   doubleXpEndedTitle: { fontSize: 13, fontWeight: '700', color: '#757575' },
   doubleXpEndedSub: { fontSize: 12, color: '#9E9E9E', marginTop: 2 },
+  modeToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+  },
+  modeToggleBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 9,
+  },
+  modeToggleBtnActive: { backgroundColor: '#6750A4' },
+  modeToggleBtnText: { fontSize: 14, fontWeight: '700', color: '#49454F' },
+  modeToggleBtnTextActive: { color: '#fff' },
 });
