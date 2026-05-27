@@ -9,6 +9,8 @@ const SCHOOL_POOL = [
   '외대부고', '하나고등학교', '경기외국어고등학교',
   '한영외국어고등학교', '대원외국어고등학교', '서울외국어고등학교',
   '용인외국어고등학교', '인천외국어고등학교',
+  '서울대학교', '연세대학교', '고려대학교', 'KAIST', 'POSTECH',
+  '성균관대학교', '한양대학교', '이화여자대학교', '서강대학교', '중앙대학교',
 ];
 
 const COMPANY_POOL = [
@@ -19,7 +21,7 @@ const COMPANY_POOL = [
 ];
 const COMPANY_TYPES = ['스타트업', '중소기업', '대기업', '프리랜서'];
 const MEDALS = ['🥇', '🥈', '🥉'];
-const SCHOOL_LEVELS = ['초등', '중학', '고등', '성인'];
+const SCHOOL_LEVELS = ['초등', '중학', '고등', '대학', '성인'];
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 
 function DoubleXpBanner({ event }) {
@@ -170,6 +172,7 @@ export default function RankingScreen() {
     if (item.name.includes('초등학교')) setSelectedLevel('초등');
     else if (item.name.includes('중학교')) setSelectedLevel('중학');
     else if (item.name.includes('고등학교')) setSelectedLevel('고등');
+    else if (item.name.includes('대학교') || item.name.includes('대학원')) setSelectedLevel('대학');
     setSearchModalVisible(false);
   };
 
