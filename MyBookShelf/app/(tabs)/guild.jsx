@@ -7,7 +7,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  getUserId, getUsername, leaveGuild, getWeekKey,
+  getUserId, getUsername, leaveGuild, getWeekKey, getAge,
 } from '../../database/database';
 import {
   getGuildInfo, getGuildWeeklyScores, getGuildRankings,
@@ -346,6 +346,17 @@ export default function GuildScreen() {
     if (isAdultBook && guild?.agePolicy === 'minor') {
       Alert.alert('선정 불가', '성인 도서는 미성년자 전용 길드에서 선정할 수 없습니다.');
       return;
+    }
+    if (isAdultBook) {
+      const age = getAge();
+      if (age === 0) {
+        Alert.alert('성인 인증 필요', '성인 도서입니다.\n프로필에서 나이를 먼저 설정해주세요.');
+        return;
+      }
+      if (age < 19) {
+        Alert.alert('성인 도서 제한', '만 19세 이상만 성인 도서를 선정할 수 있습니다.');
+        return;
+      }
     }
     setReadingTitle(item.title || '');
     setReadingAuthor(cleanAladinAuthor(item.author));
