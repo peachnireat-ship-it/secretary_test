@@ -86,6 +86,17 @@ export default function AddBookScreen() {
 
   const selectBook = (item) => {
     const isAdultBook = item.adult === 1 || item.adult === '1';
+    if (isAdultBook) {
+      const age = getAge();
+      if (age === 0) {
+        Alert.alert('성인 인증 필요', '성인 도서입니다.\n프로필에서 나이를 먼저 설정해주세요.');
+        return;
+      }
+      if (age < 19) {
+        Alert.alert('성인 도서 제한', '만 19세 미만은 성인 도서를 추가할 수 없습니다.');
+        return;
+      }
+    }
     setTitle(item.title || '');
     setAuthor(cleanAladinAuthor(item.author));
     const pages = item.subInfo?.itemPage;
