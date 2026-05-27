@@ -637,11 +637,12 @@ export const saveUsername = (name) => {
   db.runSync('UPDATE user_stats SET username = ? WHERE id = 1', [name.trim()]);
 };
 
-export const getStats = () => {
-  const total = db.getFirstSync('SELECT COUNT(*) as count FROM books');
-  const completed = db.getFirstSync("SELECT COUNT(*) as count FROM books WHERE status = 'completed'");
-  const reading = db.getFirstSync("SELECT COUNT(*) as count FROM books WHERE status = 'reading'");
-  const want = db.getFirstSync("SELECT COUNT(*) as count FROM books WHERE status = 'want_to_read'");
+export const getStats = (excludeAdult = false) => {
+  const ac = excludeAdult ? ' AND isAdult != 1' : '';
+  const total = db.getFirstSync(`SELECT COUNT(*) as count FROM books WHERE 1=1${ac}`);
+  const completed = db.getFirstSync(`SELECT COUNT(*) as count FROM books WHERE status = 'completed'${ac}`);
+  const reading = db.getFirstSync(`SELECT COUNT(*) as count FROM books WHERE status = 'reading'${ac}`);
+  const want = db.getFirstSync(`SELECT COUNT(*) as count FROM books WHERE status = 'want_to_read'${ac}`);
   return {
     total: total?.count || 0,
     completed: completed?.count || 0,
@@ -650,15 +651,16 @@ export const getStats = () => {
   };
 };
 
-export const getMonthlyReadingStats = () => {
+export const getMonthlyReadingStats = (excludeAdult = false) => {
   const now = new Date();
   const result = [];
+  const ac = excludeAdult ? ' AND isAdult != 1' : '';
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
     const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
     const row = db.getFirstSync(
-      `SELECT COUNT(*) as count FROM books WHERE status = 'completed' AND COALESCE(endDate, createdAt) >= ? AND COALESCE(endDate, createdAt) <= ?`,
+      `SELECT COUNT(*) as count FROM books WHERE status = 'completed' AND COALESCE(endDate, createdAt) >= ? AND COALESCE(endDate, createdAt) <= ?${ac}`,
       [start, end]
     );
     result.push({ label: `${d.getMonth() + 1}월`, count: row?.count ?? 0 });

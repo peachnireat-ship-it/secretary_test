@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { getStats, getMonthlyReadingStats } from '../../database/database';
+import { getStats, getMonthlyReadingStats, getAge } from '../../database/database';
 
 function StatItem({ label, value, color }) {
   return (
@@ -121,8 +121,10 @@ export default function StatisticsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setStats(getStats());
-      setMonthlyStats(getMonthlyReadingStats());
+      const age = getAge();
+      const excludeAdult = age > 0 && age < 19;
+      setStats(getStats(excludeAdult));
+      setMonthlyStats(getMonthlyReadingStats(excludeAdult));
     }, [])
   );
 
