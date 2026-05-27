@@ -8,7 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { getBookById, updateBook, trackDailyReading, onBookCompleted, onBookReverted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, getTierInfo, isDoubleXpActive, getGuildId, getUserId, getUsername } from '../../database/database';
+import { getBookById, updateBook, trackDailyReading, onBookCompleted, onBookReverted, getBookReviews, insertBookReview, deleteBookReview, addXp, XP_REWARDS, getUserStats, getTierInfo, isDoubleXpActive, getGuildId, getUserId, getUsername, getAge } from '../../database/database';
 import { syncWeeklyScore } from '../../database/guildDatabase';
 import { GENRES, checkAndUnlockBadges } from '../../database/badges';
 import StatusBadge from '../../components/StatusBadge';
@@ -133,6 +133,18 @@ export default function BookDetailScreen() {
   };
 
   const selectBookInfo = (item) => {
+    const isAdultBook = item.adult === 1 || item.adult === '1';
+    if (isAdultBook) {
+      const age = getAge();
+      if (age === 0) {
+        Alert.alert('성인 인증 필요', '성인 도서입니다.\n프로필에서 나이를 먼저 설정해주세요.');
+        return;
+      }
+      if (age < 19) {
+        Alert.alert('성인 도서 제한', '만 19세 미만은 성인 도서로 정보를 변경할 수 없습니다.');
+        return;
+      }
+    }
     setEditTitle(item.title || editTitle);
     setEditAuthor(cleanAladinAuthor(item.author));
     const pages = item.subInfo?.itemPage;
