@@ -96,6 +96,7 @@ function normalizeAladinBook(item) {
     description: item.description || null,
     source: 'aladin',
     rawKey: String(item.itemId),
+    isAdult: item.adult === 1 || item.adult === '1',
   };
 }
 
@@ -135,6 +136,10 @@ export default function RecommendScreen() {
           items = (await fetchAladinBooks(keyword, target, ag)).map(normalizeAladinBook);
         }
       }
+      const userAge = getAge();
+      if (userAge > 0 && userAge < 19) {
+        items = items.filter((b) => !b.isAdult);
+      }
       setBooks(items);
     } catch {
       // 네트워크 오류 → 빈 목록 유지
@@ -150,7 +155,16 @@ export default function RecommendScreen() {
     }, [mode, catIdx, bookRegion])
   );
 
-  const openBook = (book) => setSelected(book);
+  const openBook = (book) => {
+    if (book.isAdult) {
+      const age = getAge();
+      if (age > 0 && age < 19) {
+        Alert.alert('성인 도서', '만 19세 미만은 성인 도서를 볼 수 없습니다.');
+        return;
+      }
+    }
+    setSelected(book);
+  };
 
   const closeModal = () => setSelected(null);
 
