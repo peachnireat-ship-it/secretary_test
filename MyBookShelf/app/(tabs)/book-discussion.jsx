@@ -389,7 +389,7 @@ export default function BookDiscussionScreen() {
                             <TouchableOpacity
                               key={opt.value}
                               style={[styles.typeOption, active && { borderColor: opt.color, backgroundColor: opt.color + '18' }]}
-                              onPress={() => setForm((f) => ({ ...f, discussionType: opt.value }))}
+                              onPress={() => setForm((f) => ({ ...f, discussionType: opt.value, questions: [''] }))}
                             >
                               <Ionicons name={opt.icon} size={20} color={active ? opt.color : '#BBB'} />
                               <Text style={[styles.typeOptionLabel, active && { color: opt.color, fontWeight: 'bold' }]}>
@@ -447,37 +447,39 @@ export default function BookDiscussionScreen() {
                     maxLength={500}
                   />
 
-                  {/* 질문 목록 */}
-                  <View style={styles.questionsHeader}>
-                    <Text style={styles.fieldLabel}>
-                      토론 질문{' '}
-                      <Text style={form.discussionType === 'qa' ? styles.requiredLabel : styles.optionalLabel}>
-                        {form.discussionType === 'qa' ? '*' : '(선택)'}
-                      </Text>
-                    </Text>
-                    <TouchableOpacity onPress={addQuestion} style={styles.addQBtn}>
-                      <Ionicons name="add-circle-outline" size={20} color="#6750A4" />
-                      <Text style={styles.addQBtnText}>추가</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {form.questions.map((q, idx) => (
-                    <View key={idx} style={styles.questionInputRow}>
-                      <Text style={styles.questionInputNum}>Q{idx + 1}</Text>
-                      <TextInput
-                        style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                        placeholder={`질문 ${idx + 1}`}
-                        placeholderTextColor="#bbb"
-                        value={q}
-                        onChangeText={(v) => setQuestion(idx, v)}
-                        maxLength={100}
-                      />
-                      {form.questions.length > 1 && (
-                        <TouchableOpacity onPress={() => removeQuestion(idx)} style={styles.removeQBtn}>
-                          <Ionicons name="remove-circle-outline" size={20} color="#E53935" />
+                  {/* 질문 목록 — qa 방식일 때만 표시 */}
+                  {form.discussionType === 'qa' && (
+                    <>
+                      <View style={styles.questionsHeader}>
+                        <Text style={styles.fieldLabel}>
+                          토론 질문{' '}
+                          <Text style={styles.requiredLabel}>*</Text>
+                        </Text>
+                        <TouchableOpacity onPress={addQuestion} style={styles.addQBtn}>
+                          <Ionicons name="add-circle-outline" size={20} color="#6750A4" />
+                          <Text style={styles.addQBtnText}>추가</Text>
                         </TouchableOpacity>
-                      )}
-                    </View>
-                  ))}
+                      </View>
+                      {form.questions.map((q, idx) => (
+                        <View key={idx} style={styles.questionInputRow}>
+                          <Text style={styles.questionInputNum}>Q{idx + 1}</Text>
+                          <TextInput
+                            style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                            placeholder={`질문 ${idx + 1}`}
+                            placeholderTextColor="#bbb"
+                            value={q}
+                            onChangeText={(v) => setQuestion(idx, v)}
+                            maxLength={100}
+                          />
+                          {form.questions.length > 1 && (
+                            <TouchableOpacity onPress={() => removeQuestion(idx)} style={styles.removeQBtn}>
+                              <Ionicons name="remove-circle-outline" size={20} color="#E53935" />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      ))}
+                    </>
+                  )}
 
                   <View style={{ height: 16 }} />
                 </ScrollView>
