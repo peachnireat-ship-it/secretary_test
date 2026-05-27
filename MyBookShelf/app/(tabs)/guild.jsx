@@ -347,6 +347,10 @@ export default function GuildScreen() {
       Alert.alert('선정 불가', '성인 도서는 미성년자 전용 길드에서 선정할 수 없습니다.');
       return;
     }
+    if (isAdultBook && members.some((m) => m.isAdult !== true)) {
+      Alert.alert('선정 불가', '길드에 미성년자 회원이 있어 성인 도서를 선정할 수 없습니다.');
+      return;
+    }
     if (isAdultBook) {
       const age = getAge();
       if (age === 0) {
