@@ -13,6 +13,109 @@ const SCHOOL_POOL = [
   '성균관대학교', '한양대학교', '이화여자대학교', '서강대학교', '중앙대학교',
 ];
 
+const UNIVERSITY_LIST = [
+  { name: '서울대학교', location: '서울특별시' },
+  { name: '연세대학교', location: '서울특별시' },
+  { name: '고려대학교', location: '서울특별시' },
+  { name: '성균관대학교', location: '서울특별시' },
+  { name: '한양대학교', location: '서울특별시' },
+  { name: '이화여자대학교', location: '서울특별시' },
+  { name: '서강대학교', location: '서울특별시' },
+  { name: '중앙대학교', location: '서울특별시' },
+  { name: '경희대학교', location: '서울특별시' },
+  { name: '한국외국어대학교', location: '서울특별시' },
+  { name: '서울시립대학교', location: '서울특별시' },
+  { name: '건국대학교', location: '서울특별시' },
+  { name: '동국대학교', location: '서울특별시' },
+  { name: '홍익대학교', location: '서울특별시' },
+  { name: '숙명여자대학교', location: '서울특별시' },
+  { name: '숭실대학교', location: '서울특별시' },
+  { name: '광운대학교', location: '서울특별시' },
+  { name: '명지대학교', location: '서울특별시' },
+  { name: '국민대학교', location: '서울특별시' },
+  { name: '덕성여자대학교', location: '서울특별시' },
+  { name: '동덕여자대학교', location: '서울특별시' },
+  { name: '서울여자대학교', location: '서울특별시' },
+  { name: '성신여자대학교', location: '서울특별시' },
+  { name: '세종대학교', location: '서울특별시' },
+  { name: '상명대학교', location: '서울특별시' },
+  { name: '삼육대학교', location: '서울특별시' },
+  { name: '한성대학교', location: '서울특별시' },
+  { name: '서울과학기술대학교', location: '서울특별시' },
+  { name: '서울교육대학교', location: '서울특별시' },
+  { name: '한국예술종합학교', location: '서울특별시' },
+  { name: '한국방송통신대학교', location: '서울특별시' },
+  { name: 'KAIST', location: '대전광역시' },
+  { name: '한국과학기술원', location: '대전광역시' },
+  { name: 'POSTECH', location: '경상북도' },
+  { name: '포항공과대학교', location: '경상북도' },
+  { name: 'UNIST', location: '울산광역시' },
+  { name: '울산과학기술원', location: '울산광역시' },
+  { name: 'DGIST', location: '대구광역시' },
+  { name: '대구경북과학기술원', location: '대구광역시' },
+  { name: 'GIST', location: '광주광역시' },
+  { name: '광주과학기술원', location: '광주광역시' },
+  { name: '인하대학교', location: '인천광역시' },
+  { name: '아주대학교', location: '경기도' },
+  { name: '가천대학교', location: '경기도' },
+  { name: '경기대학교', location: '경기도' },
+  { name: '강남대학교', location: '경기도' },
+  { name: '단국대학교', location: '경기도' },
+  { name: '수원대학교', location: '경기도' },
+  { name: '성결대학교', location: '경기도' },
+  { name: '안양대학교', location: '경기도' },
+  { name: '평택대학교', location: '경기도' },
+  { name: '협성대학교', location: '경기도' },
+  { name: '대진대학교', location: '경기도' },
+  { name: '신한대학교', location: '경기도' },
+  { name: '차의과학대학교', location: '경기도' },
+  { name: '한국항공대학교', location: '경기도' },
+  { name: '경인교육대학교', location: '경기도' },
+  { name: '가톨릭대학교', location: '경기도' },
+  { name: '부산대학교', location: '부산광역시' },
+  { name: '동아대학교', location: '부산광역시' },
+  { name: '부경대학교', location: '부산광역시' },
+  { name: '동의대학교', location: '부산광역시' },
+  { name: '신라대학교', location: '부산광역시' },
+  { name: '경성대학교', location: '부산광역시' },
+  { name: '경북대학교', location: '대구광역시' },
+  { name: '계명대학교', location: '대구광역시' },
+  { name: '영남대학교', location: '경상북도' },
+  { name: '한동대학교', location: '경상북도' },
+  { name: '경상국립대학교', location: '경상남도' },
+  { name: '인제대학교', location: '경상남도' },
+  { name: '창원대학교', location: '경상남도' },
+  { name: '경남대학교', location: '경상남도' },
+  { name: '울산대학교', location: '울산광역시' },
+  { name: '전남대학교', location: '광주광역시' },
+  { name: '조선대학교', location: '광주광역시' },
+  { name: '전북대학교', location: '전라북도' },
+  { name: '전주대학교', location: '전라북도' },
+  { name: '원광대학교', location: '전라북도' },
+  { name: '군산대학교', location: '전라북도' },
+  { name: '목포대학교', location: '전라남도' },
+  { name: '순천대학교', location: '전라남도' },
+  { name: '목포해양대학교', location: '전라남도' },
+  { name: '충남대학교', location: '대전광역시' },
+  { name: '한남대학교', location: '대전광역시' },
+  { name: '배재대학교', location: '대전광역시' },
+  { name: '우송대학교', location: '대전광역시' },
+  { name: '대전대학교', location: '대전광역시' },
+  { name: '목원대학교', location: '대전광역시' },
+  { name: '공주대학교', location: '충청남도' },
+  { name: '순천향대학교', location: '충청남도' },
+  { name: '남서울대학교', location: '충청남도' },
+  { name: '충북대학교', location: '충청북도' },
+  { name: '청주대학교', location: '충청북도' },
+  { name: '서원대학교', location: '충청북도' },
+  { name: '한국교통대학교', location: '충청북도' },
+  { name: '강원대학교', location: '강원도' },
+  { name: '한림대학교', location: '강원도' },
+  { name: '강릉원주대학교', location: '강원도' },
+  { name: '가톨릭관동대학교', location: '강원도' },
+  { name: '제주대학교', location: '제주특별자치도' },
+];
+
 const COMPANY_POOL = [
   '삼성전자', 'LG전자', 'SK하이닉스', '현대자동차', '카카오',
   '네이버', '쿠팡', '토스', '당근마켓', '크래프톤',
@@ -111,19 +214,36 @@ function getDaysLeftInWeek() {
   return day === 0 ? 0 : 7 - day;
 }
 
+function searchUniversitiesLocal(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return UNIVERSITY_LIST
+    .filter((u) => u.name.toLowerCase().includes(q))
+    .map((u) => ({ name: u.name, location: u.location, address: '', type: '대학교' }));
+}
+
 async function searchSchools(query) {
   if (!query.trim()) return [];
-  const url = `https://open.neis.go.kr/hub/schoolInfo?Type=json&SCHUL_NM=${encodeURIComponent(query.trim())}&pSize=20`;
-  const res = await fetch(url);
-  const json = await res.json();
-  const info = json.schoolInfo;
-  if (!info || !info[1]?.row) return [];
-  return info[1].row.map((s) => ({
-    name: s.SCHUL_NM,
-    location: s.LCTN_SC_NM,
-    address: s.ORG_RDNMA,
-    type: s.SCHUL_KND_SC_NM,
-  }));
+  const [neisResult, uniResult] = await Promise.allSettled([
+    (async () => {
+      const url = `https://open.neis.go.kr/hub/schoolInfo?Type=json&SCHUL_NM=${encodeURIComponent(query.trim())}&pSize=20`;
+      const res = await fetch(url);
+      const json = await res.json();
+      const info = json.schoolInfo;
+      if (!info || !info[1]?.row) return [];
+      return info[1].row.map((s) => ({
+        name: s.SCHUL_NM,
+        location: s.LCTN_SC_NM,
+        address: s.ORG_RDNMA,
+        type: s.SCHUL_KND_SC_NM,
+      }));
+    })(),
+    Promise.resolve(searchUniversitiesLocal(query)),
+  ]);
+  const neis = neisResult.status === 'fulfilled' ? neisResult.value : [];
+  const unis = uniResult.status === 'fulfilled' ? uniResult.value : [];
+  const seen = new Set(neis.map((s) => s.name));
+  return [...neis, ...unis.filter((u) => !seen.has(u.name))];
 }
 
 export default function RankingScreen() {
