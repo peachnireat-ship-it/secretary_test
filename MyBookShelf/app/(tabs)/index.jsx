@@ -2,7 +2,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getAllBooks, getBooksByStatus, deleteBook, getGuildId, getUserId, getUsername } from '../../database/database';
+import { getAllBooks, getBooksByStatus, deleteBook, getGuildId, getUserId, getUsername, getAge } from '../../database/database';
 import { revokeInvalidBadges } from '../../database/badges';
 import { syncWeeklyScore } from '../../database/guildDatabase';
 import BookCard from '../../components/BookCard';
@@ -20,23 +20,28 @@ export default function LibraryScreen() {
   const [books, setBooks] = useState([]);
   const [activeTab, setActiveTab] = useState('all');
 
+  const filterAdult = useCallback((list) => {
+    const age = getAge();
+    return age > 0 && age < 19 ? list.filter((b) => !b.isAdult) : list;
+  }, []);
+
   const loadBooks = useCallback((tab) => {
     const key = tab || activeTab;
     const data = key === 'all' ? getAllBooks() : getBooksByStatus(key);
-    setBooks(data);
-  }, [activeTab]);
+    setBooks(filterAdult(data));
+  }, [activeTab, filterAdult]);
 
   useFocusEffect(
     useCallback(() => {
       const pendingStatus = takePendingLibraryStatus();
       if (pendingStatus && TABS.some(t => t.key === pendingStatus)) {
         setActiveTab(pendingStatus);
-        setBooks(getBooksByStatus(pendingStatus));
+        setBooks(filterAdult(getBooksByStatus(pendingStatus)));
       } else {
         setActiveTab('all');
-        setBooks(getAllBooks());
+        setBooks(filterAdult(getAllBooks()));
       }
-    }, [])
+    }, [filterAdult])
   );
 
   const handleTabChange = (tabKey) => {
