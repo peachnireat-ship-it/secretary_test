@@ -1061,6 +1061,18 @@ db.execSync(`
     updatedAt INTEGER
   );
 `);
+try { db.execSync(`ALTER TABLE book_discussions ADD COLUMN discussionType TEXT DEFAULT 'debate'`); } catch (_) {}
+
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS discussion_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discussionId INTEGER NOT NULL,
+    vote TEXT DEFAULT NULL,
+    questionIndex INTEGER DEFAULT NULL,
+    content TEXT NOT NULL,
+    createdAt INTEGER NOT NULL
+  );
+`);
 
 export const getDiscussions = () =>
   db.getAllSync('SELECT * FROM book_discussions ORDER BY createdAt DESC');
@@ -1068,12 +1080,12 @@ export const getDiscussions = () =>
 export const getDiscussionById = (id) =>
   db.getFirstSync('SELECT * FROM book_discussions WHERE id = ?', [id]);
 
-export const addDiscussion = ({ bookId, bookTitle, topic, content, questions }) => {
+export const addDiscussion = ({ bookId, bookTitle, topic, content, questions, discussionType }) => {
   const now = Date.now();
   const result = db.runSync(
-    `INSERT INTO book_discussions (bookId, bookTitle, topic, content, questions, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [bookId || null, bookTitle || '', topic, content || '', JSON.stringify(questions || []), now, now],
+    `INSERT INTO book_discussions (bookId, bookTitle, topic, content, questions, discussionType, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [bookId || null, bookTitle || '', topic, content || '', JSON.stringify(questions || []), discussionType || 'debate', now, now],
   );
   return result.lastInsertRowId;
 };
@@ -1086,5 +1098,20 @@ export const updateDiscussion = ({ id, topic, content, questions }) => {
 };
 
 export const deleteDiscussion = (id) => {
+  db.runSync('DELETE FROM discussion_comments WHERE discussionId = ?', [id]);
   db.runSync('DELETE FROM book_discussions WHERE id = ?', [id]);
+};
+
+export const getComments = (discussionId) =>
+  db.getAllSync('SELECT * FROM discussion_comments WHERE discussionId = ? ORDER BY createdAt ASC', [discussionId]);
+
+export const addComment = ({ discussionId, vote, questionIndex, content }) => {
+  db.runSync(
+    `INSERT INTO discussion_comments (discussionId, vote, questionIndex, content, createdAt) VALUES (?, ?, ?, ?, ?)`,
+    [discussionId, vote || null, questionIndex ?? null, content, Date.now()],
+  );
+};
+
+export const deleteComment = (id) => {
+  db.runSync('DELETE FROM discussion_comments WHERE id = ?', [id]);
 };
