@@ -7,11 +7,11 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import { insertBook } from '../database/database';
+import { insertBook, getAge } from '../database/database';
 import { GENRES, checkAndUnlockBadges } from '../database/badges';
 import BookShareCard from '../components/BookShareCard';
 
-const ALADIN_TTB_KEY = '***ALADIN_TTB_KEY_REMOVED***';
+const ALADIN_TTB_KEY = process.env.EXPO_PUBLIC_ALADIN_TTB_KEY;
 const cleanAladinAuthor = (str) =>
   str ? str.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() || '저자 미상' : '저자 미상';
 
@@ -55,6 +55,7 @@ export default function AddBookScreen() {
   const [genre, setGenre] = useState('');
   const [review, setReview] = useState('');
   const [coverImage, setCoverImage] = useState('');
+  const [isAdult, setIsAdult] = useState(false);
 
   const handleSearch = async () => {
     const q = searchQuery.trim();
@@ -84,11 +85,13 @@ export default function AddBookScreen() {
   };
 
   const selectBook = (item) => {
+    const isAdultBook = item.adult === 1 || item.adult === '1';
     setTitle(item.title || '');
     setAuthor(cleanAladinAuthor(item.author));
     const pages = item.subInfo?.itemPage;
     if (pages && pages > 0) setTotalPages(String(pages));
     setCoverImage(item.cover || '');
+    setIsAdult(isAdultBook);
     setSearchResults([]);
     setSearchQuery('');
   };
@@ -111,6 +114,17 @@ export default function AddBookScreen() {
       Alert.alert('알림', '책 제목을 입력해주세요.');
       return;
     }
+    if (isAdult) {
+      const age = getAge();
+      if (age === 0) {
+        Alert.alert('성인 인증 필요', '성인 도서입니다.\n프로필에서 나이를 먼저 설정해주세요.');
+        return;
+      }
+      if (age < 19) {
+        Alert.alert('성인 도서 제한', '만 19세 이상만 성인 도서를 추가할 수 있습니다.');
+        return;
+      }
+    }
     insertBook({
       title: title.trim(),
       author: author.trim(),
@@ -120,6 +134,7 @@ export default function AddBookScreen() {
       genre,
       review: review.trim(),
       cover: coverImage,
+      isAdult,
     });
     checkAndUnlockBadges();
     router.back();
