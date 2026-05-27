@@ -248,13 +248,17 @@ const THEMED_MISSIONS = {
 
 function detectGuildTheme(keywords) {
   if (!keywords || keywords.length === 0) return null;
+  const scores = {};
   for (const kw of keywords) {
     const lower = kw.toLowerCase().replace(/\s/g, '');
     for (const { theme, patterns } of KEYWORD_THEME_MAP) {
-      if (patterns.some(p => lower.includes(p) || p.includes(lower))) return theme;
+      if (patterns.some(p => lower.includes(p) || (p.length >= 2 && p.includes(lower)))) {
+        scores[theme] = (scores[theme] ?? 0) + 1;
+      }
     }
   }
-  return null;
+  if (Object.keys(scores).length === 0) return null;
+  return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 }
 
 export function getGuildThemeMissions(keywords, weekKey) {
