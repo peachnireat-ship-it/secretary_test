@@ -147,6 +147,9 @@ export default function RankingScreen() {
   const [editingCompany, setEditingCompany] = useState(false);
   const [companyType, setCompanyType] = useState('');
   const [selectedCompanyType, setSelectedCompanyType] = useState('');
+  const [companySearchModalVisible, setCompanySearchModalVisible] = useState(false);
+  const [companySearchQuery, setCompanySearchQuery] = useState('');
+  const [companySearchResults, setCompanySearchResults] = useState([]);
 
   const handleSearch = async () => {
     Keyboard.dismiss();
@@ -217,6 +220,19 @@ export default function RankingScreen() {
     setUserRank(board.find((e) => e.isUser)?.rank ?? null);
     setEditing(false);
     Keyboard.dismiss();
+  };
+
+  const handleCompanySearch = (query) => {
+    const q = (query ?? companySearchQuery).toLowerCase().trim();
+    const results = q
+      ? COMPANY_POOL.filter((name) => name.toLowerCase().includes(q))
+      : COMPANY_POOL;
+    setCompanySearchResults(results);
+  };
+
+  const handleSelectCompany = (name) => {
+    setInputCompany(name);
+    setCompanySearchModalVisible(false);
   };
 
   const handleSaveCompany = () => {
@@ -389,6 +405,16 @@ export default function RankingScreen() {
               onSubmitEditing={handleSaveCompany}
               returnKeyType="done"
             />
+            <TouchableOpacity
+              style={styles.searchIconBtn}
+              onPress={() => {
+                setCompanySearchQuery(inputCompany);
+                handleCompanySearch(inputCompany);
+                setCompanySearchModalVisible(true);
+              }}
+            >
+              <Text style={styles.searchIconText}>🔍</Text>
+            </TouchableOpacity>
           </View>
           <Text style={styles.levelLabel}>회사 유형 선택</Text>
           <View style={styles.levelRow}>
@@ -512,6 +538,53 @@ export default function RankingScreen() {
               <Text style={styles.resultName}>{item.name}</Text>
               <Text style={styles.resultSub}>{item.type} · {item.location}</Text>
               <Text style={styles.resultAddr} numberOfLines={1}>{item.address}</Text>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    </Modal>
+
+    <Modal
+      visible={companySearchModalVisible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setCompanySearchModalVisible(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>회사 검색</Text>
+          <TouchableOpacity onPress={() => setCompanySearchModalVisible(false)}>
+            <Text style={styles.modalClose}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.modalSearchRow}>
+          <TextInput
+            style={styles.modalInput}
+            placeholder="회사 이름을 입력하세요"
+            placeholderTextColor="#9E8FB2"
+            value={companySearchQuery}
+            onChangeText={(text) => {
+              setCompanySearchQuery(text);
+              handleCompanySearch(text);
+            }}
+            returnKeyType="search"
+            onSubmitEditing={() => handleCompanySearch(companySearchQuery)}
+            autoFocus
+          />
+          <TouchableOpacity style={styles.modalSearchBtn} onPress={() => handleCompanySearch(companySearchQuery)}>
+            <Text style={styles.modalSearchBtnText}>검색</Text>
+          </TouchableOpacity>
+        </View>
+        {companySearchResults.length === 0 && companySearchQuery.trim().length > 0 && (
+          <Text style={styles.noResult}>검색 결과가 없습니다</Text>
+        )}
+        <FlatList
+          data={companySearchResults}
+          keyExtractor={(item) => item}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectCompany(item)}>
+              <Text style={styles.resultName}>{item}</Text>
             </TouchableOpacity>
           )}
         />
