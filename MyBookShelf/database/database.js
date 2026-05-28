@@ -134,6 +134,12 @@ try {
   db.execSync(`ALTER TABLE book_reviews ADD COLUMN xpEarned INTEGER DEFAULT 10`);
 } catch (_) {}
 try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN todayMemoCount INTEGER DEFAULT 0`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN lastMemoDay INTEGER DEFAULT 0`);
+} catch (_) {}
+try {
   db.execSync(`ALTER TABLE books ADD COLUMN xpEarned INTEGER DEFAULT 0`);
 } catch (_) {}
 try {
@@ -365,6 +371,9 @@ export function isDoubleXpActive() {
 }
 
 // XP 보상 상수
+const MEMO_MIN_LENGTH = 20;
+const MEMO_DAILY_LIMIT = 5;
+
 export const XP_REWARDS = {
   BOOK_COMPLETE: 100,       // 완독 1권
   DAILY_PAGES_100: 30,      // 하루 독서 합산 100페이지 달성
@@ -756,13 +765,60 @@ export const insertBookReview = (bookId, content, type = 'memo') => {
     [bookId]
   );
   const nextSeq = row?.nextSeq ?? 1;
-  const multiplier = isDoubleXpActive() ? 2 : 1;
-  const xpEarned = XP_REWARDS.MEMO_ADD * multiplier;
+
+  let xpEarned = 0;
+  let reason = null;
+
+  if (type === 'memo') {
+    const trimmed = content.trim();
+
+    // 1. 최소 글자 수 (20자)
+    if (trimmed.length < MEMO_MIN_LENGTH) {
+      reason = 'too_short';
+    }
+
+    // 2. 중복 내용
+    if (!reason) {
+      const existing = db.getAllSync(
+        'SELECT content FROM book_reviews WHERE bookId = ? AND type = ?',
+        [bookId, 'memo']
+      );
+      const lower = trimmed.toLowerCase();
+      const isDuplicate = existing.some((r) => r.content.trim().toLowerCase() === lower);
+      if (isDuplicate) reason = 'duplicate';
+    }
+
+    // 3. 일일 XP 한도 (5건)
+    if (!reason) {
+      const todayTs = new Date().setHours(0, 0, 0, 0);
+      const stats = db.getFirstSync(
+        'SELECT todayMemoCount, lastMemoDay FROM user_stats WHERE id = 1'
+      );
+      const lastMemoDay = stats?.lastMemoDay ?? 0;
+      const todayMemoCount = lastMemoDay === todayTs ? (stats?.todayMemoCount ?? 0) : 0;
+
+      if (todayMemoCount >= MEMO_DAILY_LIMIT) {
+        reason = 'daily_limit';
+      } else {
+        const multiplier = isDoubleXpActive() ? 2 : 1;
+        xpEarned = XP_REWARDS.MEMO_ADD * multiplier;
+        db.runSync(
+          'UPDATE user_stats SET todayMemoCount = ?, lastMemoDay = ? WHERE id = 1',
+          [todayMemoCount + 1, todayTs]
+        );
+      }
+    }
+  } else {
+    const multiplier = isDoubleXpActive() ? 2 : 1;
+    xpEarned = XP_REWARDS.MEMO_ADD * multiplier;
+  }
+
+  if (xpEarned > 0) addXp(xpEarned);
   db.runSync(
     'INSERT INTO book_reviews (bookId, sequence, content, type, createdAt, xpEarned) VALUES (?, ?, ?, ?, ?, ?)',
     [bookId, nextSeq, content, type, Date.now(), xpEarned]
   );
-  addXp(xpEarned);
+  return { xpGranted: xpEarned, reason };
 };
 
 export const deleteBookReview = (id) => {

@@ -250,6 +250,7 @@ export default function BookDiscussionScreen() {
     '선정적 / 음란 내용',
     '허위 정보',
     '내용 부실 / 성의 없는 글',
+    '괴롭힘 / 분쟁 유도',
     '기타',
   ];
 

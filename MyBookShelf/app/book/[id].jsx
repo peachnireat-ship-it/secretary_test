@@ -34,6 +34,7 @@ export default function BookDetailScreen() {
   const [review, setReview] = useState('');
   const [reviews, setReviews] = useState([]);
   const [newReviewText, setNewReviewText] = useState('');
+  const [memoXpNotice, setMemoXpNotice] = useState(null);
   const [currentPage, setCurrentPage] = useState('');
   const [startDateStr, setStartDateStr] = useState('');
   const [endDateStr, setEndDateStr] = useState('');
@@ -158,13 +159,25 @@ export default function BookDetailScreen() {
     const text = newReviewText.trim();
     if (!text) return;
     const prevLevel = getUserStats().level;
-    insertBookReview(parseInt(id), text);
+    const { reason } = insertBookReview(parseInt(id), text);
     setNewReviewText('');
     loadReviews();
     checkAndUnlockBadges();
-    const newStats = getUserStats();
-    if (newStats.level > prevLevel) {
-      setLevelUpModal({ visible: true, ...getTierInfo(newStats.level), navigateBack: false });
+
+    if (reason) {
+      const msg = {
+        too_short: `메모가 너무 짧아요 (20자 미만). 경험치가 지급되지 않았습니다.`,
+        duplicate: `이미 같은 내용의 메모가 있어요. 경험치가 지급되지 않았습니다.`,
+        daily_limit: `오늘의 메모 경험치 한도(${5}건)에 도달했어요.`,
+      };
+      setMemoXpNotice(msg[reason] ?? '경험치가 지급되지 않았습니다.');
+      setTimeout(() => setMemoXpNotice(null), 4000);
+    } else {
+      setMemoXpNotice(null);
+      const newStats = getUserStats();
+      if (newStats.level > prevLevel) {
+        setLevelUpModal({ visible: true, ...getTierInfo(newStats.level), navigateBack: false });
+      }
     }
   };
 
@@ -691,6 +704,11 @@ export default function BookDetailScreen() {
             <Text style={styles.reviewAddText}>추가</Text>
           </TouchableOpacity>
         </View>
+        {memoXpNotice && (
+          <View style={styles.memoXpNotice}>
+            <Text style={styles.memoXpNoticeText}>⚠ {memoXpNotice}</Text>
+          </View>
+        )}
 
         {book.status === 'completed' && (
           <>
@@ -866,6 +884,18 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   reviewAddText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  memoXpNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#F57C00',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 4,
+  },
+  memoXpNoticeText: { fontSize: 12, color: '#E65100', flex: 1, lineHeight: 18 },
   reviewTextarea: { height: 120, marginBottom: 8 },
   infoEditToggle: {
     borderWidth: 1,

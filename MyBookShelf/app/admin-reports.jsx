@@ -29,6 +29,7 @@ export default function AdminReportsScreen() {
   const [expandedUsers, setExpandedUsers] = useState({});
   const [highlightedUser, setHighlightedUser] = useState(null);
   const [suspendModal, setSuspendModal] = useState({ visible: false, username: '', days: '' });
+  const [selectedItems, setSelectedItems] = useState(new Set());
 
   const load = useCallback(() => {
     setGroups(getReportGroups());
@@ -135,6 +136,46 @@ export default function AdminReportsScreen() {
     Alert.alert('정지 해제', `'${username}' 계정의 정지를 해제하시겠습니까?`, [
       { text: '취소', style: 'cancel' },
       { text: '해제', onPress: () => { unbanUser(username); load(); } },
+    ]);
+  };
+
+  const toggleItem = (targetType, targetId) => {
+    const key = `${targetType}-${targetId}`;
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleAllForUser = (items) => {
+    const keys = items.map((c) => `${c.targetType}-${c.targetId}`);
+    const allSelected = keys.every((k) => selectedItems.has(k));
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      if (allSelected) keys.forEach((k) => next.delete(k));
+      else keys.forEach((k) => next.add(k));
+      return next;
+    });
+  };
+
+  const handleDismissSelected = (items) => {
+    const selected = items.filter((c) => selectedItems.has(`${c.targetType}-${c.targetId}`));
+    Alert.alert('선택 신고 무시', `선택한 ${selected.length}건을 무시하시겠습니까?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '무시',
+        onPress: () => {
+          selected.forEach((c) => dismissReportsForTarget(c.targetType, c.targetId));
+          setSelectedItems((prev) => {
+            const next = new Set(prev);
+            selected.forEach((c) => next.delete(`${c.targetType}-${c.targetId}`));
+            return next;
+          });
+          load();
+        },
+      },
     ]);
   };
 
@@ -264,6 +305,11 @@ export default function AdminReportsScreen() {
 
     const isHighlighted = item.username === highlightedUser;
 
+    const allKeysForUser = item.items.map((c) => `${c.targetType}-${c.targetId}`);
+    const selectedCountForUser = allKeysForUser.filter((k) => selectedItems.has(k)).length;
+    const allSelectedForUser = allKeysForUser.length > 0 && selectedCountForUser === allKeysForUser.length;
+    const someSelectedForUser = selectedCountForUser > 0;
+
     return (
       <View style={[styles.card, isHighlighted && styles.cardHighlighted]}>
         {/* 사용자 헤더 — 탭으로 트리 접기/펼치기 */}
@@ -286,12 +332,34 @@ export default function AdminReportsScreen() {
 
         {isExpanded && <View style={styles.treeDivider} />}
 
+        {/* 전체 선택 */}
+        {isExpanded && (
+          <TouchableOpacity
+            style={styles.selectAllRow}
+            onPress={() => toggleAllForUser(item.items)}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={allSelectedForUser ? 'checkbox' : someSelectedForUser ? 'remove-circle-outline' : 'square-outline'}
+              size={20}
+              color={someSelectedForUser ? '#6750A4' : '#BDBDBD'}
+            />
+            <Text style={styles.selectAllText}>전체 선택</Text>
+            {someSelectedForUser && (
+              <View style={styles.selectedCountBadge}>
+                <Text style={styles.selectedCountBadgeText}>{selectedCountForUser}건 선택됨</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+
         {/* 트리 — 신고된 콘텐츠 목록 */}
         {isExpanded && (
           <View style={styles.treeContainer}>
             {item.items.map((content, idx) => {
               const isComment = content.targetType === 'comment';
               const isLast = idx === item.items.length - 1;
+              const isItemSelected = selectedItems.has(`${content.targetType}-${content.targetId}`);
               const reasons = content.reasons ? content.reasons.split(',').filter(Boolean) : [];
               const reporters = content.reporters
                 ? content.reporters.split(',').filter(Boolean).map((entry) => {
@@ -314,7 +382,7 @@ export default function AdminReportsScreen() {
                   </View>
 
                   {/* 콘텐츠 카드 */}
-                  <View style={styles.treeCard}>
+                  <View style={[styles.treeCard, isItemSelected && styles.treeCardSelected]}>
                     {/* 1. 게시글+제목 '의' 토론 게시글 중 제목 */}
                     {isComment && !!content.parentDiscussionTopic && (
                       <View style={styles.parentContextRow}>
@@ -343,6 +411,17 @@ export default function AdminReportsScreen() {
 
                     {/* 3. 유형 배지 + 신고 건수 + 원문 보기(오른쪽 끝) */}
                     <View style={styles.treeMetaRow}>
+                      <TouchableOpacity
+                        onPress={() => toggleItem(content.targetType, content.targetId)}
+                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={isItemSelected ? 'checkbox' : 'square-outline'}
+                          size={20}
+                          color={isItemSelected ? '#6750A4' : '#BDBDBD'}
+                        />
+                      </TouchableOpacity>
                       <View style={[styles.typeBadge, { backgroundColor: isComment ? '#0277BD' : '#6750A4' }]}>
                         <Text style={styles.typeBadgeText}>{isComment ? '댓글' : '토론글'}</Text>
                       </View>
@@ -394,11 +473,13 @@ export default function AdminReportsScreen() {
         <View style={styles.actions}>
           <TouchableOpacity
             style={styles.dismissBtn}
-            onPress={() => handleDismissUser(item.username)}
+            onPress={() => someSelectedForUser ? handleDismissSelected(item.items) : handleDismissUser(item.username)}
             activeOpacity={0.8}
           >
             <Ionicons name="checkmark-circle-outline" size={15} color="#6750A4" />
-            <Text style={styles.dismissBtnText}>신고 무시</Text>
+            <Text style={styles.dismissBtnText}>
+              {someSelectedForUser ? `선택 무시 (${selectedCountForUser}건)` : '신고 무시'}
+            </Text>
           </TouchableOpacity>
           {isRestricted ? (
             <TouchableOpacity
@@ -743,6 +824,25 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   viewOriginalText: { fontSize: 12, color: '#6750A4', fontWeight: '600' },
+  selectAllRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  selectAllText: { fontSize: 13, color: '#424242', fontWeight: '600', flex: 1 },
+  selectedCountBadge: {
+    backgroundColor: '#F3EEFF',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  selectedCountBadgeText: { fontSize: 11, fontWeight: '700', color: '#6750A4' },
+  treeCardSelected: {
+    borderColor: '#6750A4',
+    backgroundColor: '#F3EEFF',
+  },
   reporterListContainer: { gap: 6 },
   reporterListRow: {
     gap: 2,
