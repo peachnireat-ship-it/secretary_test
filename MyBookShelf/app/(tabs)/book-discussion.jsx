@@ -205,6 +205,7 @@ export default function BookDiscussionScreen() {
     '개인정보 노출',
     '선정적 / 음란 내용',
     '허위 정보',
+    '내용 부실 / 성의 없는 글',
     '기타',
   ];
 
