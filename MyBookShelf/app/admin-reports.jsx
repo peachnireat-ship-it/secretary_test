@@ -91,6 +91,14 @@ export default function AdminReportsScreen() {
           <Text style={styles.dateText}>{formatDate(item.lastReportedAt)}</Text>
         </View>
 
+        {item.targetType === 'comment' && !!item.parentDiscussionTopic && (
+          <View style={styles.parentDiscussion}>
+            <Ionicons name="chatbubbles-outline" size={12} color="#9E9E9E" />
+            <Text style={styles.parentDiscussionText} numberOfLines={1}>
+              {item.parentDiscussionTopic}
+            </Text>
+          </View>
+        )}
         <Text style={styles.targetContent} numberOfLines={2}>
           {item.targetContent || '(삭제된 게시물)'}
         </Text>
@@ -257,6 +265,8 @@ const styles = StyleSheet.create({
   typeBadgeText: { fontSize: 11, fontWeight: '700', color: '#fff' },
   reportCount: { fontSize: 13, fontWeight: '700', color: '#E53935', flex: 1 },
   dateText: { fontSize: 11, color: '#9E9E9E' },
+  parentDiscussion: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  parentDiscussionText: { fontSize: 11, color: '#9E9E9E', flex: 1 },
   targetContent: { fontSize: 14, color: '#1C1B1F', lineHeight: 20 },
   targetAuthor: { fontSize: 12, color: '#757575' },
   reasonsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

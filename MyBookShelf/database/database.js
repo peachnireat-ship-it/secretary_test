@@ -1188,7 +1188,14 @@ export const getReportGroups = () =>
       CASE
         WHEN r.targetType = 'discussion' THEN (SELECT createdBy FROM book_discussions WHERE id = r.targetId)
         WHEN r.targetType = 'comment'    THEN (SELECT createdBy FROM discussion_comments WHERE id = r.targetId)
-      END as targetAuthor
+      END as targetAuthor,
+      CASE
+        WHEN r.targetType = 'comment' THEN (
+          SELECT bd.topic FROM discussion_comments dc
+          JOIN book_discussions bd ON bd.id = dc.discussionId
+          WHERE dc.id = r.targetId
+        )
+      END as parentDiscussionTopic
     FROM discussion_reports r
     GROUP BY r.targetType, r.targetId
     ORDER BY lastReportedAt DESC
