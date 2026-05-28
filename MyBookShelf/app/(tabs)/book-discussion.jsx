@@ -100,7 +100,7 @@ export default function BookDiscussionScreen() {
     setModalVisible(true);
   };
 
-  const openBookPicker = () => { setAllBooks(getAllBooks()); setBookPickerVisible(true); };
+  const openBookPicker = () => { setAllBooks(getAllBooks().filter((b) => b.status === 'reading' || b.status === 'completed')); setBookPickerVisible(true); };
   const pickBook = (book) => { setForm((f) => ({ ...f, bookId: book.id, bookTitle: book.title })); setBookPickerVisible(false); };
   const clearBook = () => setForm((f) => ({ ...f, bookId: null, bookTitle: '' }));
 
@@ -471,7 +471,11 @@ export default function BookDiscussionScreen() {
             <View style={styles.pickerHandle} />
             <Text style={styles.pickerTitle}>책 선택</Text>
             <ScrollView>
-              {allBooks.map((b) => (
+              {allBooks.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#999', padding: 24, fontSize: 14 }}>
+                  읽는 중이거나 완독한 책이 없습니다.
+                </Text>
+              ) : allBooks.map((b) => (
                 <TouchableOpacity key={b.id} style={styles.pickerItem} onPress={() => pickBook(b)}>
                   <Ionicons name="book-outline" size={18} color="#6750A4" style={{ marginRight: 10 }} />
                   <View style={{ flex: 1 }}>
