@@ -2,7 +2,13 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getReportGroups, dismissReportsForTarget, deleteReportTarget } from '../database/database';
+import {
+  getReportGroups,
+  dismissReportsForTarget,
+  deleteReportTarget,
+  getReportGroupsByUser,
+  dismissReportsForUser,
+} from '../database/database';
 
 function formatDate(ts) {
   const d = new Date(ts);
@@ -11,10 +17,13 @@ function formatDate(ts) {
 
 export default function AdminReportsScreen() {
   const router = useRouter();
+  const [tab, setTab] = useState('content');
   const [groups, setGroups] = useState([]);
+  const [userGroups, setUserGroups] = useState([]);
 
   const load = useCallback(() => {
     setGroups(getReportGroups());
+    setUserGroups(getReportGroupsByUser());
   }, []);
 
   useFocusEffect(load);
@@ -26,6 +35,19 @@ export default function AdminReportsScreen() {
         text: '무시',
         onPress: () => {
           dismissReportsForTarget(targetType, targetId);
+          load();
+        },
+      },
+    ]);
+  };
+
+  const handleDismissUser = (username) => {
+    Alert.alert('사용자 신고 무시', `'${username}' 사용자에 대한 모든 신고를 무시하시겠습니까?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '무시',
+        onPress: () => {
+          dismissReportsForUser(username);
           load();
         },
       },
@@ -106,6 +128,47 @@ export default function AdminReportsScreen() {
     );
   };
 
+  const renderUserItem = ({ item }) => {
+    const reasons = item.allReasons ? item.allReasons.split(',').filter(Boolean) : [];
+    const uniqueReasons = [...new Set(reasons)];
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="person-circle-outline" size={18} color="#6750A4" />
+          <Text style={styles.userName}>{item.targetAuthor}</Text>
+          <Text style={styles.reportCount}>신고 {item.totalReportCount}건</Text>
+          <Text style={styles.dateText}>{formatDate(item.lastReportedAt)}</Text>
+        </View>
+
+        <Text style={styles.targetAuthor}>{item.reportedItemCount}개 콘텐츠에서 신고됨</Text>
+
+        {uniqueReasons.length > 0 && (
+          <View style={styles.reasonsRow}>
+            {uniqueReasons.map((r, i) => (
+              <View key={i} style={styles.reasonChip}>
+                <Text style={styles.reasonChipText}>{r}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.dismissBtn}
+            onPress={() => handleDismissUser(item.targetAuthor)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="checkmark-circle-outline" size={15} color="#6750A4" />
+            <Text style={styles.dismissBtnText}>신고 무시</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const isEmpty = tab === 'content' ? groups.length === 0 : userGroups.length === 0;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -116,16 +179,40 @@ export default function AdminReportsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {groups.length === 0 ? (
+      <View style={styles.tabs}>
+        <TouchableOpacity
+          style={[styles.tabBtn, tab === 'content' && styles.tabBtnActive]}
+          onPress={() => setTab('content')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabBtnText, tab === 'content' && styles.tabBtnTextActive]}>콘텐츠별</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, tab === 'user' && styles.tabBtnActive]}
+          onPress={() => setTab('user')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabBtnText, tab === 'user' && styles.tabBtnTextActive]}>사용자별</Text>
+        </TouchableOpacity>
+      </View>
+
+      {isEmpty ? (
         <View style={styles.empty}>
           <Ionicons name="shield-checkmark-outline" size={48} color="#C4B4E0" />
           <Text style={styles.emptyText}>처리할 신고가 없습니다</Text>
         </View>
-      ) : (
+      ) : tab === 'content' ? (
         <FlatList
           data={groups}
           keyExtractor={(item) => `${item.targetType}-${item.targetId}`}
           renderItem={renderItem}
+          contentContainerStyle={styles.list}
+        />
+      ) : (
+        <FlatList
+          data={userGroups}
+          keyExtractor={(item) => item.targetAuthor}
+          renderItem={renderUserItem}
           contentContainerStyle={styles.list}
         />
       )}
@@ -205,4 +292,21 @@ const styles = StyleSheet.create({
   deleteBtnText: { fontSize: 13, fontWeight: '600', color: '#fff' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { fontSize: 15, color: '#9E9E9E' },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabBtnActive: { borderBottomColor: '#6750A4' },
+  tabBtnText: { fontSize: 14, fontWeight: '600', color: '#9E9E9E' },
+  tabBtnTextActive: { color: '#6750A4' },
+  userName: { fontSize: 14, fontWeight: '700', color: '#1C1B1F', flex: 1 },
 });
