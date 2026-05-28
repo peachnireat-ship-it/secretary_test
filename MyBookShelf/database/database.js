@@ -128,6 +128,9 @@ try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN guildId TEXT DEFAULT ''`);
 } catch (_) {}
 try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN testOriginalUsername TEXT DEFAULT ''`);
+} catch (_) {}
+try {
   db.execSync(`ALTER TABLE book_reviews ADD COLUMN xpEarned INTEGER DEFAULT 10`);
 } catch (_) {}
 try {
@@ -639,6 +642,15 @@ export const saveUsername = (name) => {
   db.runSync('UPDATE user_stats SET username = ? WHERE id = 1', [name.trim()]);
 };
 
+export const getTestOriginalUsername = () => {
+  const row = db.getFirstSync('SELECT testOriginalUsername FROM user_stats WHERE id = 1');
+  return row?.testOriginalUsername || '';
+};
+
+export const saveTestOriginalUsername = (name) => {
+  db.runSync('UPDATE user_stats SET testOriginalUsername = ? WHERE id = 1', [name]);
+};
+
 export const getStats = (excludeAdult = false) => {
   const ac = excludeAdult ? ' AND isAdult != 1' : '';
   const total = db.getFirstSync(`SELECT COUNT(*) as count FROM books WHERE 1=1${ac}`);
@@ -1097,6 +1109,7 @@ db.execSync(`
     UNIQUE(targetType, targetId, reportedBy)
   );
 `);
+try { db.execSync(`ALTER TABLE discussion_reports ADD COLUMN reason TEXT DEFAULT ''`); } catch (_) {}
 
 export const getDiscussions = () =>
   db.getAllSync('SELECT * FROM book_discussions ORDER BY createdAt DESC');
@@ -1141,11 +1154,11 @@ export const deleteComment = (id) => {
   db.runSync('DELETE FROM discussion_comments WHERE id = ?', [id]);
 };
 
-export const addReport = (targetType, targetId, reportedBy) => {
+export const addReport = (targetType, targetId, reportedBy, reason = '') => {
   try {
     db.runSync(
-      `INSERT INTO discussion_reports (targetType, targetId, reportedBy, createdAt) VALUES (?, ?, ?, ?)`,
-      [targetType, targetId, reportedBy, Date.now()],
+      `INSERT INTO discussion_reports (targetType, targetId, reportedBy, createdAt, reason) VALUES (?, ?, ?, ?, ?)`,
+      [targetType, targetId, reportedBy, Date.now(), reason],
     );
     return true;
   } catch (_) {

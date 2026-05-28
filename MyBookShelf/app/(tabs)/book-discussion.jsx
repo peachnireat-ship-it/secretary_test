@@ -49,6 +49,9 @@ export default function BookDiscussionScreen() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [bookPickerVisible, setBookPickerVisible] = useState(false);
   const [allBooks, setAllBooks] = useState([]);
+  const [reportModal, setReportModal] = useState({
+    visible: false, targetType: null, targetId: null, reason: '',
+  });
   const [cmtModal, setCmtModal] = useState({
     visible: false, discussionId: null, discussionType: 'debate',
     vote: 'agree', questionIndex: null, questionText: '', content: '',
@@ -196,6 +199,15 @@ export default function BookDiscussionScreen() {
     ]);
   };
 
+  const REPORT_REASONS = [
+    '스팸 / 광고',
+    '욕설 / 혐오 표현',
+    '개인정보 노출',
+    '선정적 / 음란 내용',
+    '허위 정보',
+    '기타',
+  ];
+
   const handleReport = (targetType, targetId) => {
     const currentUser = getUsername();
     if (!currentUser) return;
@@ -203,17 +215,16 @@ export default function BookDiscussionScreen() {
       Alert.alert('이미 신고됨', '이미 신고한 게시물입니다.');
       return;
     }
-    Alert.alert('신고', '부적절한 내용으로 신고하시겠습니까?', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '신고',
-        style: 'destructive',
-        onPress: () => {
-          addReport(targetType, targetId, currentUser);
-          Alert.alert('신고 완료', '신고가 접수되었습니다. 검토 후 조치하겠습니다.');
-        },
-      },
-    ]);
+    setReportModal({ visible: true, targetType, targetId, reason: '' });
+  };
+
+  const submitReport = () => {
+    const currentUser = getUsername();
+    const { targetType, targetId, reason } = reportModal;
+    if (!reason) return;
+    addReport(targetType, targetId, currentUser, reason);
+    setReportModal({ visible: false, targetType: null, targetId: null, reason: '' });
+    Alert.alert('신고 완료', '신고가 접수되었습니다. 검토 후 조치하겠습니다.');
   };
 
   const renderParticipation = (disc) => {
@@ -554,6 +565,45 @@ export default function BookDiscussionScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* 신고 사유 선택 모달 */}
+      <Modal visible={reportModal.visible} transparent animationType="fade" onRequestClose={() => setReportModal((m) => ({ ...m, visible: false }))}>
+        <Pressable style={styles.overlay} onPress={() => setReportModal((m) => ({ ...m, visible: false }))}>
+          <Pressable style={styles.reportSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.reportSheetHeader}>
+              <Ionicons name="flag-outline" size={20} color="#E53935" />
+              <Text style={styles.reportSheetTitle}>신고 사유 선택</Text>
+            </View>
+            <Text style={styles.reportSheetDesc}>해당하는 신고 사유를 선택해 주세요.</Text>
+            {REPORT_REASONS.map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.reportReasonItem, reportModal.reason === r && styles.reportReasonItemSelected]}
+                onPress={() => setReportModal((m) => ({ ...m, reason: r }))}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.reportRadio, reportModal.reason === r && styles.reportRadioSelected]}>
+                  {reportModal.reason === r && <View style={styles.reportRadioDot} />}
+                </View>
+                <Text style={[styles.reportReasonText, reportModal.reason === r && styles.reportReasonTextSelected]}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.reportBtnRow}>
+              <TouchableOpacity style={styles.reportCancelBtn} onPress={() => setReportModal((m) => ({ ...m, visible: false }))} activeOpacity={0.8}>
+                <Text style={styles.reportCancelBtnText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.reportSubmitBtn, !reportModal.reason && styles.reportSubmitBtnDisabled]}
+                onPress={submitReport}
+                disabled={!reportModal.reason}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.reportSubmitBtnText}>신고하기</Text>
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -959,4 +1009,77 @@ const styles = StyleSheet.create({
   voteToggleBtnAgree: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
   voteToggleBtnDisagree: { backgroundColor: '#F44336', borderColor: '#F44336' },
   voteToggleBtnText: { fontSize: 14, fontWeight: 'bold', color: '#999' },
+
+  // 신고 모달
+  reportSheet: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    marginHorizontal: 24,
+    padding: 24,
+    gap: 4,
+  },
+  reportSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  reportSheetTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  reportSheetDesc: { fontSize: 13, color: '#9E9E9E', marginBottom: 8 },
+  reportReasonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginVertical: 3,
+  },
+  reportReasonItemSelected: {
+    borderColor: '#E53935',
+    backgroundColor: '#FFF5F5',
+  },
+  reportRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#BDBDBD',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportRadioSelected: { borderColor: '#E53935' },
+  reportRadioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E53935',
+  },
+  reportReasonText: { fontSize: 14, color: '#424242' },
+  reportReasonTextSelected: { color: '#E53935', fontWeight: '600' },
+  reportBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  reportCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    alignItems: 'center',
+  },
+  reportCancelBtnText: { fontSize: 14, color: '#9E9E9E', fontWeight: '600' },
+  reportSubmitBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#E53935',
+    alignItems: 'center',
+  },
+  reportSubmitBtnDisabled: { backgroundColor: '#FFCDD2' },
+  reportSubmitBtnText: { fontSize: 14, color: '#fff', fontWeight: '700' },
 });

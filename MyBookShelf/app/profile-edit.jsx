@@ -1,8 +1,8 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Modal, Alert } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getUsername, saveUsername, getAge, saveAge } from '../database/database';
+import { getUsername, saveUsername, getAge, saveAge, getTestOriginalUsername, saveTestOriginalUsername } from '../database/database';
 
 const AGE_GROUPS = [
   { label: '어린이 (~12세)', range: '15일 + 200페이지', min: 1, max: 12 },
@@ -22,14 +22,47 @@ export default function ProfileEditScreen() {
   const [showAdultVerify, setShowAdultVerify] = useState(false);
   const [birthYear, setBirthYear] = useState('');
   const [birthYearError, setBirthYearError] = useState('');
+  const [isTestMode, setIsTestMode] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       setName(getUsername());
       const saved = getAge();
       setAgeText(saved > 0 ? String(saved) : '');
+      setIsTestMode(!!getTestOriginalUsername());
     }, [])
   );
+
+  const handleSwitchToTest = () => {
+    const original = getUsername();
+    if (!original) return;
+    Alert.alert(
+      '테스트 계정으로 전환',
+      `현재 닉네임 "${original}"을 보존하고\n임시 계정으로 전환합니다.\n\n신고 버튼 테스트 후 "원래 계정으로 복원"을 눌러주세요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '전환',
+          onPress: () => {
+            saveTestOriginalUsername(original);
+            saveUsername('테스트_임시계정');
+            setName('테스트_임시계정');
+            setIsTestMode(true);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRestoreAccount = () => {
+    const original = getTestOriginalUsername();
+    if (!original) return;
+    saveUsername(original);
+    saveTestOriginalUsername('');
+    setName(original);
+    setIsTestMode(false);
+    Alert.alert('복원 완료', `"${original}" 계정으로 복원되었습니다.`);
+  };
 
   const parsedAge = parseInt(ageText, 10);
   const ageValid = ageText === '' || (!isNaN(parsedAge) && parsedAge >= 1 && parsedAge <= 120);
@@ -138,6 +171,30 @@ export default function ProfileEditScreen() {
         >
           <Text style={styles.saveBtnText}>저장하기</Text>
         </TouchableOpacity>
+
+        <View style={styles.testSection}>
+          <View style={styles.testHeader}>
+            <Ionicons name="flask-outline" size={15} color="#9E9E9E" />
+            <Text style={styles.testLabel}>개발자 테스트</Text>
+          </View>
+          {isTestMode ? (
+            <>
+              <View style={styles.testModeBadge}>
+                <Ionicons name="warning-outline" size={14} color="#FF9800" />
+                <Text style={styles.testModeBadgeText}>임시 테스트 계정 사용 중</Text>
+              </View>
+              <TouchableOpacity style={styles.restoreBtn} onPress={handleRestoreAccount} activeOpacity={0.8}>
+                <Ionicons name="refresh-outline" size={15} color="#6750A4" />
+                <Text style={styles.restoreBtnText}>원래 계정으로 복원</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.testBtn} onPress={handleSwitchToTest} activeOpacity={0.8}>
+              <Ionicons name="person-add-outline" size={15} color="#9E9E9E" />
+              <Text style={styles.testBtnText}>임시 테스트 계정으로 전환</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </ScrollView>
 
       <Modal visible={showAdultVerify} transparent animationType="fade">
@@ -281,6 +338,67 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   saveBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+  testSection: {
+    marginTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    paddingTop: 16,
+    gap: 10,
+  },
+  testHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  testLabel: {
+    fontSize: 12,
+    color: '#9E9E9E',
+    fontWeight: '600',
+  },
+  testModeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  testModeBadgeText: {
+    fontSize: 13,
+    color: '#FF9800',
+    fontWeight: '600',
+  },
+  testBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  testBtnText: {
+    fontSize: 13,
+    color: '#9E9E9E',
+  },
+  restoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#6750A4',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  restoreBtnText: {
+    fontSize: 13,
+    color: '#6750A4',
+    fontWeight: '600',
+  },
 
   verifyOverlay: {
     flex: 1,
