@@ -16,6 +16,8 @@ import {
   addComment,
   deleteComment,
   getUsername,
+  addXp,
+  XP_REWARDS,
 } from '../../database/database';
 
 function fmtDate(ts) {
@@ -177,6 +179,7 @@ export default function BookDiscussionScreen() {
       createdBy: getUsername(),
       parentId: cmtModal.parentId,
     });
+    addXp(XP_REWARDS.DISCUSSION_COMMENT);
     setCmtModal((m) => ({ ...m, visible: false }));
     reloadComments(cmtModal.discussionId);
   };

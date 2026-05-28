@@ -369,6 +369,7 @@ export const XP_REWARDS = {
   CHALLENGE_SUCCESS: 150,   // 챌린지 성공
   MEMO_ADD: 10,             // 독서 메모 1개 추가
   BOOK_REVIEW: 50,          // 완독 도서 리뷰 최초 등록
+  DISCUSSION_COMMENT: 15,   // 독서 토론 댓글/의견/답변 등록
 };
 
 // 티어 정의: 브론즈(1~100) → 실버(1~80) → 골드(1~60) → 플래티넘(1~40) → 다이아(1~30)
