@@ -157,6 +157,7 @@ export default function BookDiscussionScreen() {
       vote: cmtModal.discussionType === 'debate' ? cmtModal.vote : null,
       questionIndex: cmtModal.questionIndex,
       content: cmtModal.content.trim(),
+      createdBy: getUsername(),
     });
     setCmtModal((m) => ({ ...m, visible: false }));
     reloadComments(cmtModal.discussionId);
@@ -204,7 +205,12 @@ export default function BookDiscussionScreen() {
                   {c.vote === 'agree' ? '찬성' : '반대'}
                 </Text>
               </View>
-              <Text style={styles.commentText}>{c.content}</Text>
+              <View style={{ flex: 1 }}>
+                {c.createdBy ? (
+                  <Text style={styles.commentAuthor}>{c.createdBy}</Text>
+                ) : null}
+                <Text style={styles.commentText}>{c.content}</Text>
+              </View>
               <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
                 <Ionicons name="close-circle-outline" size={16} color="#DDD" />
               </TouchableOpacity>
@@ -226,7 +232,12 @@ export default function BookDiscussionScreen() {
           {comments.map((c) => (
             <View key={c.id} style={styles.commentItem}>
               <Ionicons name="chatbubble-outline" size={14} color="#9C8DC4" style={{ marginTop: 2 }} />
-              <Text style={[styles.commentText, { flex: 1 }]}>{c.content}</Text>
+              <View style={{ flex: 1 }}>
+                {c.createdBy ? (
+                  <Text style={styles.commentAuthor}>{c.createdBy}</Text>
+                ) : null}
+                <Text style={styles.commentText}>{c.content}</Text>
+              </View>
               <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
                 <Ionicons name="close-circle-outline" size={16} color="#DDD" />
               </TouchableOpacity>
@@ -256,7 +267,12 @@ export default function BookDiscussionScreen() {
               {answers.map((a) => (
                 <View key={a.id} style={styles.answerItem}>
                   <Ionicons name="return-down-forward-outline" size={14} color="#B0A0D8" />
-                  <Text style={styles.answerText}>{a.content}</Text>
+                  <View style={{ flex: 1 }}>
+                    {a.createdBy ? (
+                      <Text style={styles.commentAuthor}>{a.createdBy}</Text>
+                    ) : null}
+                    <Text style={styles.answerText}>{a.content}</Text>
+                  </View>
                   <TouchableOpacity onPress={() => confirmDeleteComment(a.id, disc.id)}>
                     <Ionicons name="close-circle-outline" size={16} color="#DDD" />
                   </TouchableOpacity>
@@ -678,7 +694,8 @@ const styles = StyleSheet.create({
   commentItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
   voteBadge: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, alignItems: 'center' },
   voteBadgeText: { fontSize: 11, fontWeight: 'bold' },
-  commentText: { flex: 1, fontSize: 13, color: '#444', lineHeight: 19 },
+  commentAuthor: { fontSize: 11, fontWeight: 'bold', color: '#9C8DC4', marginBottom: 2 },
+  commentText: { fontSize: 13, color: '#444', lineHeight: 19 },
 
   // 참여 버튼
   participateBtn: {
@@ -695,7 +712,7 @@ const styles = StyleSheet.create({
   qaQuestionNum: { fontSize: 13, fontWeight: 'bold', color: '#6750A4', width: 28 },
   qaQuestionText: { fontSize: 13, color: '#333', flex: 1, fontWeight: '600', lineHeight: 19 },
   answerItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 6, paddingLeft: 8 },
-  answerText: { flex: 1, fontSize: 13, color: '#555', lineHeight: 18 },
+  answerText: { fontSize: 13, color: '#555', lineHeight: 18 },
 
   cardActions: { flexDirection: 'row', gap: 10, marginTop: 14, justifyContent: 'flex-end' },
   actionBtn: {

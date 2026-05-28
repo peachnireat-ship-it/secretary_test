@@ -1063,6 +1063,14 @@ db.execSync(`
 `);
 try { db.execSync(`ALTER TABLE book_discussions ADD COLUMN discussionType TEXT DEFAULT 'debate'`); } catch (_) {}
 try { db.execSync(`ALTER TABLE book_discussions ADD COLUMN createdBy TEXT DEFAULT ''`); } catch (_) {}
+try {
+  db.execSync(`
+    UPDATE book_discussions
+    SET createdBy = (SELECT username FROM user_stats WHERE id = 1)
+    WHERE (createdBy IS NULL OR createdBy = '')
+      AND (SELECT COALESCE(username, '') FROM user_stats WHERE id = 1) != ''
+  `);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS discussion_comments (
@@ -1074,6 +1082,7 @@ db.execSync(`
     createdAt INTEGER NOT NULL
   );
 `);
+try { db.execSync('ALTER TABLE discussion_comments ADD COLUMN createdBy TEXT DEFAULT NULL'); } catch (_) {}
 
 export const getDiscussions = () =>
   db.getAllSync('SELECT * FROM book_discussions ORDER BY createdAt DESC');
@@ -1106,10 +1115,10 @@ export const deleteDiscussion = (id) => {
 export const getComments = (discussionId) =>
   db.getAllSync('SELECT * FROM discussion_comments WHERE discussionId = ? ORDER BY createdAt ASC', [discussionId]);
 
-export const addComment = ({ discussionId, vote, questionIndex, content }) => {
+export const addComment = ({ discussionId, vote, questionIndex, content, createdBy }) => {
   db.runSync(
-    `INSERT INTO discussion_comments (discussionId, vote, questionIndex, content, createdAt) VALUES (?, ?, ?, ?, ?)`,
-    [discussionId, vote || null, questionIndex ?? null, content, Date.now()],
+    `INSERT INTO discussion_comments (discussionId, vote, questionIndex, content, createdAt, createdBy) VALUES (?, ?, ?, ?, ?, ?)`,
+    [discussionId, vote || null, questionIndex ?? null, content, Date.now(), createdBy || null],
   );
 };
 
