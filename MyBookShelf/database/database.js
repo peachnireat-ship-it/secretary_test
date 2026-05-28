@@ -370,6 +370,7 @@ export const XP_REWARDS = {
   MEMO_ADD: 10,             // 독서 메모 1개 추가
   BOOK_REVIEW: 50,          // 완독 도서 리뷰 최초 등록
   DISCUSSION_COMMENT: 15,   // 독서 토론 댓글/의견/답변 등록
+  DISCUSSION_CREATE: 20,    // 독서 토론 등록 (주제 10자+, 내용 20자+ 충족 시)
 };
 
 // 티어 정의: 브론즈(1~100) → 실버(1~80) → 골드(1~60) → 플래티넘(1~40) → 다이아(1~30)
@@ -1086,6 +1087,17 @@ db.execSync(`
 try { db.execSync('ALTER TABLE discussion_comments ADD COLUMN createdBy TEXT DEFAULT NULL'); } catch (_) {}
 try { db.execSync('ALTER TABLE discussion_comments ADD COLUMN parentId INTEGER DEFAULT NULL'); } catch (_) {}
 
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS discussion_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    targetType TEXT NOT NULL,
+    targetId INTEGER NOT NULL,
+    reportedBy TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    UNIQUE(targetType, targetId, reportedBy)
+  );
+`);
+
 export const getDiscussions = () =>
   db.getAllSync('SELECT * FROM book_discussions ORDER BY createdAt DESC');
 
@@ -1128,3 +1140,21 @@ export const deleteComment = (id) => {
   db.runSync('DELETE FROM discussion_comments WHERE parentId = ?', [id]);
   db.runSync('DELETE FROM discussion_comments WHERE id = ?', [id]);
 };
+
+export const addReport = (targetType, targetId, reportedBy) => {
+  try {
+    db.runSync(
+      `INSERT INTO discussion_reports (targetType, targetId, reportedBy, createdAt) VALUES (?, ?, ?, ?)`,
+      [targetType, targetId, reportedBy, Date.now()],
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
+
+export const hasReported = (targetType, targetId, reportedBy) =>
+  !!db.getFirstSync(
+    `SELECT id FROM discussion_reports WHERE targetType = ? AND targetId = ? AND reportedBy = ?`,
+    [targetType, targetId, reportedBy],
+  );

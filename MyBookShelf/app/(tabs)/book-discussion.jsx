@@ -18,6 +18,8 @@ import {
   getUsername,
   addXp,
   XP_REWARDS,
+  addReport,
+  hasReported,
 } from '../../database/database';
 
 function fmtDate(ts) {
@@ -129,6 +131,9 @@ export default function BookDiscussionScreen() {
         questions: cleanedQs, discussionType: form.discussionType,
         createdBy: getUsername(),
       });
+      if (form.topic.trim().length >= 10 && form.content.trim().length >= 20) {
+        addXp(XP_REWARDS.DISCUSSION_CREATE);
+      }
     }
     setModalVisible(false);
     reload();
@@ -191,6 +196,26 @@ export default function BookDiscussionScreen() {
     ]);
   };
 
+  const handleReport = (targetType, targetId) => {
+    const currentUser = getUsername();
+    if (!currentUser) return;
+    if (hasReported(targetType, targetId, currentUser)) {
+      Alert.alert('이미 신고됨', '이미 신고한 게시물입니다.');
+      return;
+    }
+    Alert.alert('신고', '부적절한 내용으로 신고하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '신고',
+        style: 'destructive',
+        onPress: () => {
+          addReport(targetType, targetId, currentUser);
+          Alert.alert('신고 완료', '신고가 접수되었습니다. 검토 후 조치하겠습니다.');
+        },
+      },
+    ]);
+  };
+
   const renderParticipation = (disc) => {
     const comments = commentsMap[disc.id] || [];
     const dtype = disc.discussionType || 'debate';
@@ -213,6 +238,11 @@ export default function BookDiscussionScreen() {
             {r.createdBy ? <Text style={styles.commentAuthor}>{r.createdBy}</Text> : null}
             <Text style={styles.commentText}>{r.content}</Text>
           </View>
+          {r.createdBy && r.createdBy !== currentUser && (
+            <TouchableOpacity onPress={() => handleReport('comment', r.id)}>
+              <Ionicons name="flag-outline" size={15} color="#DDD" />
+            </TouchableOpacity>
+          )}
           {canDelete(r) && (
             <TouchableOpacity onPress={() => confirmDeleteComment(r.id, disc.id)}>
               <Ionicons name="close-circle-outline" size={16} color="#DDD" />
@@ -260,6 +290,11 @@ export default function BookDiscussionScreen() {
                 <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
                   <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
                 </TouchableOpacity>
+                {c.createdBy && c.createdBy !== currentUser && (
+                  <TouchableOpacity onPress={() => handleReport('comment', c.id)}>
+                    <Ionicons name="flag-outline" size={15} color="#DDD" />
+                  </TouchableOpacity>
+                )}
                 {canDelete(c) && (
                   <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
                     <Ionicons name="close-circle-outline" size={16} color="#DDD" />
@@ -293,6 +328,11 @@ export default function BookDiscussionScreen() {
                 <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
                   <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
                 </TouchableOpacity>
+                {c.createdBy && c.createdBy !== currentUser && (
+                  <TouchableOpacity onPress={() => handleReport('comment', c.id)}>
+                    <Ionicons name="flag-outline" size={15} color="#DDD" />
+                  </TouchableOpacity>
+                )}
                 {canDelete(c) && (
                   <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
                     <Ionicons name="close-circle-outline" size={16} color="#DDD" />
@@ -334,6 +374,11 @@ export default function BookDiscussionScreen() {
                     <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, a)}>
                       <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
                     </TouchableOpacity>
+                    {a.createdBy && a.createdBy !== currentUser && (
+                      <TouchableOpacity onPress={() => handleReport('comment', a.id)}>
+                        <Ionicons name="flag-outline" size={15} color="#DDD" />
+                      </TouchableOpacity>
+                    )}
                     {canDelete(a) && (
                       <TouchableOpacity onPress={() => confirmDeleteComment(a.id, disc.id)}>
                         <Ionicons name="close-circle-outline" size={16} color="#DDD" />
@@ -458,6 +503,16 @@ export default function BookDiscussionScreen() {
                   {renderParticipation(disc)}
 
                   <View style={styles.cardActions}>
+                    {disc.createdBy && disc.createdBy !== getUsername() && (
+                      <TouchableOpacity
+                        style={[styles.actionBtn, styles.actionBtnReport]}
+                        onPress={() => handleReport('discussion', disc.id)}
+                      >
+                        <Ionicons name="flag-outline" size={16} color="#FF9800" />
+                        <Text style={[styles.actionBtnText, { color: '#FF9800' }]}>신고</Text>
+                      </TouchableOpacity>
+                    )}
+                    <View style={{ flex: 1 }} />
                     <TouchableOpacity style={styles.actionBtn} onPress={() => openEdit(disc)}>
                       <Ionicons name="pencil-outline" size={16} color="#6750A4" />
                       <Text style={styles.actionBtnText}>편집</Text>
@@ -799,6 +854,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 6,
   },
   actionBtnDanger: { borderColor: '#FFCDD2' },
+  actionBtnReport: { borderColor: '#FFE0B2' },
   actionBtnText: { fontSize: 13, color: '#6750A4', fontWeight: '600' },
 
   fab: {
