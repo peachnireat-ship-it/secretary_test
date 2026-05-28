@@ -54,6 +54,27 @@ export default function ProfileEditScreen() {
     );
   };
 
+  const handleSwitchToTest2 = () => {
+    const original = getUsername();
+    if (!original) return;
+    Alert.alert(
+      '테스트 계정2로 전환',
+      `현재 닉네임 "${original}"을 보존하고\n임시 계정2로 전환합니다.\n\n다수 신고 테스트 후 "원래 계정으로 복원"을 눌러주세요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '전환',
+          onPress: () => {
+            saveTestOriginalUsername(original);
+            saveUsername('테스트_임시계정2');
+            setName('테스트_임시계정2');
+            setIsTestMode(true);
+          },
+        },
+      ]
+    );
+  };
+
   const handleSwitchToAdmin = () => {
     const original = getUsername();
     if (!original) return;
@@ -210,7 +231,7 @@ export default function ProfileEditScreen() {
               <View style={styles.testModeBadge}>
                 <Ionicons name="warning-outline" size={14} color="#FF9800" />
                 <Text style={styles.testModeBadgeText}>
-                  {name === 'nireat' ? '운영자 테스트 계정 사용 중' : '임시 테스트 계정 사용 중'}
+                  {name === 'nireat' ? '운영자 테스트 계정 사용 중' : name === '테스트_임시계정2' ? '임시 테스트 계정2 사용 중' : '임시 테스트 계정 사용 중'}
                 </Text>
               </View>
               <TouchableOpacity style={styles.restoreBtn} onPress={handleRestoreAccount} activeOpacity={0.8}>
@@ -223,6 +244,10 @@ export default function ProfileEditScreen() {
               <TouchableOpacity style={styles.testBtn} onPress={handleSwitchToTest} activeOpacity={0.8}>
                 <Ionicons name="person-add-outline" size={15} color="#9E9E9E" />
                 <Text style={styles.testBtnText}>임시 테스트 계정으로 전환</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.testBtn} onPress={handleSwitchToTest2} activeOpacity={0.8}>
+                <Ionicons name="people-outline" size={15} color="#9E9E9E" />
+                <Text style={styles.testBtnText}>임시 테스트 계정2로 전환</Text>
               </TouchableOpacity>
               {name !== 'nireat' && (
                 <TouchableOpacity style={styles.testBtn} onPress={handleSwitchToAdmin} activeOpacity={0.8}>

@@ -1179,7 +1179,7 @@ export const getReportGroups = () =>
       r.targetId,
       COUNT(*) as reportCount,
       GROUP_CONCAT(DISTINCT r.reason) as reasons,
-      GROUP_CONCAT(DISTINCT r.reportedBy) as reporters,
+      GROUP_CONCAT(r.reportedBy || ' / ' || COALESCE(r.reason, '') || ' / ' || r.createdAt, ',') as reporters,
       MAX(r.createdAt) as lastReportedAt,
       CASE
         WHEN r.targetType = 'discussion' THEN (SELECT topic FROM book_discussions WHERE id = r.targetId)

@@ -78,9 +78,17 @@ export default function AdminReportsScreen() {
   const renderItem = ({ item }) => {
     const label = item.targetType === 'discussion' ? '토론글' : '댓글';
     const labelColor = item.targetType === 'discussion' ? '#6750A4' : '#0277BD';
-    const reasons = item.reasons ? item.reasons.split(',').filter(Boolean) : [];
-    const uniqueReasons = [...new Set(reasons)];
-    const reporters = item.reporters ? item.reporters.split(',').filter(Boolean) : [];
+    const reporters = item.reporters
+      ? item.reporters.split(',').filter(Boolean).map((entry) => {
+          const atSep = entry.lastIndexOf(' / ');
+          const at = Number(entry.slice(atSep + 3));
+          const left = entry.slice(0, atSep);
+          const reasonSep = left.indexOf(' / ');
+          const name = left.slice(0, reasonSep);
+          const reason = left.slice(reasonSep + 3);
+          return { name, reason, at };
+        })
+      : [];
 
     return (
       <View style={styles.card}>
@@ -108,17 +116,13 @@ export default function AdminReportsScreen() {
         )}
 
         {reporters.length > 0 && (
-          <View style={styles.reportersRow}>
-            <Ionicons name="flag-outline" size={12} color="#9E9E9E" />
-            <Text style={styles.reportersText}>{reporters.join(', ')}</Text>
-          </View>
-        )}
-
-        {uniqueReasons.length > 0 && (
-          <View style={styles.reasonsRow}>
-            {uniqueReasons.map((r, i) => (
-              <View key={i} style={styles.reasonChip}>
-                <Text style={styles.reasonChipText}>{r}</Text>
+          <View style={styles.reportersList}>
+            {reporters.map((r, i) => (
+              <View key={i} style={styles.reporterRow}>
+                <Ionicons name="flag-outline" size={12} color="#9E9E9E" />
+                <Text style={styles.reporterName}>{r.name}</Text>
+                <Text style={styles.reporterReason}>{r.reason ? `: ${r.reason}` : ''}</Text>
+                <Text style={styles.reporterAt}>{formatDate(r.at)}</Text>
               </View>
             ))}
           </View>
@@ -275,8 +279,11 @@ const styles = StyleSheet.create({
   dateText: { fontSize: 11, color: '#9E9E9E' },
   parentDiscussion: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   parentDiscussionText: { fontSize: 11, color: '#9E9E9E', flex: 1 },
-  reportersRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  reportersText: { fontSize: 11, color: '#9E9E9E', flex: 1 },
+  reportersList: { gap: 4 },
+  reporterRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  reporterName: { fontSize: 12, color: '#616161', fontWeight: '600' },
+  reporterReason: { fontSize: 12, color: '#757575', flex: 1 },
+  reporterAt: { fontSize: 11, color: '#9E9E9E' },
   targetContent: { fontSize: 14, color: '#1C1B1F', lineHeight: 20 },
   targetAuthor: { fontSize: 12, color: '#757575' },
   reasonsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
