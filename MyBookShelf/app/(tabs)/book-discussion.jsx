@@ -191,6 +191,9 @@ export default function BookDiscussionScreen() {
   const renderParticipation = (disc) => {
     const comments = commentsMap[disc.id] || [];
     const dtype = disc.discussionType || 'debate';
+    const currentUser = getUsername();
+    const canDelete = (comment) =>
+      !comment.createdBy || comment.createdBy === currentUser || disc.createdBy === currentUser;
 
     const topComments = comments.filter((c) => !c.parentId);
     const repliesMap = {};
@@ -207,9 +210,11 @@ export default function BookDiscussionScreen() {
             {r.createdBy ? <Text style={styles.commentAuthor}>{r.createdBy}</Text> : null}
             <Text style={styles.commentText}>{r.content}</Text>
           </View>
-          <TouchableOpacity onPress={() => confirmDeleteComment(r.id, disc.id)}>
-            <Ionicons name="close-circle-outline" size={16} color="#DDD" />
-          </TouchableOpacity>
+          {canDelete(r) && (
+            <TouchableOpacity onPress={() => confirmDeleteComment(r.id, disc.id)}>
+              <Ionicons name="close-circle-outline" size={16} color="#DDD" />
+            </TouchableOpacity>
+          )}
         </View>
       ));
 
@@ -252,9 +257,11 @@ export default function BookDiscussionScreen() {
                 <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
                   <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
-                  <Ionicons name="close-circle-outline" size={16} color="#DDD" />
-                </TouchableOpacity>
+                {canDelete(c) && (
+                  <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
+                    <Ionicons name="close-circle-outline" size={16} color="#DDD" />
+                  </TouchableOpacity>
+                )}
               </View>
               {renderReplies(c.id)}
             </View>
@@ -283,9 +290,11 @@ export default function BookDiscussionScreen() {
                 <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
                   <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
-                  <Ionicons name="close-circle-outline" size={16} color="#DDD" />
-                </TouchableOpacity>
+                {canDelete(c) && (
+                  <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
+                    <Ionicons name="close-circle-outline" size={16} color="#DDD" />
+                  </TouchableOpacity>
+                )}
               </View>
               {renderReplies(c.id)}
             </View>
@@ -322,9 +331,11 @@ export default function BookDiscussionScreen() {
                     <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, a)}>
                       <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => confirmDeleteComment(a.id, disc.id)}>
-                      <Ionicons name="close-circle-outline" size={16} color="#DDD" />
-                    </TouchableOpacity>
+                    {canDelete(a) && (
+                      <TouchableOpacity onPress={() => confirmDeleteComment(a.id, disc.id)}>
+                        <Ionicons name="close-circle-outline" size={16} color="#DDD" />
+                      </TouchableOpacity>
+                    )}
                   </View>
                   {renderReplies(a.id)}
                 </View>
