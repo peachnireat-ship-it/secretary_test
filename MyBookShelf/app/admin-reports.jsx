@@ -80,6 +80,7 @@ export default function AdminReportsScreen() {
     const labelColor = item.targetType === 'discussion' ? '#6750A4' : '#0277BD';
     const reasons = item.reasons ? item.reasons.split(',').filter(Boolean) : [];
     const uniqueReasons = [...new Set(reasons)];
+    const reporters = item.reporters ? item.reporters.split(',').filter(Boolean) : [];
 
     return (
       <View style={styles.card}>
@@ -104,6 +105,13 @@ export default function AdminReportsScreen() {
         </Text>
         {!!item.targetAuthor && (
           <Text style={styles.targetAuthor}>작성자: {item.targetAuthor}</Text>
+        )}
+
+        {reporters.length > 0 && (
+          <View style={styles.reportersRow}>
+            <Ionicons name="flag-outline" size={12} color="#9E9E9E" />
+            <Text style={styles.reportersText}>{reporters.join(', ')}</Text>
+          </View>
         )}
 
         {uniqueReasons.length > 0 && (
@@ -267,6 +275,8 @@ const styles = StyleSheet.create({
   dateText: { fontSize: 11, color: '#9E9E9E' },
   parentDiscussion: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   parentDiscussionText: { fontSize: 11, color: '#9E9E9E', flex: 1 },
+  reportersRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  reportersText: { fontSize: 11, color: '#9E9E9E', flex: 1 },
   targetContent: { fontSize: 14, color: '#1C1B1F', lineHeight: 20 },
   targetAuthor: { fontSize: 12, color: '#757575' },
   reasonsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
