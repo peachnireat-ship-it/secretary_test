@@ -458,10 +458,10 @@ export default function BookDetailScreen() {
       </View>
     </View>
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={{ flex: 1, paddingBottom: insets.bottom }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={{ paddingBottom: insets.bottom + 120 }} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
         <View style={styles.titleRow}>
           {editCover ? (
             <Image source={{ uri: editCover }} style={styles.headerCover} resizeMode="cover" />
