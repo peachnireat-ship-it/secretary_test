@@ -1111,6 +1111,46 @@ db.execSync(`
 `);
 try { db.execSync(`ALTER TABLE discussion_reports ADD COLUMN reason TEXT DEFAULT ''`); } catch (_) {}
 
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS banned_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    banType TEXT NOT NULL,
+    banUntil INTEGER,
+    bannedAt INTEGER NOT NULL
+  );
+`);
+
+export const banUser = (username, banType, banUntil = null) => {
+  db.runSync(
+    `INSERT OR REPLACE INTO banned_users (username, banType, banUntil, bannedAt) VALUES (?, ?, ?, ?)`,
+    [username, banType, banUntil, Date.now()]
+  );
+};
+
+export const unbanUser = (username) => {
+  db.runSync('DELETE FROM banned_users WHERE username = ?', [username]);
+};
+
+export const getUserBanStatus = (username) => {
+  if (!username) return null;
+  const row = db.getFirstSync('SELECT * FROM banned_users WHERE username = ?', [username]);
+  if (!row) return null;
+  if (row.banType === 'suspend' && row.banUntil && row.banUntil < Date.now()) {
+    db.runSync('DELETE FROM banned_users WHERE username = ?', [username]);
+    return null;
+  }
+  return row;
+};
+
+export const getBannedUsers = () => {
+  db.runSync(
+    'DELETE FROM banned_users WHERE banType = ? AND banUntil IS NOT NULL AND banUntil < ?',
+    ['suspend', Date.now()]
+  );
+  return db.getAllSync('SELECT * FROM banned_users');
+};
+
 export const getDiscussions = () =>
   db.getAllSync('SELECT * FROM book_discussions ORDER BY createdAt DESC');
 
@@ -1195,7 +1235,20 @@ export const getReportGroups = () =>
           JOIN book_discussions bd ON bd.id = dc.discussionId
           WHERE dc.id = r.targetId
         )
-      END as parentDiscussionTopic
+      END as parentDiscussionTopic,
+      CASE
+        WHEN r.targetType = 'comment' THEN (
+          SELECT bd.bookTitle FROM discussion_comments dc
+          JOIN book_discussions bd ON bd.id = dc.discussionId
+          WHERE dc.id = r.targetId
+        )
+      END as parentDiscussionBookTitle,
+      CASE
+        WHEN r.targetType = 'comment' THEN (
+          SELECT dc.discussionId FROM discussion_comments dc WHERE dc.id = r.targetId
+        )
+        WHEN r.targetType = 'discussion' THEN r.targetId
+      END as parentDiscussionId
     FROM discussion_reports r
     GROUP BY r.targetType, r.targetId
     ORDER BY lastReportedAt DESC
@@ -1225,6 +1278,58 @@ export const getReportGroupsByUser = () =>
     WHERE targetAuthor IS NOT NULL AND targetAuthor != ''
     GROUP BY targetAuthor
     ORDER BY totalReportCount DESC
+  `);
+
+export const getReportDetailsByUser = () =>
+  db.getAllSync(`
+    SELECT
+      sub.targetAuthor,
+      sub.targetType,
+      sub.targetId,
+      COUNT(*) as reportCount,
+      GROUP_CONCAT(DISTINCT sub.reason) as reasons,
+      MAX(sub.createdAt) as lastReportedAt,
+      sub.targetContent,
+      sub.parentDiscussionTopic,
+      sub.parentDiscussionBookTitle,
+      sub.parentDiscussionId,
+      GROUP_CONCAT(sub.reportedBy || ' / ' || COALESCE(sub.reason, '') || ' / ' || sub.createdAt, ',') as reporters
+    FROM (
+      SELECT
+        r.id, r.targetType, r.targetId, r.reason, r.createdAt, r.reportedBy,
+        CASE
+          WHEN r.targetType = 'discussion' THEN (SELECT createdBy FROM book_discussions WHERE id = r.targetId)
+          WHEN r.targetType = 'comment'    THEN (SELECT createdBy FROM discussion_comments WHERE id = r.targetId)
+        END as targetAuthor,
+        CASE
+          WHEN r.targetType = 'discussion' THEN (SELECT topic FROM book_discussions WHERE id = r.targetId)
+          WHEN r.targetType = 'comment'    THEN (SELECT content FROM discussion_comments WHERE id = r.targetId)
+        END as targetContent,
+        CASE
+          WHEN r.targetType = 'comment' THEN (
+            SELECT bd.topic FROM discussion_comments dc
+            JOIN book_discussions bd ON bd.id = dc.discussionId
+            WHERE dc.id = r.targetId
+          )
+        END as parentDiscussionTopic,
+        CASE
+          WHEN r.targetType = 'comment' THEN (
+            SELECT bd.bookTitle FROM discussion_comments dc
+            JOIN book_discussions bd ON bd.id = dc.discussionId
+            WHERE dc.id = r.targetId
+          )
+        END as parentDiscussionBookTitle,
+        CASE
+          WHEN r.targetType = 'comment' THEN (
+            SELECT dc.discussionId FROM discussion_comments dc WHERE dc.id = r.targetId
+          )
+          WHEN r.targetType = 'discussion' THEN r.targetId
+        END as parentDiscussionId
+      FROM discussion_reports r
+    ) sub
+    WHERE sub.targetAuthor IS NOT NULL AND sub.targetAuthor != ''
+    GROUP BY sub.targetAuthor, sub.targetType, sub.targetId
+    ORDER BY sub.targetAuthor, lastReportedAt DESC
   `);
 
 export const dismissReportsForUser = (username) => {

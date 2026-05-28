@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
   Pressable, SafeAreaView,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getAllBooks,
@@ -20,6 +20,7 @@ import {
   XP_REWARDS,
   addReport,
   hasReported,
+  getUserBanStatus,
 } from '../../database/database';
 
 function fmtDate(ts) {
@@ -39,11 +40,16 @@ const TYPE_OPTIONS = [
 const TYPE_META = Object.fromEntries(TYPE_OPTIONS.map((o) => [o.value, o]));
 
 export default function BookDiscussionScreen() {
+  const { focusDiscId, focusCmtId } = useLocalSearchParams();
+  const scrollViewRef = useRef(null);
+  const cardLayoutsRef = useRef({});
+
   const [discussions, setDiscussions] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [bookMap, setBookMap] = useState({});
   const [expandedId, setExpandedId] = useState(null);
   const [commentsMap, setCommentsMap] = useState({});
+  const [highlightedCommentId, setHighlightedCommentId] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -65,7 +71,26 @@ export default function BookDiscussionScreen() {
     books.forEach((b) => { map[b.id] = b; });
     setBookMap(map);
   }, []);
-  useFocusEffect(reload);
+
+  useFocusEffect(
+    useCallback(() => {
+      reload();
+      if (focusDiscId) {
+        const id = Number(focusDiscId);
+        setExpandedId(id);
+        setCommentsMap((m) => ({ ...m, [id]: getComments(id) }));
+        setHighlightedCommentId(focusCmtId ? Number(focusCmtId) : null);
+        setTimeout(() => {
+          const y = cardLayoutsRef.current[id];
+          if (y !== undefined && scrollViewRef.current) {
+            scrollViewRef.current.scrollTo({ y, animated: true });
+          }
+        }, 300);
+      } else {
+        setHighlightedCommentId(null);
+      }
+    }, [reload, focusDiscId, focusCmtId]),
+  );
 
   const filteredDiscussions = searchQuery.trim()
     ? discussions.filter((d) => {
@@ -120,6 +145,16 @@ export default function BookDiscussionScreen() {
 
   const saveDiscussion = () => {
     if (!form.topic.trim()) { Alert.alert('필수 입력', '토론 주제를 입력해 주세요.'); return; }
+    if (!editTarget) {
+      const ban = getUserBanStatus(getUsername());
+      if (ban) {
+        const msg = ban.banType === 'ban'
+          ? '계정이 영구 정지되어 토론을 작성할 수 없습니다.'
+          : `계정이 이용 정지 중입니다.\n정지 해제일: ${new Date(ban.banUntil).toLocaleDateString('ko-KR')}`;
+        Alert.alert('작성 불가', msg);
+        return;
+      }
+    }
     const cleanedQs = form.questions.filter((q) => q.trim());
     if (form.discussionType === 'qa' && cleanedQs.length === 0) {
       Alert.alert('질문 필요', '질문별 답변 방식은 질문을 1개 이상 입력해 주세요.');
@@ -179,6 +214,14 @@ export default function BookDiscussionScreen() {
 
   const submitComment = () => {
     if (!cmtModal.content.trim()) { Alert.alert('입력 필요', '내용을 입력해 주세요.'); return; }
+    const ban = getUserBanStatus(getUsername());
+    if (ban) {
+      const msg = ban.banType === 'ban'
+        ? '계정이 영구 정지되어 댓글을 작성할 수 없습니다.'
+        : `계정이 이용 정지 중입니다.\n정지 해제일: ${new Date(ban.banUntil).toLocaleDateString('ko-KR')}`;
+      Alert.alert('작성 불가', msg);
+      return;
+    }
     addComment({
       discussionId: cmtModal.discussionId,
       vote: cmtModal.discussionType === 'debate' && !cmtModal.parentId ? cmtModal.vote : null,
@@ -201,6 +244,7 @@ export default function BookDiscussionScreen() {
 
   const REPORT_REASONS = [
     '스팸 / 광고',
+    '도배',
     '욕설 / 혐오 표현',
     '개인정보 노출',
     '선정적 / 음란 내용',
@@ -244,7 +288,7 @@ export default function BookDiscussionScreen() {
 
     const renderReplies = (parentId) =>
       (repliesMap[parentId] || []).map((r) => (
-        <View key={r.id} style={styles.replyItem}>
+        <View key={r.id} style={[styles.replyItem, highlightedCommentId === r.id && styles.commentHighlighted]}>
           <Ionicons name="return-down-forward-outline" size={13} color="#C4B4E0" />
           <View style={{ flex: 1 }}>
             {r.createdBy ? <Text style={styles.commentAuthor}>{r.createdBy}</Text> : null}
@@ -289,7 +333,7 @@ export default function BookDiscussionScreen() {
 
           {topComments.map((c) => (
             <View key={c.id}>
-              <View style={styles.commentItem}>
+              <View style={[styles.commentItem, highlightedCommentId === c.id && styles.commentHighlighted]}>
                 <View style={[styles.voteBadge, { backgroundColor: c.vote === 'agree' ? '#E8F5E9' : '#FFEBEE' }]}>
                   <Text style={[styles.voteBadgeText, { color: c.vote === 'agree' ? '#4CAF50' : '#F44336' }]}>
                     {c.vote === 'agree' ? '찬성' : '반대'}
@@ -331,7 +375,7 @@ export default function BookDiscussionScreen() {
           {topComments.length === 0 && <Text style={styles.noCommentText}>아직 댓글이 없습니다.</Text>}
           {topComments.map((c) => (
             <View key={c.id}>
-              <View style={styles.commentItem}>
+              <View style={[styles.commentItem, highlightedCommentId === c.id && styles.commentHighlighted]}>
                 <Ionicons name="chatbubble-outline" size={14} color="#9C8DC4" style={{ marginTop: 2 }} />
                 <View style={{ flex: 1 }}>
                   {c.createdBy ? <Text style={styles.commentAuthor}>{c.createdBy}</Text> : null}
@@ -377,7 +421,7 @@ export default function BookDiscussionScreen() {
               </View>
               {answers.map((a) => (
                 <View key={a.id}>
-                  <View style={styles.answerItem}>
+                  <View style={[styles.answerItem, highlightedCommentId === a.id && styles.commentHighlighted]}>
                     <Ionicons name="return-down-forward-outline" size={14} color="#B0A0D8" />
                     <View style={{ flex: 1 }}>
                       {a.createdBy ? <Text style={styles.commentAuthor}>{a.createdBy}</Text> : null}
@@ -433,7 +477,7 @@ export default function BookDiscussionScreen() {
         )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.list}>
         {filteredDiscussions.length === 0 && (
           <View style={styles.empty}>
             <Ionicons name="chatbubbles-outline" size={52} color="#C9B8E8" />
@@ -464,6 +508,7 @@ export default function BookDiscussionScreen() {
               style={[styles.card, expanded && styles.cardExpanded]}
               onPress={() => toggleExpand(disc)}
               activeOpacity={0.8}
+              onLayout={(e) => { cardLayoutsRef.current[disc.id] = e.nativeEvent.layout.y; }}
             >
               <View style={styles.cardHeader}>
                 <View style={styles.cardMeta}>
@@ -876,6 +921,7 @@ const styles = StyleSheet.create({
 
   // 댓글 아이템
   commentItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
+  commentHighlighted: { backgroundColor: '#EDE7F6', borderRadius: 8, padding: 6, borderLeftWidth: 3, borderLeftColor: '#6750A4' },
   voteBadge: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, alignItems: 'center' },
   voteBadgeText: { fontSize: 11, fontWeight: 'bold' },
   commentAuthor: { fontSize: 11, fontWeight: 'bold', color: '#9C8DC4', marginBottom: 2 },
