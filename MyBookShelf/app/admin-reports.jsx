@@ -1,6 +1,7 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getReportGroups,
@@ -17,6 +18,7 @@ function formatDate(ts) {
 
 export default function AdminReportsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState('content');
   const [groups, setGroups] = useState([]);
   const [userGroups, setUserGroups] = useState([]);
@@ -171,7 +173,7 @@ export default function AdminReportsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#1C1B1F" />
         </TouchableOpacity>
@@ -227,7 +229,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 16,
     paddingBottom: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
