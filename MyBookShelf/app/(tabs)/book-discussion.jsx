@@ -15,6 +15,7 @@ import {
   getComments,
   addComment,
   deleteComment,
+  getUsername,
 } from '../../database/database';
 
 function fmtDate(ts) {
@@ -35,6 +36,8 @@ const TYPE_META = Object.fromEntries(TYPE_OPTIONS.map((o) => [o.value, o]));
 
 export default function BookDiscussionScreen() {
   const [discussions, setDiscussions] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [bookMap, setBookMap] = useState({});
   const [expandedId, setExpandedId] = useState(null);
   const [commentsMap, setCommentsMap] = useState({});
   const [modalVisible, setModalVisible] = useState(false);
@@ -47,8 +50,26 @@ export default function BookDiscussionScreen() {
     vote: 'agree', questionIndex: null, questionText: '', content: '',
   });
 
-  const reload = useCallback(() => setDiscussions(getDiscussions()), []);
+  const reload = useCallback(() => {
+    setDiscussions(getDiscussions());
+    const books = getAllBooks();
+    const map = {};
+    books.forEach((b) => { map[b.id] = b; });
+    setBookMap(map);
+  }, []);
   useFocusEffect(reload);
+
+  const filteredDiscussions = searchQuery.trim()
+    ? discussions.filter((d) => {
+        const q = searchQuery.toLowerCase();
+        const author = (d.bookId && bookMap[d.bookId]?.author) || '';
+        return (
+          (d.bookTitle || '').toLowerCase().includes(q) ||
+          author.toLowerCase().includes(q) ||
+          (d.createdBy || '').toLowerCase().includes(q)
+        );
+      })
+    : discussions;
 
   const reloadComments = (discussionId) => {
     setCommentsMap((m) => ({ ...m, [discussionId]: getComments(discussionId) }));
@@ -103,6 +124,7 @@ export default function BookDiscussionScreen() {
         bookId: form.bookId, bookTitle: form.bookTitle,
         topic: form.topic.trim(), content: form.content.trim(),
         questions: cleanedQs, discussionType: form.discussionType,
+        createdBy: getUsername(),
       });
     }
     setModalVisible(false);
@@ -256,16 +278,42 @@ export default function BookDiscussionScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.searchContainer}>
+        <Ionicons name="search-outline" size={18} color="#999" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="책 이름, 작성자로 검색"
+          placeholderTextColor="#bbb"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={18} color="#BDBDBD" />
+          </TouchableOpacity>
+        )}
+      </View>
+
       <ScrollView contentContainerStyle={styles.list}>
-        {discussions.length === 0 && (
+        {filteredDiscussions.length === 0 && (
           <View style={styles.empty}>
             <Ionicons name="chatbubbles-outline" size={52} color="#C9B8E8" />
-            <Text style={styles.emptyTitle}>토론이 없습니다</Text>
-            <Text style={styles.emptyDesc}>+ 버튼을 눌러 첫 번째 독서 토론을 만들어보세요.</Text>
+            {searchQuery.trim() ? (
+              <>
+                <Text style={styles.emptyTitle}>검색 결과가 없습니다</Text>
+                <Text style={styles.emptyDesc}>다른 책 이름이나 작성자로 검색해 보세요.</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyTitle}>토론이 없습니다</Text>
+                <Text style={styles.emptyDesc}>+ 버튼을 눌러 첫 번째 독서 토론을 만들어보세요.</Text>
+              </>
+            )}
           </View>
         )}
 
-        {discussions.map((disc) => {
+        {filteredDiscussions.map((disc) => {
           const expanded = expandedId === disc.id;
           const dtype = disc.discussionType || 'debate';
           const typeMeta = TYPE_META[dtype] || TYPE_META.debate;
@@ -296,6 +344,12 @@ export default function BookDiscussionScreen() {
                     <Ionicons name={typeMeta.icon} size={10} color={typeMeta.color} />
                     <Text style={[styles.typeTagText, { color: typeMeta.color }]}>{typeMeta.label}</Text>
                   </View>
+                  {disc.createdBy ? (
+                    <View style={styles.creatorTag}>
+                      <Ionicons name="person-outline" size={10} color="#888" />
+                      <Text style={styles.creatorTagText}>{disc.createdBy}</Text>
+                    </View>
+                  ) : null}
                   <Text style={styles.dateText}>{fmtDate(disc.createdAt)}</Text>
                 </View>
                 <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#999" />
@@ -563,6 +617,15 @@ export default function BookDiscussionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
+  searchContainer: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#fff', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    margin: 12, marginBottom: 4,
+    elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 3,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: '#333', paddingVertical: 0 },
   list: { padding: 12, paddingBottom: 80 },
   empty: { alignItems: 'center', marginTop: 80, gap: 10 },
   emptyTitle: { fontSize: 16, fontWeight: 'bold', color: '#9E9E9E' },
@@ -589,6 +652,8 @@ const styles = StyleSheet.create({
   },
   typeTagText: { fontSize: 11, fontWeight: '600' },
   dateText: { fontSize: 11, color: '#BDBDBD' },
+  creatorTag: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  creatorTagText: { fontSize: 11, color: '#999' },
   topicText: { fontSize: 15, fontWeight: 'bold', color: '#212121', lineHeight: 22 },
   contentText: { fontSize: 13, color: '#555', marginTop: 10, lineHeight: 20 },
 
