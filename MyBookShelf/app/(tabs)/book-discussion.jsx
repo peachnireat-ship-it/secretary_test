@@ -48,6 +48,7 @@ export default function BookDiscussionScreen() {
   const [cmtModal, setCmtModal] = useState({
     visible: false, discussionId: null, discussionType: 'debate',
     vote: 'agree', questionIndex: null, questionText: '', content: '',
+    parentId: null, parentContent: '',
   });
 
   const reload = useCallback(() => {
@@ -147,6 +148,22 @@ export default function BookDiscussionScreen() {
       questionIndex,
       questionText,
       content: '',
+      parentId: null,
+      parentContent: '',
+    });
+  };
+
+  const openReplyModal = (disc, parentComment) => {
+    setCmtModal({
+      visible: true,
+      discussionId: disc.id,
+      discussionType: disc.discussionType || 'debate',
+      vote: 'agree',
+      questionIndex: null,
+      questionText: '',
+      content: '',
+      parentId: parentComment.id,
+      parentContent: parentComment.content,
     });
   };
 
@@ -154,10 +171,11 @@ export default function BookDiscussionScreen() {
     if (!cmtModal.content.trim()) { Alert.alert('입력 필요', '내용을 입력해 주세요.'); return; }
     addComment({
       discussionId: cmtModal.discussionId,
-      vote: cmtModal.discussionType === 'debate' ? cmtModal.vote : null,
+      vote: cmtModal.discussionType === 'debate' && !cmtModal.parentId ? cmtModal.vote : null,
       questionIndex: cmtModal.questionIndex,
       content: cmtModal.content.trim(),
       createdBy: getUsername(),
+      parentId: cmtModal.parentId,
     });
     setCmtModal((m) => ({ ...m, visible: false }));
     reloadComments(cmtModal.discussionId);
@@ -174,9 +192,30 @@ export default function BookDiscussionScreen() {
     const comments = commentsMap[disc.id] || [];
     const dtype = disc.discussionType || 'debate';
 
+    const topComments = comments.filter((c) => !c.parentId);
+    const repliesMap = {};
+    comments.filter((c) => c.parentId).forEach((r) => {
+      if (!repliesMap[r.parentId]) repliesMap[r.parentId] = [];
+      repliesMap[r.parentId].push(r);
+    });
+
+    const renderReplies = (parentId) =>
+      (repliesMap[parentId] || []).map((r) => (
+        <View key={r.id} style={styles.replyItem}>
+          <Ionicons name="return-down-forward-outline" size={13} color="#C4B4E0" />
+          <View style={{ flex: 1 }}>
+            {r.createdBy ? <Text style={styles.commentAuthor}>{r.createdBy}</Text> : null}
+            <Text style={styles.commentText}>{r.content}</Text>
+          </View>
+          <TouchableOpacity onPress={() => confirmDeleteComment(r.id, disc.id)}>
+            <Ionicons name="close-circle-outline" size={16} color="#DDD" />
+          </TouchableOpacity>
+        </View>
+      ));
+
     if (dtype === 'debate') {
-      const agrees = comments.filter((c) => c.vote === 'agree');
-      const disagrees = comments.filter((c) => c.vote === 'disagree');
+      const agrees = topComments.filter((c) => c.vote === 'agree');
+      const disagrees = topComments.filter((c) => c.vote === 'disagree');
       const total = agrees.length + disagrees.length;
       const agreePct = total ? Math.round((agrees.length / total) * 100) : 50;
       const disagreePct = 100 - agreePct;
@@ -198,22 +237,26 @@ export default function BookDiscussionScreen() {
             <Text style={styles.noCommentText}>아직 의견이 없습니다. 첫 번째로 의견을 남겨보세요!</Text>
           )}
 
-          {comments.map((c) => (
-            <View key={c.id} style={styles.commentItem}>
-              <View style={[styles.voteBadge, { backgroundColor: c.vote === 'agree' ? '#E8F5E9' : '#FFEBEE' }]}>
-                <Text style={[styles.voteBadgeText, { color: c.vote === 'agree' ? '#4CAF50' : '#F44336' }]}>
-                  {c.vote === 'agree' ? '찬성' : '반대'}
-                </Text>
+          {topComments.map((c) => (
+            <View key={c.id}>
+              <View style={styles.commentItem}>
+                <View style={[styles.voteBadge, { backgroundColor: c.vote === 'agree' ? '#E8F5E9' : '#FFEBEE' }]}>
+                  <Text style={[styles.voteBadgeText, { color: c.vote === 'agree' ? '#4CAF50' : '#F44336' }]}>
+                    {c.vote === 'agree' ? '찬성' : '반대'}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  {c.createdBy ? <Text style={styles.commentAuthor}>{c.createdBy}</Text> : null}
+                  <Text style={styles.commentText}>{c.content}</Text>
+                </View>
+                <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
+                  <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
+                  <Ionicons name="close-circle-outline" size={16} color="#DDD" />
+                </TouchableOpacity>
               </View>
-              <View style={{ flex: 1 }}>
-                {c.createdBy ? (
-                  <Text style={styles.commentAuthor}>{c.createdBy}</Text>
-                ) : null}
-                <Text style={styles.commentText}>{c.content}</Text>
-              </View>
-              <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
-                <Ionicons name="close-circle-outline" size={16} color="#DDD" />
-              </TouchableOpacity>
+              {renderReplies(c.id)}
             </View>
           ))}
 
@@ -228,19 +271,23 @@ export default function BookDiscussionScreen() {
     if (dtype === 'free') {
       return (
         <View style={styles.participationSection}>
-          {comments.length === 0 && <Text style={styles.noCommentText}>아직 댓글이 없습니다.</Text>}
-          {comments.map((c) => (
-            <View key={c.id} style={styles.commentItem}>
-              <Ionicons name="chatbubble-outline" size={14} color="#9C8DC4" style={{ marginTop: 2 }} />
-              <View style={{ flex: 1 }}>
-                {c.createdBy ? (
-                  <Text style={styles.commentAuthor}>{c.createdBy}</Text>
-                ) : null}
-                <Text style={styles.commentText}>{c.content}</Text>
+          {topComments.length === 0 && <Text style={styles.noCommentText}>아직 댓글이 없습니다.</Text>}
+          {topComments.map((c) => (
+            <View key={c.id}>
+              <View style={styles.commentItem}>
+                <Ionicons name="chatbubble-outline" size={14} color="#9C8DC4" style={{ marginTop: 2 }} />
+                <View style={{ flex: 1 }}>
+                  {c.createdBy ? <Text style={styles.commentAuthor}>{c.createdBy}</Text> : null}
+                  <Text style={styles.commentText}>{c.content}</Text>
+                </View>
+                <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
+                  <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
+                  <Ionicons name="close-circle-outline" size={16} color="#DDD" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => confirmDeleteComment(c.id, disc.id)}>
-                <Ionicons name="close-circle-outline" size={16} color="#DDD" />
-              </TouchableOpacity>
+              {renderReplies(c.id)}
             </View>
           ))}
           <TouchableOpacity style={styles.participateBtn} onPress={() => openCmtModal(disc)}>
@@ -257,7 +304,7 @@ export default function BookDiscussionScreen() {
     return (
       <View style={styles.participationSection}>
         {qs.map((q, qi) => {
-          const answers = comments.filter((c) => c.questionIndex === qi);
+          const answers = topComments.filter((c) => c.questionIndex === qi);
           return (
             <View key={qi} style={styles.qaBlock}>
               <View style={styles.qaQuestionRow}>
@@ -265,17 +312,21 @@ export default function BookDiscussionScreen() {
                 <Text style={styles.qaQuestionText}>{q}</Text>
               </View>
               {answers.map((a) => (
-                <View key={a.id} style={styles.answerItem}>
-                  <Ionicons name="return-down-forward-outline" size={14} color="#B0A0D8" />
-                  <View style={{ flex: 1 }}>
-                    {a.createdBy ? (
-                      <Text style={styles.commentAuthor}>{a.createdBy}</Text>
-                    ) : null}
-                    <Text style={styles.answerText}>{a.content}</Text>
+                <View key={a.id}>
+                  <View style={styles.answerItem}>
+                    <Ionicons name="return-down-forward-outline" size={14} color="#B0A0D8" />
+                    <View style={{ flex: 1 }}>
+                      {a.createdBy ? <Text style={styles.commentAuthor}>{a.createdBy}</Text> : null}
+                      <Text style={styles.answerText}>{a.content}</Text>
+                    </View>
+                    <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, a)}>
+                      <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => confirmDeleteComment(a.id, disc.id)}>
+                      <Ionicons name="close-circle-outline" size={16} color="#DDD" />
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity onPress={() => confirmDeleteComment(a.id, disc.id)}>
-                    <Ionicons name="close-circle-outline" size={16} color="#DDD" />
-                  </TouchableOpacity>
+                  {renderReplies(a.id)}
                 </View>
               ))}
               <TouchableOpacity
@@ -575,11 +626,19 @@ export default function BookDiscussionScreen() {
             <Pressable style={styles.cmtSheet} onPress={() => {}}>
               <View style={styles.pickerHandle} />
               <Text style={styles.cmtSheetTitle}>
-                {cmtModal.discussionType === 'debate' ? '의견 남기기' :
-                 cmtModal.questionIndex !== null      ? '답변 달기'   : '댓글 달기'}
+                {cmtModal.parentId                      ? '답글 달기'   :
+                 cmtModal.discussionType === 'debate'   ? '의견 남기기' :
+                 cmtModal.questionIndex !== null        ? '답변 달기'   : '댓글 달기'}
               </Text>
 
-              {cmtModal.discussionType === 'debate' && (
+              {cmtModal.parentId && cmtModal.parentContent ? (
+                <View style={styles.replyRef}>
+                  <Ionicons name="return-up-forward-outline" size={13} color="#9C8DC4" />
+                  <Text style={styles.replyRefText} numberOfLines={2}>{cmtModal.parentContent}</Text>
+                </View>
+              ) : null}
+
+              {cmtModal.discussionType === 'debate' && !cmtModal.parentId && (
                 <View style={styles.voteToggleRow}>
                   <TouchableOpacity
                     style={[styles.voteToggleBtn, cmtModal.vote === 'agree' && styles.voteToggleBtnAgree]}
@@ -607,6 +666,7 @@ export default function BookDiscussionScreen() {
               <TextInput
                 style={[styles.input, styles.inputMulti, { marginTop: 12 }]}
                 placeholder={
+                  cmtModal.parentId                       ? '답글을 작성해 주세요.'                    :
                   cmtModal.discussionType === 'debate'    ? '찬성 또는 반대하는 이유를 작성해 주세요.' :
                   cmtModal.questionIndex !== null         ? '이 질문에 대한 답변을 작성해 주세요.'      :
                                                             '자유롭게 댓글을 작성해 주세요.'
@@ -789,6 +849,23 @@ const styles = StyleSheet.create({
   removeQBtn: { padding: 2 },
   saveBtn: { backgroundColor: '#6750A4', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 8 },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+
+  // 답글 아이템
+  replyItem: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    marginBottom: 6, marginLeft: 16,
+    backgroundColor: '#F8F4FF', borderRadius: 8,
+    paddingVertical: 7, paddingHorizontal: 8,
+  },
+  replyBtn: { padding: 3 },
+
+  // 답글 달기 모달 — 원본 댓글 표시
+  replyRef: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    backgroundColor: '#F0EBF8', borderRadius: 8,
+    padding: 10, marginBottom: 12,
+  },
+  replyRefText: { fontSize: 13, color: '#6750A4', lineHeight: 18, flex: 1 },
 
   // 댓글 입력 모달
   cmtSheet: {

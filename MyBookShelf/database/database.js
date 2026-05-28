@@ -1083,6 +1083,7 @@ db.execSync(`
   );
 `);
 try { db.execSync('ALTER TABLE discussion_comments ADD COLUMN createdBy TEXT DEFAULT NULL'); } catch (_) {}
+try { db.execSync('ALTER TABLE discussion_comments ADD COLUMN parentId INTEGER DEFAULT NULL'); } catch (_) {}
 
 export const getDiscussions = () =>
   db.getAllSync('SELECT * FROM book_discussions ORDER BY createdAt DESC');
@@ -1115,13 +1116,14 @@ export const deleteDiscussion = (id) => {
 export const getComments = (discussionId) =>
   db.getAllSync('SELECT * FROM discussion_comments WHERE discussionId = ? ORDER BY createdAt ASC', [discussionId]);
 
-export const addComment = ({ discussionId, vote, questionIndex, content, createdBy }) => {
+export const addComment = ({ discussionId, vote, questionIndex, content, createdBy, parentId }) => {
   db.runSync(
-    `INSERT INTO discussion_comments (discussionId, vote, questionIndex, content, createdAt, createdBy) VALUES (?, ?, ?, ?, ?, ?)`,
-    [discussionId, vote || null, questionIndex ?? null, content, Date.now(), createdBy || null],
+    `INSERT INTO discussion_comments (discussionId, vote, questionIndex, content, createdAt, createdBy, parentId) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [discussionId, vote || null, questionIndex ?? null, content, Date.now(), createdBy || null, parentId || null],
   );
 };
 
 export const deleteComment = (id) => {
+  db.runSync('DELETE FROM discussion_comments WHERE parentId = ?', [id]);
   db.runSync('DELETE FROM discussion_comments WHERE id = ?', [id]);
 };
