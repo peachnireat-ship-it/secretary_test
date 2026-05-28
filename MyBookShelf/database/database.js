@@ -1171,3 +1171,38 @@ export const hasReported = (targetType, targetId, reportedBy) =>
     `SELECT id FROM discussion_reports WHERE targetType = ? AND targetId = ? AND reportedBy = ?`,
     [targetType, targetId, reportedBy],
   );
+
+export const getReportGroups = () =>
+  db.getAllSync(`
+    SELECT
+      r.targetType,
+      r.targetId,
+      COUNT(*) as reportCount,
+      GROUP_CONCAT(DISTINCT r.reason) as reasons,
+      GROUP_CONCAT(DISTINCT r.reportedBy) as reporters,
+      MAX(r.createdAt) as lastReportedAt,
+      CASE
+        WHEN r.targetType = 'discussion' THEN (SELECT topic FROM book_discussions WHERE id = r.targetId)
+        WHEN r.targetType = 'comment'    THEN (SELECT content FROM discussion_comments WHERE id = r.targetId)
+      END as targetContent,
+      CASE
+        WHEN r.targetType = 'discussion' THEN (SELECT createdBy FROM book_discussions WHERE id = r.targetId)
+        WHEN r.targetType = 'comment'    THEN (SELECT createdBy FROM discussion_comments WHERE id = r.targetId)
+      END as targetAuthor
+    FROM discussion_reports r
+    GROUP BY r.targetType, r.targetId
+    ORDER BY lastReportedAt DESC
+  `);
+
+export const dismissReportsForTarget = (targetType, targetId) => {
+  db.runSync('DELETE FROM discussion_reports WHERE targetType = ? AND targetId = ?', [targetType, targetId]);
+};
+
+export const deleteReportTarget = (targetType, targetId) => {
+  if (targetType === 'discussion') {
+    deleteDiscussion(targetId);
+  } else {
+    deleteComment(targetId);
+  }
+  dismissReportsForTarget(targetType, targetId);
+};

@@ -172,6 +172,13 @@ export default function ProfileEditScreen() {
           <Text style={styles.saveBtnText}>저장하기</Text>
         </TouchableOpacity>
 
+        {name === 'nireat' && (
+          <TouchableOpacity style={styles.adminBtn} onPress={() => router.push('/admin-reports')} activeOpacity={0.8}>
+            <Ionicons name="shield-outline" size={15} color="#fff" />
+            <Text style={styles.adminBtnText}>신고 내역 관리</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.testSection}>
           <View style={styles.testHeader}>
             <Ionicons name="flask-outline" size={15} color="#9E9E9E" />
@@ -338,6 +345,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   saveBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+  adminBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#6750A4',
+    borderRadius: 12,
+    paddingVertical: 13,
+    marginTop: 12,
+  },
+  adminBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 
   testSection: {
     marginTop: 24,
