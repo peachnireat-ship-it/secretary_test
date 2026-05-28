@@ -54,6 +54,27 @@ export default function ProfileEditScreen() {
     );
   };
 
+  const handleSwitchToAdmin = () => {
+    const original = getUsername();
+    if (!original) return;
+    Alert.alert(
+      '운영자 테스트 계정으로 전환',
+      `현재 닉네임 "${original}"을 보존하고\n운영자 계정(nireat)으로 전환합니다.\n\n관리자 기능 테스트 후 "원래 계정으로 복원"을 눌러주세요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '전환',
+          onPress: () => {
+            saveTestOriginalUsername(original);
+            saveUsername('nireat');
+            setName('nireat');
+            setIsTestMode(true);
+          },
+        },
+      ]
+    );
+  };
+
   const handleRestoreAccount = () => {
     const original = getTestOriginalUsername();
     if (!original) return;
@@ -188,7 +209,9 @@ export default function ProfileEditScreen() {
             <>
               <View style={styles.testModeBadge}>
                 <Ionicons name="warning-outline" size={14} color="#FF9800" />
-                <Text style={styles.testModeBadgeText}>임시 테스트 계정 사용 중</Text>
+                <Text style={styles.testModeBadgeText}>
+                  {name === 'nireat' ? '운영자 테스트 계정 사용 중' : '임시 테스트 계정 사용 중'}
+                </Text>
               </View>
               <TouchableOpacity style={styles.restoreBtn} onPress={handleRestoreAccount} activeOpacity={0.8}>
                 <Ionicons name="refresh-outline" size={15} color="#6750A4" />
@@ -196,10 +219,18 @@ export default function ProfileEditScreen() {
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity style={styles.testBtn} onPress={handleSwitchToTest} activeOpacity={0.8}>
-              <Ionicons name="person-add-outline" size={15} color="#9E9E9E" />
-              <Text style={styles.testBtnText}>임시 테스트 계정으로 전환</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={styles.testBtn} onPress={handleSwitchToTest} activeOpacity={0.8}>
+                <Ionicons name="person-add-outline" size={15} color="#9E9E9E" />
+                <Text style={styles.testBtnText}>임시 테스트 계정으로 전환</Text>
+              </TouchableOpacity>
+              {name !== 'nireat' && (
+                <TouchableOpacity style={styles.testBtn} onPress={handleSwitchToAdmin} activeOpacity={0.8}>
+                  <Ionicons name="shield-outline" size={15} color="#9E9E9E" />
+                  <Text style={styles.testBtnText}>운영자 테스트 계정으로 전환</Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
       </ScrollView>
