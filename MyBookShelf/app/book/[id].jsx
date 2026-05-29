@@ -239,7 +239,7 @@ export default function BookDetailScreen() {
       goalDate: goalTs ?? book.goalDate,
       bookType,
       genre,
-      progressPct: parseInt(progressPct) || 0,
+      progressPct: effectiveProgress,
       status: autoComplete ? 'completed' : book.status,
     });
 
@@ -300,7 +300,7 @@ export default function BookDetailScreen() {
             status: 'reading',
             startDate: dateStrToTs(startDateStr) || now,
             genre,
-            progressPct: parseInt(progressPct) || 0,
+            progressPct: effectiveProgress,
           });
           router.back();
         },
@@ -327,7 +327,7 @@ export default function BookDetailScreen() {
             status: 'want_to_read',
             startDate: null,
             genre,
-            progressPct: parseInt(progressPct) || 0,
+            progressPct: effectiveProgress,
           });
           router.back();
         },
@@ -361,7 +361,7 @@ export default function BookDetailScreen() {
               status: 'reading',
               endDate: null,
               genre,
-              progressPct: parseInt(progressPct) || 0,
+              progressPct: effectiveProgress,
             });
             onBookReverted(book.id, fallbackXp);
             const guildId = getGuildId();
@@ -402,7 +402,7 @@ export default function BookDetailScreen() {
             endDate: finalEndDate,
             goalDate: goalTs ?? book.goalDate,
             genre,
-            progressPct: parseInt(progressPct) || 0,
+            progressPct: effectiveProgress,
           });
           const prevLevel = getUserStats().level;
           trackDailyReading(0);
