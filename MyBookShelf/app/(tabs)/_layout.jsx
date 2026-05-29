@@ -13,7 +13,7 @@ const ALL_TABS = [
   { name: 'statistics',   title: '통계',        icon: 'bar-chart-outline' },
   { name: 'badges',       title: '뱃지',        icon: 'medal-outline' },
   { name: 'challenge',    title: '챌린지',      icon: 'trophy-outline' },
-  { name: 'ranking',      title: '대항전',      icon: 'podium-outline' },
+  { name: 'ranking',      title: '랭킹',        icon: 'podium-outline' },
   { name: 'hall-of-fame',     title: '명예의 전당', icon: 'star-outline' },
   { name: 'reading-pattern', title: '패턴 분석',   icon: 'analytics-outline' },
   { name: 'recommend',       title: '추천 도서',   icon: 'sparkles-outline' },
