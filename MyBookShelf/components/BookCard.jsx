@@ -27,7 +27,14 @@ export default function BookCard({ book, onPress, onLongPress }) {
     >
       <View style={styles.header}>
         <Text style={styles.title} numberOfLines={1}>{book.title}</Text>
-        <StatusBadge status={book.status} />
+        <View style={styles.badgeGroup}>
+          {(book.readCount || 1) > 1 && (
+            <View style={styles.readCountBadge}>
+              <Text style={styles.readCountBadgeText}>{book.readCount}회차</Text>
+            </View>
+          )}
+          <StatusBadge status={book.status} />
+        </View>
       </View>
       {book.author ? (
         <Text style={styles.author} numberOfLines={1}>{book.author}</Text>
@@ -75,6 +82,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     gap: 8,
   },
+  badgeGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  readCountBadge: {
+    backgroundColor: '#E8DEF8',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  readCountBadgeText: { fontSize: 11, fontWeight: '700', color: '#6750A4' },
   title: {
     fontSize: 16,
     fontWeight: 'bold',

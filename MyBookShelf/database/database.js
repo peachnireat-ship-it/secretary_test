@@ -148,6 +148,9 @@ try {
 try {
   db.execSync(`ALTER TABLE guild_members ADD COLUMN isAdult INTEGER DEFAULT 0`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN readCount INTEGER DEFAULT 1`);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS user_prefs (

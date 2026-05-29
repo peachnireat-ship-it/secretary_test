@@ -375,6 +375,39 @@ export default function BookDetailScreen() {
     );
   };
 
+  const handleReRead = () => {
+    if (!book) return;
+    const nextCount = (book.readCount || 1) + 1;
+    Alert.alert(
+      '다시 읽기',
+      `${nextCount}회차 독서를 시작할까요?\n완독 기록은 유지되며 별점도 그대로 남습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '시작',
+          onPress: () => {
+            updateBook({
+              ...book,
+              title: editTitle.trim() || book.title,
+              author: editAuthor.trim(),
+              totalPages: parseInt(editTotalPages) || book.totalPages,
+              cover: editCover,
+              rating,
+              review,
+              currentPage: 0,
+              status: 'reading',
+              startDate: Date.now(),
+              endDate: null,
+              progressPct: 0,
+              readCount: nextCount,
+            });
+            router.back();
+          },
+        },
+      ]
+    );
+  };
+
   const handleMarkCompleted = () => {
     if (!book) return;
     const startTs = dateStrToTs(startDateStr);
@@ -471,6 +504,11 @@ export default function BookDetailScreen() {
             {(editAuthor || book.author) ? <Text style={styles.author}>{editAuthor || book.author}</Text> : null}
             <View style={styles.badgeRow}>
               <StatusBadge status={book.status} />
+              {(book.readCount || 1) > 1 && (
+                <View style={styles.readCountBadge}>
+                  <Text style={styles.readCountBadgeText}>{book.readCount}회차</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -737,8 +775,8 @@ export default function BookDetailScreen() {
             </TouchableOpacity>
           )}
           {book.status === 'completed' && (
-            <TouchableOpacity style={styles.revertBtn} onPress={handleRevertToReading}>
-              <Text style={styles.revertBtnText}>읽는 중</Text>
+            <TouchableOpacity style={styles.reReadBtn} onPress={handleReRead}>
+              <Text style={styles.reReadBtnText}>다시 읽기</Text>
             </TouchableOpacity>
           )}
           {book.status !== 'completed' && (
@@ -767,7 +805,14 @@ const styles = StyleSheet.create({
   titleMeta: { flex: 1 },
   title: { fontSize: 20.5, fontWeight: 'bold', color: '#1C1B1F', marginBottom: 4 },
   author: { fontSize: 15, color: '#49454F', marginBottom: 10 },
-  badgeRow: {},
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  readCountBadge: {
+    backgroundColor: '#E8DEF8',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  readCountBadgeText: { fontSize: 12, fontWeight: '700', color: '#6750A4' },
   sectionLabel: { fontSize: 14, fontWeight: '600', color: '#1C1B1F', marginBottom: 8, marginTop: 20 },
   input: {
     borderWidth: 1,
@@ -811,6 +856,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   readingBtnText: { color: '#1976D2', fontSize: 14, fontWeight: '600' },
+  reReadBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#1976D2',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  reReadBtnText: { color: '#1976D2', fontSize: 14, fontWeight: '600' },
   revertBtn: {
     flex: 1,
     borderWidth: 1,
