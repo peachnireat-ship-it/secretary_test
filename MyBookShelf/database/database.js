@@ -1133,6 +1133,7 @@ db.execSync(`
 `);
 try { db.execSync(`ALTER TABLE book_discussions ADD COLUMN discussionType TEXT DEFAULT 'debate'`); } catch (_) {}
 try { db.execSync(`ALTER TABLE book_discussions ADD COLUMN createdBy TEXT DEFAULT ''`); } catch (_) {}
+try { db.execSync(`ALTER TABLE book_discussions ADD COLUMN endsAt INTEGER DEFAULT NULL`); } catch (_) {}
 try {
   db.execSync(`
     UPDATE book_discussions
@@ -1213,20 +1214,20 @@ export const getDiscussions = () =>
 export const getDiscussionById = (id) =>
   db.getFirstSync('SELECT * FROM book_discussions WHERE id = ?', [id]);
 
-export const addDiscussion = ({ bookId, bookTitle, topic, content, questions, discussionType, createdBy }) => {
+export const addDiscussion = ({ bookId, bookTitle, topic, content, questions, discussionType, createdBy, endsAt }) => {
   const now = Date.now();
   const result = db.runSync(
-    `INSERT INTO book_discussions (bookId, bookTitle, topic, content, questions, discussionType, createdBy, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [bookId || null, bookTitle || '', topic, content || '', JSON.stringify(questions || []), discussionType || 'debate', createdBy || '', now, now],
+    `INSERT INTO book_discussions (bookId, bookTitle, topic, content, questions, discussionType, createdBy, createdAt, updatedAt, endsAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [bookId || null, bookTitle || '', topic, content || '', JSON.stringify(questions || []), discussionType || 'debate', createdBy || '', now, now, endsAt || null],
   );
   return result.lastInsertRowId;
 };
 
-export const updateDiscussion = ({ id, topic, content, questions }) => {
+export const updateDiscussion = ({ id, topic, content, questions, endsAt }) => {
   db.runSync(
-    `UPDATE book_discussions SET topic = ?, content = ?, questions = ?, updatedAt = ? WHERE id = ?`,
-    [topic, content || '', JSON.stringify(questions || []), Date.now(), id],
+    `UPDATE book_discussions SET topic = ?, content = ?, questions = ?, endsAt = ?, updatedAt = ? WHERE id = ?`,
+    [topic, content || '', JSON.stringify(questions || []), endsAt ?? null, Date.now(), id],
   );
 };
 

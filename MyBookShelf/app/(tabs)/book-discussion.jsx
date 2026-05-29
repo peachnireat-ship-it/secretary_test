@@ -29,7 +29,28 @@ function fmtDate(ts) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
-const EMPTY_FORM = { bookId: null, bookTitle: '', topic: '', content: '', questions: [''], discussionType: 'debate' };
+function tsToDateStr(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatDateStr(raw) {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+}
+
+function dateStrToTs(str) {
+  if (!str || !str.trim()) return null;
+  const parts = str.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return null;
+  const d = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999);
+  return isNaN(d.getTime()) ? null : d.getTime();
+}
+
+const EMPTY_FORM = { bookId: null, bookTitle: '', topic: '', content: '', questions: [''], discussionType: 'debate', endsAtStr: '' };
 
 const TYPE_OPTIONS = [
   { value: 'debate', label: '찬반 토론', icon: 'git-compare-outline', color: '#6750A4' },
@@ -128,6 +149,7 @@ export default function BookDiscussionScreen() {
       bookId: disc.bookId, bookTitle: disc.bookTitle,
       topic: disc.topic, content: disc.content, questions: qs,
       discussionType: disc.discussionType || 'debate',
+      endsAtStr: tsToDateStr(disc.endsAt),
     });
     setModalVisible(true);
   };
@@ -160,14 +182,19 @@ export default function BookDiscussionScreen() {
       Alert.alert('질문 필요', '질문별 답변 방식은 질문을 1개 이상 입력해 주세요.');
       return;
     }
+    const endsAt = dateStrToTs(form.endsAtStr);
+    if (form.endsAtStr.trim() && !endsAt) {
+      Alert.alert('날짜 오류', '종료 날짜 형식이 올바르지 않습니다. (예: 2026-06-30)');
+      return;
+    }
     if (editTarget) {
-      updateDiscussion({ id: editTarget.id, topic: form.topic.trim(), content: form.content.trim(), questions: cleanedQs });
+      updateDiscussion({ id: editTarget.id, topic: form.topic.trim(), content: form.content.trim(), questions: cleanedQs, endsAt });
     } else {
       addDiscussion({
         bookId: form.bookId, bookTitle: form.bookTitle,
         topic: form.topic.trim(), content: form.content.trim(),
         questions: cleanedQs, discussionType: form.discussionType,
-        createdBy: getUsername(),
+        createdBy: getUsername(), endsAt,
       });
       if (form.topic.trim().length >= 10 && form.content.trim().length >= 20) {
         addXp(XP_REWARDS.DISCUSSION_CREATE);
@@ -277,6 +304,7 @@ export default function BookDiscussionScreen() {
     const comments = commentsMap[disc.id] || [];
     const dtype = disc.discussionType || 'debate';
     const currentUser = getUsername();
+    const isEnded = !!(disc.endsAt && disc.endsAt < Date.now());
     const canDelete = (comment) =>
       !comment.createdBy || comment.createdBy === currentUser || disc.createdBy === currentUser;
 
@@ -344,9 +372,11 @@ export default function BookDiscussionScreen() {
                   {c.createdBy ? <Text style={styles.commentAuthor}>{c.createdBy}</Text> : null}
                   <Text style={styles.commentText}>{c.content}</Text>
                 </View>
-                <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
-                  <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
-                </TouchableOpacity>
+                {!isEnded && (
+                  <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
+                    <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
+                  </TouchableOpacity>
+                )}
                 {c.createdBy && c.createdBy !== currentUser && (
                   <TouchableOpacity onPress={() => handleReport('comment', c.id)}>
                     <Ionicons name="flag-outline" size={15} color="#DDD" />
@@ -362,10 +392,14 @@ export default function BookDiscussionScreen() {
             </View>
           ))}
 
-          <TouchableOpacity style={styles.participateBtn} onPress={() => openCmtModal(disc)}>
-            <Ionicons name="add-circle-outline" size={15} color="#6750A4" />
-            <Text style={styles.participateBtnText}>의견 남기기</Text>
-          </TouchableOpacity>
+          {!isEnded ? (
+            <TouchableOpacity style={styles.participateBtn} onPress={() => openCmtModal(disc)}>
+              <Ionicons name="add-circle-outline" size={15} color="#6750A4" />
+              <Text style={styles.participateBtnText}>의견 남기기</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.endedNotice}>종료된 토론입니다. 새로운 의견을 남길 수 없습니다.</Text>
+          )}
         </View>
       );
     }
@@ -382,9 +416,11 @@ export default function BookDiscussionScreen() {
                   {c.createdBy ? <Text style={styles.commentAuthor}>{c.createdBy}</Text> : null}
                   <Text style={styles.commentText}>{c.content}</Text>
                 </View>
-                <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
-                  <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
-                </TouchableOpacity>
+                {!isEnded && (
+                  <TouchableOpacity style={styles.replyBtn} onPress={() => openReplyModal(disc, c)}>
+                    <Ionicons name="return-up-forward-outline" size={15} color="#B0A0D8" />
+                  </TouchableOpacity>
+                )}
                 {c.createdBy && c.createdBy !== currentUser && (
                   <TouchableOpacity onPress={() => handleReport('comment', c.id)}>
                     <Ionicons name="flag-outline" size={15} color="#DDD" />
@@ -399,10 +435,14 @@ export default function BookDiscussionScreen() {
               {renderReplies(c.id)}
             </View>
           ))}
-          <TouchableOpacity style={styles.participateBtn} onPress={() => openCmtModal(disc)}>
-            <Ionicons name="add-circle-outline" size={15} color="#6750A4" />
-            <Text style={styles.participateBtnText}>댓글 달기</Text>
-          </TouchableOpacity>
+          {!isEnded ? (
+            <TouchableOpacity style={styles.participateBtn} onPress={() => openCmtModal(disc)}>
+              <Ionicons name="add-circle-outline" size={15} color="#6750A4" />
+              <Text style={styles.participateBtnText}>댓글 달기</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.endedNotice}>종료된 토론입니다. 댓글을 달 수 없습니다.</Text>
+          )}
         </View>
       );
     }
@@ -412,6 +452,7 @@ export default function BookDiscussionScreen() {
     try { qs = JSON.parse(disc.questions); } catch (_) {}
     return (
       <View style={styles.participationSection}>
+        {isEnded && <Text style={styles.endedNotice}>종료된 토론입니다. 답변을 달 수 없습니다.</Text>}
         {qs.map((q, qi) => {
           const answers = topComments.filter((c) => c.questionIndex === qi);
           return (
@@ -445,13 +486,15 @@ export default function BookDiscussionScreen() {
                   {renderReplies(a.id)}
                 </View>
               ))}
-              <TouchableOpacity
-                style={[styles.participateBtn, { alignSelf: 'flex-start', marginTop: 6 }]}
-                onPress={() => openCmtModal(disc, qi, q)}
-              >
-                <Ionicons name="pencil-outline" size={13} color="#6750A4" />
-                <Text style={styles.participateBtnText}>답변 달기</Text>
-              </TouchableOpacity>
+              {!isEnded ? (
+                <TouchableOpacity
+                  style={[styles.participateBtn, { alignSelf: 'flex-start', marginTop: 6 }]}
+                  onPress={() => openCmtModal(disc, qi, q)}
+                >
+                  <Ionicons name="pencil-outline" size={13} color="#6750A4" />
+                  <Text style={styles.participateBtnText}>답변 달기</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           );
         })}
@@ -535,6 +578,14 @@ export default function BookDiscussionScreen() {
                     </View>
                   ) : null}
                   <Text style={styles.dateText}>{fmtDate(disc.createdAt)}</Text>
+                  {disc.endsAt ? (
+                    <View style={[styles.endDateTag, disc.endsAt < Date.now() && styles.endDateTagEnded]}>
+                      <Ionicons name="time-outline" size={10} color={disc.endsAt < Date.now() ? '#E53935' : '#757575'} />
+                      <Text style={[styles.endDateTagText, disc.endsAt < Date.now() && styles.endDateTagTextEnded]}>
+                        {disc.endsAt < Date.now() ? '종료됨' : `~${fmtDate(disc.endsAt)}`}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
                 <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#999" />
               </View>
@@ -738,6 +789,23 @@ export default function BookDiscussionScreen() {
                     maxLength={500}
                   />
 
+                  {/* 토론 종료 날짜 */}
+                  <Text style={styles.fieldLabel}>토론 종료 날짜 <Text style={styles.optionalLabel}>(선택)</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="YYYY-MM-DD (예: 2026-06-30)"
+                    placeholderTextColor="#bbb"
+                    value={form.endsAtStr}
+                    onChangeText={(v) => setForm((f) => ({ ...f, endsAtStr: formatDateStr(v) }))}
+                    keyboardType="numeric"
+                    maxLength={10}
+                  />
+                  {form.endsAtStr.length === 10 && dateStrToTs(form.endsAtStr) && (
+                    <Text style={styles.datePreview}>
+                      {fmtDate(dateStrToTs(form.endsAtStr))} 23:59에 종료
+                    </Text>
+                  )}
+
                   {/* 질문 목록 — qa 방식일 때만 표시 */}
                   {form.discussionType === 'qa' && (
                     <>
@@ -898,6 +966,19 @@ const styles = StyleSheet.create({
   },
   typeTagText: { fontSize: 11, fontWeight: '600' },
   dateText: { fontSize: 11, color: '#BDBDBD' },
+  endDateTag: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#F5F5F5', borderRadius: 20,
+    paddingHorizontal: 7, paddingVertical: 3,
+  },
+  endDateTagEnded: { backgroundColor: '#FFEBEE' },
+  endDateTagText: { fontSize: 11, color: '#757575', fontWeight: '600' },
+  endDateTagTextEnded: { color: '#E53935' },
+  endedNotice: {
+    fontSize: 12, color: '#BDBDBD', textAlign: 'center',
+    paddingVertical: 10, fontStyle: 'italic',
+  },
+  datePreview: { fontSize: 12, color: '#6750A4', marginTop: 2, marginBottom: 4 },
   creatorTag: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   creatorTagText: { fontSize: 11, color: '#999' },
   topicText: { fontSize: 15, fontWeight: 'bold', color: '#212121', lineHeight: 22 },
