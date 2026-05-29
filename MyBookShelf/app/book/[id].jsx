@@ -375,6 +375,26 @@ export default function BookDetailScreen() {
     );
   };
 
+  const handleEditReadCount = () => {
+    const current = book.readCount || 1;
+    Alert.alert(
+      '독서 회차 수정',
+      `현재 ${current}회차로 설정되어 있습니다.\n몇 회차 독서인가요?`,
+      [
+        { text: '취소', style: 'cancel' },
+        ...[1, 2, 3, 4, 5].map((n) => ({
+          text: `${n}회차`,
+          style: n === current ? 'default' : 'default',
+          onPress: () => {
+            const updated = { ...book, readCount: n };
+            updateBook(updated);
+            setBook(updated);
+          },
+        })),
+      ]
+    );
+  };
+
   const handleReRead = () => {
     if (!book) return;
     const nextCount = (book.readCount || 1) + 1;
@@ -504,11 +524,15 @@ export default function BookDetailScreen() {
             {(editAuthor || book.author) ? <Text style={styles.author}>{editAuthor || book.author}</Text> : null}
             <View style={styles.badgeRow}>
               <StatusBadge status={book.status} />
-              {(book.readCount || 1) > 1 && (
+              {book.status === 'reading' ? (
+                <TouchableOpacity style={styles.readCountBadge} onPress={handleEditReadCount}>
+                  <Text style={styles.readCountBadgeText}>{book.readCount || 1}회차 ✎</Text>
+                </TouchableOpacity>
+              ) : (book.readCount || 1) > 1 ? (
                 <View style={styles.readCountBadge}>
                   <Text style={styles.readCountBadgeText}>{book.readCount}회차</Text>
                 </View>
-              )}
+              ) : null}
             </View>
           </View>
         </View>
