@@ -579,12 +579,16 @@ export default function BookDiscussionScreen() {
                   ) : null}
                   <Text style={styles.dateText}>{fmtDate(disc.createdAt)}</Text>
                   {disc.endsAt ? (
-                    <View style={[styles.endDateTag, disc.endsAt < Date.now() && styles.endDateTagEnded]}>
-                      <Ionicons name="time-outline" size={10} color={disc.endsAt < Date.now() ? '#E53935' : '#757575'} />
-                      <Text style={[styles.endDateTagText, disc.endsAt < Date.now() && styles.endDateTagTextEnded]}>
-                        {disc.endsAt < Date.now() ? '종료됨' : `~${fmtDate(disc.endsAt)}`}
-                      </Text>
-                    </View>
+                    disc.endsAt < Date.now() ? (
+                      <View style={styles.endedChip}>
+                        <Text style={styles.endedChipText}>종료</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.endDateTag}>
+                        <Ionicons name="time-outline" size={10} color="#757575" />
+                        <Text style={styles.endDateTagText}>{`~${fmtDate(disc.endsAt)}`}</Text>
+                      </View>
+                    )
                   ) : null}
                 </View>
                 <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#999" />
@@ -971,9 +975,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5', borderRadius: 20,
     paddingHorizontal: 7, paddingVertical: 3,
   },
-  endDateTagEnded: { backgroundColor: '#FFEBEE' },
   endDateTagText: { fontSize: 11, color: '#757575', fontWeight: '600' },
-  endDateTagTextEnded: { color: '#E53935' },
+  endedChip: {
+    backgroundColor: '#E53935', borderRadius: 20,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  endedChipText: { fontSize: 11, color: '#fff', fontWeight: '700' },
   endedNotice: {
     fontSize: 12, color: '#BDBDBD', textAlign: 'center',
     paddingVertical: 10, fontStyle: 'italic',
