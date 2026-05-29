@@ -502,7 +502,7 @@ export const updateBook = (book) => {
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
      status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?,
-     bookType = ?, progressPct = ?, genre = ?, cover = ?, updatedAt = ?, goalSetAt = ?, ratedAt = ?, isAdult = ? WHERE id = ?`,
+     bookType = ?, progressPct = ?, genre = ?, cover = ?, updatedAt = ?, goalSetAt = ?, ratedAt = ?, isAdult = ?, readCount = ? WHERE id = ?`,
     [
       book.title,
       book.author || '',
@@ -522,6 +522,7 @@ export const updateBook = (book) => {
       newGoalSetAt,
       newRatedAt,
       book.isAdult ? 1 : 0,
+      book.readCount || 1,
       book.id,
     ]
   );
