@@ -64,6 +64,7 @@ export default function GuildScreen() {
   const [editAgePolicy, setEditAgePolicy] = useState('all');
   const [editSaving, setEditSaving] = useState(false);
   const [dissolving, setDissolving] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   const AGE_POLICIES = [
     { value: 'all',   label: '전체 이용',    icon: 'people-outline', color: '#4CAF50', bg: '#E8F5E9' },
@@ -285,24 +286,31 @@ export default function GuildScreen() {
   };
 
   const handleLeave = () => {
-    Alert.alert('길드 탈퇴', '정말 이 길드를 탈퇴하시겠습니까?', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '탈퇴',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const userId = getUserId();
-            await removeMemberFromGuild(selectedGuildId, userId);
-            leaveGuild();
-            setMyGuilds((prev) => prev.filter((g) => g.id !== selectedGuildId));
-            handleBack();
-          } catch (e) {
-            Alert.alert('오류', e.message || '탈퇴에 실패했습니다.');
-          }
+    Alert.alert(
+      '길드 탈퇴',
+      `'${guild?.name}' 길드를 탈퇴하시겠습니까?\n탈퇴 후에는 길드 활동 내역이 사라집니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '탈퇴',
+          style: 'destructive',
+          onPress: async () => {
+            setLeaving(true);
+            try {
+              const userId = getUserId();
+              await removeMemberFromGuild(selectedGuildId, userId);
+              leaveGuild();
+              setMyGuilds((prev) => prev.filter((g) => g.id !== selectedGuildId));
+              handleBack();
+            } catch (e) {
+              Alert.alert('오류', e.message || '탈퇴에 실패했습니다.');
+            } finally {
+              setLeaving(false);
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const openReadingModal = () => {
@@ -709,14 +717,15 @@ export default function GuildScreen() {
           </TouchableOpacity>
           <Text style={styles.guildName} numberOfLines={1}>{guild?.name || '내 길드'}</Text>
           <View style={styles.headerRightBtns}>
-            {isOwner && (
+            {isOwner ? (
               <TouchableOpacity onPress={openEditModal} hitSlop={8}>
                 <Ionicons name="settings-outline" size={19} color="rgba(255,255,255,0.75)" />
               </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={handleLeave} hitSlop={8}>
+                <Ionicons name="log-out-outline" size={19} color="rgba(255,255,255,0.75)" />
+              </TouchableOpacity>
             )}
-            <TouchableOpacity onPress={handleLeave} hitSlop={8}>
-              <Ionicons name="log-out-outline" size={19} color="rgba(255,255,255,0.75)" />
-            </TouchableOpacity>
           </View>
         </View>
         <View style={styles.guildMeta}>
@@ -844,55 +853,77 @@ export default function GuildScreen() {
 
         {/* ── 멤버 순위 ── */}
         {activeTab === 1 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>멤버 이번 주 점수</Text>
-            {mergedMembers.length === 0 ? (
-              <Text style={styles.emptyText}>아직 점수 기록이 없습니다.</Text>
-            ) : (
-              mergedMembers.map((m, i) => (
-                <View key={m.userId} style={[styles.rankRow, i === 0 && styles.rankRowFirst]}>
-                  <Text style={styles.rankNum}>
-                    {i < 3 ? MEDALS[i] : `${i + 1}위`}
-                  </Text>
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text
-                      style={{ fontSize: 14, fontWeight: '600', color: '#2D2440', flexShrink: 1 }}
-                      numberOfLines={1}
-                    >
-                      {m.displayName}
+          <View>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>멤버 이번 주 점수</Text>
+              {mergedMembers.length === 0 ? (
+                <Text style={styles.emptyText}>아직 점수 기록이 없습니다.</Text>
+              ) : (
+                mergedMembers.map((m, i) => (
+                  <View key={m.userId} style={[styles.rankRow, i === 0 && styles.rankRowFirst]}>
+                    <Text style={styles.rankNum}>
+                      {i < 3 ? MEDALS[i] : `${i + 1}위`}
                     </Text>
-                    {m.isOwner && (
-                      <View style={styles.ownerBadge}>
-                        <Text style={styles.ownerBadgeText}>운영자</Text>
-                      </View>
-                    )}
-                    {!m.isOwner && m.isDeputy && (
-                      <View style={styles.deputyBadge}>
-                        <Text style={styles.deputyBadgeText}>부운영자</Text>
-                      </View>
-                    )}
-                    {m.isAdult === true ? (
-                      <View style={styles.adultMemberBadge}>
-                        <Text style={styles.adultMemberBadgeText}>성인</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.minorMemberBadge}>
-                        <Text style={styles.minorMemberBadgeText}>미성년자</Text>
-                      </View>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text
+                        style={{ fontSize: 14, fontWeight: '600', color: '#2D2440', flexShrink: 1 }}
+                        numberOfLines={1}
+                      >
+                        {m.displayName}
+                      </Text>
+                      {m.isOwner && (
+                        <View style={styles.ownerBadge}>
+                          <Text style={styles.ownerBadgeText}>운영자</Text>
+                        </View>
+                      )}
+                      {!m.isOwner && m.isDeputy && (
+                        <View style={styles.deputyBadge}>
+                          <Text style={styles.deputyBadgeText}>부운영자</Text>
+                        </View>
+                      )}
+                      {m.isAdult === true ? (
+                        <View style={styles.adultMemberBadge}>
+                          <Text style={styles.adultMemberBadgeText}>성인</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.minorMemberBadge}>
+                          <Text style={styles.minorMemberBadgeText}>미성년자</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.rankScore}>{(m.score || 0).toLocaleString()}점</Text>
+                    {isOwner && !m.isOwner && (
+                      <TouchableOpacity
+                        onPress={() => handleMemberAction(m)}
+                        hitSlop={8}
+                        style={styles.memberActionBtn}
+                      >
+                        <Ionicons name="ellipsis-vertical" size={16} color="#B0AAC0" />
+                      </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={styles.rankScore}>{(m.score || 0).toLocaleString()}점</Text>
-                  {isOwner && !m.isOwner && (
-                    <TouchableOpacity
-                      onPress={() => handleMemberAction(m)}
-                      hitSlop={8}
-                      style={styles.memberActionBtn}
-                    >
-                      <Ionicons name="ellipsis-vertical" size={16} color="#B0AAC0" />
-                    </TouchableOpacity>
+                ))
+              )}
+            </View>
+
+            {!isOwner && (
+              <View style={styles.leaveSection}>
+                <TouchableOpacity
+                  style={[styles.leaveBtn, leaving && { opacity: 0.6 }]}
+                  onPress={handleLeave}
+                  disabled={leaving}
+                  activeOpacity={0.75}
+                >
+                  {leaving ? (
+                    <ActivityIndicator color="#E53935" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="log-out-outline" size={16} color="#E53935" />
+                      <Text style={styles.leaveBtnText}>길드 탈퇴</Text>
+                    </>
                   )}
-                </View>
-              ))
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         )}
@@ -1993,6 +2024,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#bbb',
     textAlign: 'center',
+  },
+  leaveSection: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  leaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#FFCDD2',
+    backgroundColor: '#FFF5F5',
+  },
+  leaveBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#E53935',
   },
   dissolveSection: {
     borderTopWidth: 1,

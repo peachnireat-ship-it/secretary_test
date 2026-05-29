@@ -254,6 +254,12 @@ export async function updateGuildInfo(guildId, { name, isPublic, weeklyGoal, key
 
 export async function removeMemberFromGuild(guildId, userId) {
   if (!isFirebaseReady()) return;
+
+  const guildSnap = await getDoc(doc(firestoreDb, 'guilds', guildId));
+  if (guildSnap.exists() && guildSnap.data().creatorId === userId) {
+    throw new Error('길드 운영자는 탈퇴할 수 없습니다.\n길드를 폐쇄하거나 운영자를 양도해주세요.');
+  }
+
   await deleteDoc(doc(firestoreDb, 'guild_members', `${guildId}_${userId}`));
   await updateDoc(doc(firestoreDb, 'guilds', guildId), {
     memberCount: increment(-1),
