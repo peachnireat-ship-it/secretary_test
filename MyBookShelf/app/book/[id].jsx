@@ -406,6 +406,8 @@ export default function BookDetailScreen() {
         {
           text: '시작',
           onPress: () => {
+            const todayStart = new Date().setHours(0, 0, 0, 0);
+            const goalIsPast = book.goalDate && book.goalDate < todayStart;
             updateBook({
               ...book,
               title: editTitle.trim() || book.title,
@@ -420,6 +422,8 @@ export default function BookDetailScreen() {
               endDate: null,
               progressPct: 0,
               readCount: nextCount,
+              prevGoalDate: book.goalDate || null,
+              goalDate: goalIsPast ? null : book.goalDate,
             });
             router.back();
           },
@@ -741,6 +745,11 @@ export default function BookDetailScreen() {
           placeholder="YYYY-MM-DD"
           placeholderTextColor="#CAC4D0"
         />
+        {book.prevGoalDate ? (
+          <Text style={styles.prevGoalDateHint}>
+            이전 회차 목표일: {tsToDateStr(book.prevGoalDate).replace(/-/g, '.')}
+          </Text>
+        ) : null}
 
         <Text style={styles.sectionLabel}>독서 메모 / 하이라이트</Text>
         {reviews.map((item) => (
@@ -837,6 +846,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   readCountBadgeText: { fontSize: 12, fontWeight: '700', color: '#6750A4' },
+  prevGoalDateHint: { fontSize: 12, color: '#9E8FB2', marginTop: 4, marginBottom: 2 },
   sectionLabel: { fontSize: 14, fontWeight: '600', color: '#1C1B1F', marginBottom: 8, marginTop: 20 },
   input: {
     borderWidth: 1,
