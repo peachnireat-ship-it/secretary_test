@@ -154,6 +154,9 @@ try {
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN prevGoalDate INTEGER`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE books ADD COLUMN readHistory TEXT DEFAULT '[]'`);
+} catch (_) {}
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS user_prefs (
@@ -505,7 +508,7 @@ export const updateBook = (book) => {
   db.runSync(
     `UPDATE books SET title = ?, author = ?, totalPages = ?, currentPage = ?,
      status = ?, rating = ?, review = ?, startDate = ?, endDate = ?, goalDate = ?,
-     bookType = ?, progressPct = ?, genre = ?, cover = ?, updatedAt = ?, goalSetAt = ?, ratedAt = ?, isAdult = ?, readCount = ?, prevGoalDate = ? WHERE id = ?`,
+     bookType = ?, progressPct = ?, genre = ?, cover = ?, updatedAt = ?, goalSetAt = ?, ratedAt = ?, isAdult = ?, readCount = ?, prevGoalDate = ?, readHistory = ? WHERE id = ?`,
     [
       book.title,
       book.author || '',
@@ -527,6 +530,7 @@ export const updateBook = (book) => {
       book.isAdult ? 1 : 0,
       book.readCount || 1,
       book.prevGoalDate ?? null,
+      typeof book.readHistory === 'string' ? book.readHistory : JSON.stringify(book.readHistory ?? []),
       book.id,
     ]
   );

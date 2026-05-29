@@ -408,6 +408,18 @@ export default function BookDetailScreen() {
           onPress: () => {
             const todayStart = new Date().setHours(0, 0, 0, 0);
             const goalIsPast = book.goalDate && book.goalDate < todayStart;
+            const prevHistory = (() => {
+              try { return JSON.parse(book.readHistory || '[]'); } catch { return []; }
+            })();
+            const updatedHistory = JSON.stringify([
+              ...prevHistory,
+              {
+                round: book.readCount || 1,
+                startDate: book.startDate || null,
+                endDate: book.endDate || null,
+                goalDate: book.goalDate || null,
+              },
+            ]);
             updateBook({
               ...book,
               title: editTitle.trim() || book.title,
@@ -424,6 +436,7 @@ export default function BookDetailScreen() {
               readCount: nextCount,
               prevGoalDate: book.goalDate || null,
               goalDate: goalIsPast ? null : book.goalDate,
+              readHistory: updatedHistory,
             });
             router.back();
           },
@@ -745,11 +758,28 @@ export default function BookDetailScreen() {
           placeholder="YYYY-MM-DD"
           placeholderTextColor="#CAC4D0"
         />
-        {book.prevGoalDate ? (
-          <Text style={styles.prevGoalDateHint}>
-            이전 회차 목표일: {tsToDateStr(book.prevGoalDate).replace(/-/g, '.')}
-          </Text>
-        ) : null}
+        {(() => {
+          try {
+            const history = JSON.parse(book.readHistory || '[]');
+            if (history.length === 0) return null;
+            const fmt = (ts) => ts ? tsToDateStr(ts).replace(/-/g, '.') : '-';
+            return (
+              <View style={styles.readHistoryBox}>
+                <Text style={styles.readHistoryTitle}>이전 회차 기록</Text>
+                {history.map((h) => (
+                  <View key={h.round} style={styles.readHistoryRow}>
+                    <Text style={styles.readHistoryRound}>{h.round}회차</Text>
+                    <View style={styles.readHistoryDates}>
+                      <Text style={styles.readHistoryDate}>시작 {fmt(h.startDate)}</Text>
+                      <Text style={styles.readHistoryDate}>종료 {fmt(h.endDate)}</Text>
+                      <Text style={styles.readHistoryDate}>목표 {fmt(h.goalDate)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            );
+          } catch { return null; }
+        })()}
 
         <Text style={styles.sectionLabel}>독서 메모 / 하이라이트</Text>
         {reviews.map((item) => (
@@ -847,6 +877,19 @@ const styles = StyleSheet.create({
   },
   readCountBadgeText: { fontSize: 12, fontWeight: '700', color: '#6750A4' },
   prevGoalDateHint: { fontSize: 12, color: '#9E8FB2', marginTop: 4, marginBottom: 2 },
+  readHistoryBox: {
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: '#F3EFF8',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+  },
+  readHistoryTitle: { fontSize: 12, fontWeight: '700', color: '#6750A4', marginBottom: 2 },
+  readHistoryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  readHistoryRound: { fontSize: 12, fontWeight: '700', color: '#6750A4', minWidth: 36 },
+  readHistoryDates: { flex: 1, gap: 2 },
+  readHistoryDate: { fontSize: 12, color: '#49454F' },
   sectionLabel: { fontSize: 14, fontWeight: '600', color: '#1C1B1F', marginBottom: 8, marginTop: 20 },
   input: {
     borderWidth: 1,
