@@ -15,7 +15,7 @@ import {
   getGuildPosts, createGuildPost, deleteGuildPost, updateGuildInfo,
   getGuildThemeMissionSubmissions, reviewThemeMission,
   getGuildReading, setGuildReading, endGuildReading,
-  getGuildMembers, appointDeputy, revokeDeputy,
+  getGuildMembers, appointDeputy, revokeDeputy, dissolveGuild,
 } from '../../database/guildDatabase';
 import { isFirebaseReady } from '../../database/firebaseConfig';
 
@@ -63,6 +63,7 @@ export default function GuildScreen() {
   const [editKeywordInput, setEditKeywordInput] = useState('');
   const [editAgePolicy, setEditAgePolicy] = useState('all');
   const [editSaving, setEditSaving] = useState(false);
+  const [dissolving, setDissolving] = useState(false);
 
   const AGE_POLICIES = [
     { value: 'all',   label: '전체 이용',    icon: 'people-outline', color: '#4CAF50', bg: '#E8F5E9' },
@@ -469,6 +470,47 @@ export default function GuildScreen() {
     } catch (e) {
       Alert.alert('오류', e.message || '해제에 실패했습니다.');
     }
+  };
+
+  const handleDissolveGuild = () => {
+    Alert.alert(
+      '길드 폐쇄',
+      `'${guild?.name}' 길드를 폐쇄하시겠습니까?\n\n모든 멤버, 게시글, 점수 기록이 영구 삭제되며 복구할 수 없습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '폐쇄',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              '정말 폐쇄하시겠습니까?',
+              '이 작업은 되돌릴 수 없습니다.',
+              [
+                { text: '취소', style: 'cancel' },
+                {
+                  text: '폐쇄 확인',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDissolving(true);
+                    try {
+                      const userId = getUserId();
+                      await dissolveGuild(selectedGuildId, userId);
+                      setShowEditModal(false);
+                      setMyGuilds((prev) => prev.filter((g) => g.id !== selectedGuildId));
+                      handleBack();
+                    } catch (e) {
+                      Alert.alert('오류', e.message || '길드 폐쇄에 실패했습니다.');
+                    } finally {
+                      setDissolving(false);
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   const handleKickMember = (userId, displayName) => {
@@ -1116,6 +1158,24 @@ export default function GuildScreen() {
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
                     <Text style={styles.modalSubmitText}>저장</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.dissolveSection}>
+                <TouchableOpacity
+                  style={[styles.dissolveBtn, dissolving && { opacity: 0.6 }]}
+                  onPress={handleDissolveGuild}
+                  disabled={dissolving}
+                  activeOpacity={0.75}
+                >
+                  {dissolving ? (
+                    <ActivityIndicator color="#E53935" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="close-circle-outline" size={16} color="#E53935" />
+                      <Text style={styles.dissolveBtnText}>길드 폐쇄</Text>
+                    </>
                   )}
                 </TouchableOpacity>
               </View>
@@ -1934,6 +1994,30 @@ const styles = StyleSheet.create({
     color: '#bbb',
     textAlign: 'center',
   },
+  dissolveSection: {
+    borderTopWidth: 1,
+    borderTopColor: '#F0EBF8',
+    marginTop: 8,
+    paddingTop: 14,
+    marginBottom: 8,
+  },
+  dissolveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#FFCDD2',
+    backgroundColor: '#FFF5F5',
+  },
+  dissolveBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#E53935',
+  },
+
   editKwAddBtn: {
     backgroundColor: '#6750A4',
     borderRadius: 8,

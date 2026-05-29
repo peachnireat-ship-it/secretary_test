@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Switch,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getUserId, getUsername, getSchool, getSchoolLevel, saveGuildId } from '../database/database';
@@ -10,6 +11,7 @@ import { createGuild } from '../database/guildDatabase';
 
 export default function GuildCreateScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [weeklyGoal, setWeeklyGoal] = useState('5');
   const [isPublic, setIsPublic] = useState(true);
@@ -80,7 +82,11 @@ export default function GuildCreateScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.section}>
         <Text style={styles.label}>길드 이름</Text>
         <TextInput
@@ -276,7 +282,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     marginTop: 6,
-    marginBottom: 40,
+    marginBottom: 16,
   },
   createBtnDisabled: {
     opacity: 0.6,

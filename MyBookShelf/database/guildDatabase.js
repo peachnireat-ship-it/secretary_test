@@ -406,6 +406,33 @@ export async function endGuildReading(guildId) {
   });
 }
 
+// ── 길드 폐쇄 ────────────────────────────────────────────────────
+
+export async function dissolveGuild(guildId, userId) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+
+  const guildSnap = await getDoc(doc(firestoreDb, 'guilds', guildId));
+  if (!guildSnap.exists()) throw new Error('길드를 찾을 수 없습니다.');
+  if (guildSnap.data().creatorId !== userId) throw new Error('길드 운영자만 폐쇄할 수 있습니다.');
+
+  const relatedQueries = [
+    query(collection(firestoreDb, 'guild_members'), where('guildId', '==', guildId)),
+    query(collection(firestoreDb, 'guild_scores'), where('guildId', '==', guildId)),
+    query(collection(firestoreDb, 'guild_posts'), where('guildId', '==', guildId)),
+    query(collection(firestoreDb, 'guild_theme_missions'), where('guildId', '==', guildId)),
+  ];
+
+  await Promise.all(
+    relatedQueries.map(async (q) => {
+      const snap = await getDocs(q);
+      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+    })
+  );
+
+  await deleteDoc(doc(firestoreDb, 'guild_reading', guildId));
+  await deleteDoc(doc(firestoreDb, 'guilds', guildId));
+}
+
 // ── 부운영자 임명 / 해제 ──────────────────────────────────────────
 
 export async function appointDeputy(guildId, userId) {
