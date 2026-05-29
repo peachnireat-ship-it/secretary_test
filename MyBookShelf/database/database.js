@@ -713,10 +713,25 @@ export const getWeeklyProgress = (excludeAdult = false) => {
   const weekStartTs = weekStart.getTime();
 
   const ac = excludeAdult ? ' AND isAdult != 1' : '';
-  const completed = db.getFirstSync(
+  const completedCurrent = db.getFirstSync(
     `SELECT COUNT(*) as count FROM books WHERE status = 'completed' AND endDate >= ?${ac}`,
     [weekStartTs]
   )?.count ?? 0;
+
+  // 다시 읽기로 status가 'reading'이 된 경우에도 이번 주 완독 이력(readHistory)을 집계
+  const booksWithHistory = db.getAllSync(
+    `SELECT readHistory FROM books WHERE readHistory IS NOT NULL AND readHistory != '[]'${ac}`
+  );
+  let historyCompleted = 0;
+  booksWithHistory.forEach(b => {
+    try {
+      JSON.parse(b.readHistory || '[]').forEach(entry => {
+        if (entry.endDate && entry.endDate >= weekStartTs) historyCompleted++;
+      });
+    } catch {}
+  });
+
+  const completed = completedCurrent + historyCompleted;
   const memos = db.getFirstSync(
     excludeAdult
       ? `SELECT COUNT(*) as count FROM book_reviews br INNER JOIN books b ON br.bookId = b.id WHERE br.createdAt >= ? AND b.isAdult != 1`
