@@ -1,16 +1,57 @@
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Keyboard, Modal, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Keyboard, Modal, FlatList, ActivityIndicator } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { getWeeklyScore, getSchool, saveSchool, getWeekKey, getSchoolLevel, saveSchoolLevel, getWeeklyDoubleXpEvent, getCompany, saveCompany, getCompanyType, saveCompanyType, getAge } from '../../database/database';
 
-const SCHOOL_POOL = [
-  '서울과학고등학교', '경기과학고등학교', '광주과학고등학교',
-  '대전과학고등학교', '세종과학예술영재학교', '민족사관고등학교',
-  '외대부고', '하나고등학교', '경기외국어고등학교',
-  '한영외국어고등학교', '대원외국어고등학교', '서울외국어고등학교',
-  '용인외국어고등학교', '인천외국어고등학교',
-  '서울대학교', '연세대학교', '고려대학교', 'KAIST', 'POSTECH',
-  '성균관대학교', '한양대학교', '이화여자대학교', '서강대학교', '중앙대학교',
+const SCHOOL_POOL_TAGGED = [
+  { name: '서울교육대학교부설초등학교', level: '초등' },
+  { name: '경인교육대학교부설초등학교', level: '초등' },
+  { name: '한국교원대학교부설초등학교', level: '초등' },
+  { name: '서울사범대학부설초등학교', level: '초등' },
+  { name: '대원초등학교', level: '초등' },
+  { name: '계성초등학교', level: '초등' },
+  { name: '영훈초등학교', level: '초등' },
+  { name: '한신초등학교', level: '초등' },
+  { name: '경기초등학교', level: '초등' },
+  { name: '부산교육대학교부설초등학교', level: '초등' },
+  { name: '광주교육대학교부설초등학교', level: '초등' },
+  { name: '대구교육대학교부설초등학교', level: '초등' },
+  { name: '서울대학교사범대학부설중학교', level: '중등' },
+  { name: '이화여자대학교사범대학부속중학교', level: '중등' },
+  { name: '경기여자중학교', level: '중등' },
+  { name: '대원중학교', level: '중등' },
+  { name: '숙명여자중학교', level: '중등' },
+  { name: '성신여자중학교', level: '중등' },
+  { name: '목동중학교', level: '중등' },
+  { name: '반포중학교', level: '중등' },
+  { name: '중산중학교', level: '중등' },
+  { name: '자양중학교', level: '중등' },
+  { name: '분당중학교', level: '중등' },
+  { name: '부산대학교사범대학부설중학교', level: '중등' },
+  { name: '서울과학고등학교', level: '고등' },
+  { name: '경기과학고등학교', level: '고등' },
+  { name: '광주과학고등학교', level: '고등' },
+  { name: '대전과학고등학교', level: '고등' },
+  { name: '세종과학예술영재학교', level: '고등' },
+  { name: '민족사관고등학교', level: '고등' },
+  { name: '외대부고', level: '고등' },
+  { name: '하나고등학교', level: '고등' },
+  { name: '경기외국어고등학교', level: '고등' },
+  { name: '한영외국어고등학교', level: '고등' },
+  { name: '대원외국어고등학교', level: '고등' },
+  { name: '서울외국어고등학교', level: '고등' },
+  { name: '용인외국어고등학교', level: '고등' },
+  { name: '인천외국어고등학교', level: '고등' },
+  { name: '서울대학교', level: '대학' },
+  { name: '연세대학교', level: '대학' },
+  { name: '고려대학교', level: '대학' },
+  { name: 'KAIST', level: '대학' },
+  { name: 'POSTECH', level: '대학' },
+  { name: '성균관대학교', level: '대학' },
+  { name: '한양대학교', level: '대학' },
+  { name: '이화여자대학교', level: '대학' },
+  { name: '서강대학교', level: '대학' },
+  { name: '중앙대학교', level: '대학' },
 ];
 
 const UNIVERSITY_LIST = [
@@ -125,7 +166,21 @@ const COMPANY_POOL = [
 const COMPANY_TYPES = ['스타트업', '중소기업', '대기업', '프리랜서'];
 const MEDALS = ['🥇', '🥈', '🥉'];
 const SCHOOL_LEVELS = ['초등', '중학', '고등', '대학', '성인'];
+const RANKING_FILTERS = ['전체', '초등', '중등', '고등', '대학', '회사'];
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
+
+const LEVEL_DISPLAY = {
+  '초등': '초등학교',
+  '중학': '중학교',
+  '중등': '중학교',
+  '고등': '고등학교',
+  '대학': '대학교',
+  '성인': '성인',
+};
+
+function normalizeLevel(level) {
+  return level === '중학' ? '중등' : level;
+}
 
 function DoubleXpBanner({ event }) {
   if (!event) return null;
@@ -176,35 +231,61 @@ function DoubleXpBanner({ event }) {
   );
 }
 
-function seededScore(seed) {
-  let s = seed & 0x7fffffff;
+function nameHash(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = ((h << 5) - h + name.charCodeAt(i)) & 0x7fffffff;
+  }
+  return h;
+}
+
+function seededScore(weekNum, nameSeed) {
+  let s = (weekNum * 1000003 + nameSeed) & 0x7fffffff;
   s = ((s * 1664525) + 1013904223) & 0x7fffffff;
   s = ((s * 1664525) + 1013904223) & 0x7fffffff;
   return Math.round((s / 0x7fffffff) * 600);
 }
 
-function buildLeaderboard(userSchool, userScore, weekKey) {
+function buildFilteredLeaderboard(userSchool, userLevel, userScore, weekKey, filterLevel) {
+  if (!weekKey) return [];
   const weekNum = parseInt(weekKey.replace('-W', ''), 10);
-  const pool = SCHOOL_POOL.filter((s) => s !== userSchool);
-  const others = pool.map((school, i) => ({
-    school,
-    score: seededScore(weekNum * 100 + i),
+
+  const filteredPool = filterLevel === '전체'
+    ? SCHOOL_POOL_TAGGED
+    : SCHOOL_POOL_TAGGED.filter((e) => e.level === filterLevel);
+
+  const poolWithoutUser = filteredPool.filter((e) => e.name !== userSchool);
+  const others = poolWithoutUser.map((entry) => ({
+    name: entry.name,
+    level: entry.level,
+    score: seededScore(weekNum, nameHash(entry.name)),
     isUser: false,
   }));
-  const all = [...others, { school: userSchool, score: userScore, isUser: true }];
+
+  let all = [...others];
+  if (userSchool) {
+    const userInFilter = filterLevel === '전체' || userLevel === filterLevel;
+    if (userInFilter) {
+      all.push({ name: userSchool, level: userLevel, score: userScore, isUser: true });
+    }
+  }
+
   all.sort((a, b) => b.score - a.score);
   return all.map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 }
 
 function buildCompanyLeaderboard(userCompany, userScore, weekKey) {
+  if (!weekKey) return [];
   const weekNum = parseInt(weekKey.replace('-W', ''), 10);
   const pool = COMPANY_POOL.filter((c) => c !== userCompany);
-  const others = pool.map((company, i) => ({
-    company,
-    score: seededScore(weekNum * 200 + i),
+  const others = pool.map((company) => ({
+    name: company,
+    score: seededScore(weekNum * 2, nameHash(company)),
     isUser: false,
   }));
-  const all = [...others, { company: userCompany, score: userScore, isUser: true }];
+  const all = userCompany
+    ? [...others, { name: userCompany, score: userScore, isUser: true }]
+    : others;
   all.sort((a, b) => b.score - a.score);
   return all.map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 }
@@ -249,10 +330,8 @@ async function searchSchools(query) {
 export default function RankingScreen() {
   const [school, setSchool] = useState('');
   const [inputSchool, setInputSchool] = useState('');
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [userRank, setUserRank] = useState(null);
   const [userScore, setUserScore] = useState(0);
-  const [editing, setEditing] = useState(false);
+  const [editingSchool, setEditingSchool] = useState(false);
   const [weekKey, setWeekKey] = useState('');
   const [schoolLevel, setSchoolLevel] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
@@ -261,11 +340,8 @@ export default function RankingScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const [battleMode, setBattleMode] = useState('school');
   const [company, setCompany] = useState('');
   const [inputCompany, setInputCompany] = useState('');
-  const [companyLeaderboard, setCompanyLeaderboard] = useState([]);
-  const [companyRank, setCompanyRank] = useState(null);
   const [editingCompany, setEditingCompany] = useState(false);
   const [companyType, setCompanyType] = useState('');
   const [selectedCompanyType, setSelectedCompanyType] = useState('');
@@ -273,6 +349,7 @@ export default function RankingScreen() {
   const [companySearchQuery, setCompanySearchQuery] = useState('');
   const [companySearchResults, setCompanySearchResults] = useState([]);
   const [userAge, setUserAge] = useState(0);
+  const [rankingFilter, setRankingFilter] = useState('전체');
 
   const handleSearch = async () => {
     Keyboard.dismiss();
@@ -297,6 +374,19 @@ export default function RankingScreen() {
     setSearchModalVisible(false);
   };
 
+  const handleCompanySearch = (query) => {
+    const q = (query ?? companySearchQuery).toLowerCase().trim();
+    const results = q
+      ? COMPANY_POOL.filter((name) => name.toLowerCase().includes(q))
+      : COMPANY_POOL;
+    setCompanySearchResults(results);
+  };
+
+  const handleSelectCompany = (name) => {
+    setInputCompany(name);
+    setCompanySearchModalVisible(false);
+  };
+
   useFocusEffect(
     useCallback(() => {
       const age = getAge();
@@ -311,22 +401,12 @@ export default function RankingScreen() {
       setSelectedLevel(savedLevel);
       setUserScore(score);
       setWeekKey(key);
-      if (saved) {
-        const board = buildLeaderboard(saved, score, key);
-        setLeaderboard(board);
-        setUserRank(board.find((e) => e.isUser)?.rank ?? null);
-      }
       const savedCompany = getCompany();
       const savedCompanyType = getCompanyType();
       setCompany(savedCompany);
       setInputCompany(savedCompany);
       setCompanyType(savedCompanyType);
       setSelectedCompanyType(savedCompanyType);
-      if (savedCompany) {
-        const companyBoard = buildCompanyLeaderboard(savedCompany, score, key);
-        setCompanyLeaderboard(companyBoard);
-        setCompanyRank(companyBoard.find((e) => e.isUser)?.rank ?? null);
-      }
       setDoubleXpEvent(getWeeklyDoubleXpEvent());
       setUserAge(age);
     }, [])
@@ -339,27 +419,12 @@ export default function RankingScreen() {
     saveSchoolLevel(selectedLevel);
     const key = getWeekKey();
     const score = getWeeklyScore(userAge > 0 && userAge < 19);
-    const board = buildLeaderboard(trimmed, score, key);
     setSchool(trimmed);
     setSchoolLevel(selectedLevel);
     setUserScore(score);
-    setLeaderboard(board);
-    setUserRank(board.find((e) => e.isUser)?.rank ?? null);
-    setEditing(false);
+    setWeekKey(key);
+    setEditingSchool(false);
     Keyboard.dismiss();
-  };
-
-  const handleCompanySearch = (query) => {
-    const q = (query ?? companySearchQuery).toLowerCase().trim();
-    const results = q
-      ? COMPANY_POOL.filter((name) => name.toLowerCase().includes(q))
-      : COMPANY_POOL;
-    setCompanySearchResults(results);
-  };
-
-  const handleSelectCompany = (name) => {
-    setInputCompany(name);
-    setCompanySearchModalVisible(false);
   };
 
   const handleSaveCompany = () => {
@@ -369,53 +434,54 @@ export default function RankingScreen() {
     saveCompanyType(selectedCompanyType);
     const key = getWeekKey();
     const score = getWeeklyScore(userAge > 0 && userAge < 19);
-    const board = buildCompanyLeaderboard(trimmed, score, key);
     setCompany(trimmed);
     setCompanyType(selectedCompanyType);
     setUserScore(score);
-    setCompanyLeaderboard(board);
-    setCompanyRank(board.find((e) => e.isUser)?.rank ?? null);
+    setWeekKey(key);
     setEditingCompany(false);
     Keyboard.dismiss();
   };
 
-  const showSetup = !school || editing;
-  const showCompanySetup = !company || editingCompany;
+  const normalizedUserLevel = normalizeLevel(schoolLevel);
+  const isSchoolFilter = rankingFilter !== '회사';
+
+  const currentLeaderboard = isSchoolFilter
+    ? buildFilteredLeaderboard(school, normalizedUserLevel, userScore, weekKey, rankingFilter)
+    : buildCompanyLeaderboard(company, userScore, weekKey);
+
+  const currentUserRank = currentLeaderboard.find((e) => e.isUser)?.rank ?? null;
+  const showSchoolSetup = isSchoolFilter && (!school || editingSchool);
+  const showCompanySetup = !isSchoolFilter && (!company || editingCompany);
 
   return (
     <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.modeToggleRow}>
-      <TouchableOpacity
-        style={[styles.modeToggleBtn, battleMode === 'school' && styles.modeToggleBtnActive]}
-        onPress={() => setBattleMode('school')}
-      >
-        <Text style={[styles.modeToggleBtnText, battleMode === 'school' && styles.modeToggleBtnTextActive]}>
-          🏫 학교
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.modeToggleBtn, battleMode === 'company' && styles.modeToggleBtnActive]}
-        onPress={() => {
-          if (userAge > 0 && userAge < 19) {
-            Alert.alert('참여 불가', '회사 대항전은 성인(19세 이상)만 참여할 수 있습니다.');
-            return;
-          }
-          setBattleMode('company');
-        }}
-      >
-        <Text style={[styles.modeToggleBtnText, battleMode === 'company' && styles.modeToggleBtnTextActive]}>
-          🏢 회사
-        </Text>
-      </TouchableOpacity>
-    </View>
-    <View style={styles.headerBox}>
-        <Text style={styles.headerTitle}>{battleMode === 'school' ? '🏆 학교 대항전' : '🏢 회사 대항전'}</Text>
+      <View style={styles.headerBox}>
+        <Text style={styles.headerTitle}>{isSchoolFilter ? '🏆 학교 대항전' : '🏢 회사 대항전'}</Text>
         <Text style={styles.headerWeek}>{weekKey}</Text>
         <Text style={styles.headerDays}>이번 주 마감까지 {getDaysLeftInWeek()}일 남음</Text>
       </View>
 
-      {battleMode === 'school' && (showSetup ? (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterTabsOuter}
+        contentContainerStyle={styles.filterTabsInner}
+      >
+        {RANKING_FILTERS.map((filter) => (
+          <TouchableOpacity
+            key={filter}
+            style={[styles.filterTab, rankingFilter === filter && styles.filterTabActive]}
+            onPress={() => setRankingFilter(filter)}
+          >
+            <Text style={[styles.filterTabText, rankingFilter === filter && styles.filterTabTextActive]}>
+              {filter}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {isSchoolFilter && (showSchoolSetup ? (
         <View style={styles.setupCard}>
           <Text style={styles.setupTitle}>학교를 등록해주세요</Text>
           <Text style={styles.setupDesc}>
@@ -451,7 +517,7 @@ export default function RankingScreen() {
                 onPress={() => setSelectedLevel(lv)}
               >
                 <Text style={[styles.levelBtnText, selectedLevel === lv && styles.levelBtnTextActive]}>
-                  {lv}
+                  {lv === '중학' ? '중등' : lv}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -462,8 +528,8 @@ export default function RankingScreen() {
           >
             <Text style={styles.setupButtonText}>등록하기</Text>
           </TouchableOpacity>
-          {editing && (
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setEditing(false)}>
+          {editingSchool && (
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setEditingSchool(false)}>
               <Text style={styles.cancelButtonText}>취소</Text>
             </TouchableOpacity>
           )}
@@ -472,11 +538,13 @@ export default function RankingScreen() {
         <>
           <View style={styles.myScoreCard}>
             <View style={styles.myScoreLeft}>
-              <Text style={styles.myRankText}>{userRank}위</Text>
+              <Text style={styles.myRankText}>
+                {currentUserRank ? `${currentUserRank}위` : '-'}
+              </Text>
               <View>
                 <Text style={styles.mySchoolName}>{school}</Text>
-                <Text style={styles.myLevelText}>{schoolLevel && `${schoolLevel}학교`}</Text>
-                <TouchableOpacity onPress={() => setEditing(true)}>
+                <Text style={styles.myLevelText}>{LEVEL_DISPLAY[schoolLevel] ?? ''}</Text>
+                <TouchableOpacity onPress={() => setEditingSchool(true)}>
                   <Text style={styles.changeSchoolText}>학교 변경</Text>
                 </TouchableOpacity>
               </View>
@@ -497,10 +565,12 @@ export default function RankingScreen() {
           </View>
 
           <View style={styles.leaderboardCard}>
-            <Text style={styles.leaderboardTitle}>전체 순위</Text>
-            {leaderboard.map((entry) => (
+            <Text style={styles.leaderboardTitle}>
+              {rankingFilter === '전체' ? '전체 순위' : `${rankingFilter} 순위`}
+            </Text>
+            {currentLeaderboard.map((entry) => (
               <View
-                key={entry.school}
+                key={entry.name}
                 style={[styles.rankRow, entry.isUser && styles.rankRowUser]}
               >
                 <Text style={[styles.rankNum, entry.rank <= 3 && styles.rankNumTop]}>
@@ -510,8 +580,7 @@ export default function RankingScreen() {
                   style={[styles.rankSchool, entry.isUser && styles.rankSchoolUser]}
                   numberOfLines={1}
                 >
-                  {entry.school}
-                  {entry.isUser ? ' ⭐' : ''}
+                  {entry.name}{entry.isUser ? ' ⭐' : ''}
                 </Text>
                 <Text style={[styles.rankScore, entry.isUser && styles.rankScoreUser]}>
                   {entry.score}pt
@@ -522,64 +591,75 @@ export default function RankingScreen() {
         </>
       ))}
 
-      {battleMode === 'company' && (showCompanySetup ? (
+      {!isSchoolFilter && (showCompanySetup ? (
         <View style={styles.setupCard}>
-          <Text style={styles.setupTitle}>회사를 등록해주세요</Text>
-          <Text style={styles.setupDesc}>
-            회사 이름을 입력하면 대항전 순위에 참여할 수 있습니다
-          </Text>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.schoolInput}
-              placeholder="회사 이름 입력"
-              placeholderTextColor="#9E8FB2"
-              value={inputCompany}
-              onChangeText={setInputCompany}
-              onSubmitEditing={handleSaveCompany}
-              returnKeyType="done"
-            />
-            <TouchableOpacity
-              style={styles.searchIconBtn}
-              onPress={() => {
-                setCompanySearchQuery(inputCompany);
-                handleCompanySearch(inputCompany);
-                setCompanySearchModalVisible(true);
-              }}
-            >
-              <Text style={styles.searchIconText}>🔍</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.levelLabel}>회사 유형 선택</Text>
-          <View style={styles.levelRow}>
-            {COMPANY_TYPES.map((type) => (
+          {userAge > 0 && userAge < 19 ? (
+            <>
+              <Text style={styles.setupTitle}>참여 불가</Text>
+              <Text style={styles.setupDesc}>
+                회사 대항전은 성인(19세 이상)만 참여할 수 있습니다.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.setupTitle}>회사를 등록해주세요</Text>
+              <Text style={styles.setupDesc}>
+                회사 이름을 입력하면 대항전 순위에 참여할 수 있습니다
+              </Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.schoolInput}
+                  placeholder="회사 이름 입력"
+                  placeholderTextColor="#9E8FB2"
+                  value={inputCompany}
+                  onChangeText={setInputCompany}
+                  onSubmitEditing={handleSaveCompany}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity
+                  style={styles.searchIconBtn}
+                  onPress={() => {
+                    setCompanySearchQuery(inputCompany);
+                    handleCompanySearch(inputCompany);
+                    setCompanySearchModalVisible(true);
+                  }}
+                >
+                  <Text style={styles.searchIconText}>🔍</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.levelLabel}>회사 유형 선택</Text>
+              <View style={styles.levelRow}>
+                {COMPANY_TYPES.map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.levelBtn, selectedCompanyType === type && styles.levelBtnActive]}
+                    onPress={() => setSelectedCompanyType(type)}
+                  >
+                    <Text style={[styles.levelBtnText, selectedCompanyType === type && styles.levelBtnTextActive]}>
+                      {type}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
               <TouchableOpacity
-                key={type}
-                style={[styles.levelBtn, selectedCompanyType === type && styles.levelBtnActive]}
-                onPress={() => setSelectedCompanyType(type)}
+                style={[styles.setupButton, (!inputCompany.trim() || !selectedCompanyType) && styles.setupButtonDisabled]}
+                onPress={handleSaveCompany}
               >
-                <Text style={[styles.levelBtnText, selectedCompanyType === type && styles.levelBtnTextActive]}>
-                  {type}
-                </Text>
+                <Text style={styles.setupButtonText}>등록하기</Text>
               </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity
-            style={[styles.setupButton, (!inputCompany.trim() || !selectedCompanyType) && styles.setupButtonDisabled]}
-            onPress={handleSaveCompany}
-          >
-            <Text style={styles.setupButtonText}>등록하기</Text>
-          </TouchableOpacity>
-          {editingCompany && (
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setEditingCompany(false)}>
-              <Text style={styles.cancelButtonText}>취소</Text>
-            </TouchableOpacity>
+              {editingCompany && (
+                <TouchableOpacity style={styles.cancelButton} onPress={() => setEditingCompany(false)}>
+                  <Text style={styles.cancelButtonText}>취소</Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
       ) : (
         <>
           <View style={styles.myScoreCard}>
             <View style={styles.myScoreLeft}>
-              <Text style={styles.myRankText}>{companyRank}위</Text>
+              <Text style={styles.myRankText}>{currentUserRank}위</Text>
               <View>
                 <Text style={styles.mySchoolName}>{company}</Text>
                 <Text style={styles.myLevelText}>{companyType}</Text>
@@ -604,10 +684,10 @@ export default function RankingScreen() {
           </View>
 
           <View style={styles.leaderboardCard}>
-            <Text style={styles.leaderboardTitle}>전체 순위</Text>
-            {companyLeaderboard.map((entry) => (
+            <Text style={styles.leaderboardTitle}>회사 순위</Text>
+            {currentLeaderboard.map((entry) => (
               <View
-                key={entry.company}
+                key={entry.name}
                 style={[styles.rankRow, entry.isUser && styles.rankRowUser]}
               >
                 <Text style={[styles.rankNum, entry.rank <= 3 && styles.rankNumTop]}>
@@ -617,8 +697,7 @@ export default function RankingScreen() {
                   style={[styles.rankSchool, entry.isUser && styles.rankSchoolUser]}
                   numberOfLines={1}
                 >
-                  {entry.company}
-                  {entry.isUser ? ' ⭐' : ''}
+                  {entry.name}{entry.isUser ? ' ⭐' : ''}
                 </Text>
                 <Text style={[styles.rankScore, entry.isUser && styles.rankScoreUser]}>
                   {entry.score}pt
@@ -745,6 +824,19 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff', marginBottom: 4 },
   headerWeek: { fontSize: 13, color: '#D4BBFF', marginBottom: 2 },
   headerDays: { fontSize: 12, color: '#D4BBFF' },
+  filterTabsOuter: { marginBottom: 16 },
+  filterTabsInner: { gap: 8 },
+  filterTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#E8DEF8',
+  },
+  filterTabActive: { backgroundColor: '#6750A4', borderColor: '#6750A4' },
+  filterTabText: { fontSize: 13, fontWeight: '600', color: '#49454F' },
+  filterTabTextActive: { color: '#fff' },
   setupCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -949,25 +1041,4 @@ const styles = StyleSheet.create({
   },
   doubleXpEndedTitle: { fontSize: 13, fontWeight: '700', color: '#757575' },
   doubleXpEndedSub: { fontSize: 12, color: '#9E9E9E', marginTop: 2 },
-  modeToggleRow: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-  },
-  modeToggleBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 9,
-  },
-  modeToggleBtnActive: { backgroundColor: '#6750A4' },
-  modeToggleBtnText: { fontSize: 14, fontWeight: '700', color: '#49454F' },
-  modeToggleBtnTextActive: { color: '#fff' },
 });
