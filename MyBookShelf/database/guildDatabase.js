@@ -52,7 +52,7 @@ export async function createGuild({ name, isPublic, weeklyGoal, userId, displayN
   return { guildId, inviteCode };
 }
 
-// ── 초대 코드로 가입 ─────────────────────────────────────────────
+// ── 초대 코드로 가입 신청 ─────────────────────────────────────────
 
 export async function joinGuildByCode(inviteCode, userId, displayName, school, schoolLevel) {
   if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
@@ -87,22 +87,75 @@ export async function joinGuildByCode(inviteCode, userId, displayName, school, s
   const memberSnap = await getDoc(memberRef);
   if (memberSnap.exists()) throw new Error('이미 이 길드의 멤버입니다.');
 
-  await setDoc(memberRef, {
+  const requestRef = doc(firestoreDb, 'guild_join_requests', `${guildId}_${userId}`);
+  const requestSnap = await getDoc(requestRef);
+  if (requestSnap.exists()) throw new Error('이미 가입 신청 중입니다. 운영자 승인을 기다려주세요.');
+
+  await setDoc(requestRef, {
     guildId,
     userId,
     displayName: displayName || '독서가',
     school: school || '',
     schoolLevel: schoolLevel || '',
-    joinedAt: serverTimestamp(),
-    isOwner: false,
     isAdult: getAge() >= 19,
+    requestedAt: serverTimestamp(),
+    status: 'pending',
   });
 
-  await updateDoc(doc(firestoreDb, 'guilds', guildId), {
-    memberCount: increment(1),
-  });
+  return { guildId, guildName: guildData.name };
+}
 
-  return { guildId, guildName: guildDoc.data().name };
+// ── 가입 신청 목록 조회 ────────────────────────────────────────────
+
+export async function getGuildJoinRequests(guildId) {
+  if (!isFirebaseReady()) return [];
+  const q = query(
+    collection(firestoreDb, 'guild_join_requests'),
+    where('guildId', '==', guildId),
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((r) => r.status === 'pending')
+    .sort((a, b) => (a.requestedAt?.seconds || 0) - (b.requestedAt?.seconds || 0));
+}
+
+// ── 가입 신청 승인 ────────────────────────────────────────────────
+
+export async function approveJoinRequest(guildId, userId) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+
+  const requestRef = doc(firestoreDb, 'guild_join_requests', `${guildId}_${userId}`);
+  const requestSnap = await getDoc(requestRef);
+  if (!requestSnap.exists()) throw new Error('가입 신청을 찾을 수 없습니다.');
+  const requestData = requestSnap.data();
+
+  const memberRef = doc(firestoreDb, 'guild_members', `${guildId}_${userId}`);
+  const memberSnap = await getDoc(memberRef);
+  if (!memberSnap.exists()) {
+    await setDoc(memberRef, {
+      guildId,
+      userId,
+      displayName: requestData.displayName || '독서가',
+      school: requestData.school || '',
+      schoolLevel: requestData.schoolLevel || '',
+      joinedAt: serverTimestamp(),
+      isOwner: false,
+      isAdult: requestData.isAdult,
+    });
+    await updateDoc(doc(firestoreDb, 'guilds', guildId), {
+      memberCount: increment(1),
+    });
+  }
+
+  await deleteDoc(requestRef);
+}
+
+// ── 가입 신청 거절 ────────────────────────────────────────────────
+
+export async function rejectJoinRequest(guildId, userId) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  await deleteDoc(doc(firestoreDb, 'guild_join_requests', `${guildId}_${userId}`));
 }
 
 // ── 공개 길드 검색 ───────────────────────────────────────────────
@@ -316,6 +369,76 @@ export async function deleteGuildPost(postId) {
   await deleteDoc(doc(firestoreDb, 'guild_posts', postId));
 }
 
+// ── 게시판 글 신고 ────────────────────────────────────────────────
+
+export async function reportGuildPost(postId, guildId, reporterId) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  const reportRef = doc(firestoreDb, 'guild_post_reports', `${postId}_${reporterId}`);
+  const existing = await getDoc(reportRef);
+  if (existing.exists()) throw new Error('이미 신고한 게시글입니다.');
+  await setDoc(reportRef, {
+    postId,
+    guildId,
+    reporterId,
+    createdAt: serverTimestamp(),
+  });
+}
+
+// ── 게시판 신고 목록 조회 (앱 운영자용) ──────────────────────────────
+
+export async function getGuildPostReports() {
+  if (!isFirebaseReady()) return [];
+  const snap = await getDocs(collection(firestoreDb, 'guild_post_reports'));
+  const reports = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  const grouped = {};
+  reports.forEach((r) => {
+    if (!grouped[r.postId]) {
+      grouped[r.postId] = { postId: r.postId, guildId: r.guildId, reportCount: 0, reporters: [] };
+    }
+    grouped[r.postId].reportCount++;
+    grouped[r.postId].reporters.push({ reporterId: r.reporterId, createdAt: r.createdAt });
+  });
+
+  await Promise.all(
+    Object.keys(grouped).map(async (postId) => {
+      try {
+        const postSnap = await getDoc(doc(firestoreDb, 'guild_posts', postId));
+        if (postSnap.exists()) {
+          const data = postSnap.data();
+          grouped[postId].title = data.title;
+          grouped[postId].content = data.content;
+          grouped[postId].authorId = data.userId;
+          grouped[postId].authorName = data.displayName;
+          grouped[postId].postCreatedAt = data.createdAt;
+        } else {
+          grouped[postId].deleted = true;
+        }
+      } catch (_) {}
+    }),
+  );
+
+  return Object.values(grouped).sort(
+    (a, b) =>
+      (b.reporters[0]?.createdAt?.seconds || 0) - (a.reporters[0]?.createdAt?.seconds || 0),
+  );
+}
+
+export async function dismissGuildPostReports(postId) {
+  if (!isFirebaseReady()) return;
+  const q = query(collection(firestoreDb, 'guild_post_reports'), where('postId', '==', postId));
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+}
+
+export async function deleteGuildPostAndReports(postId) {
+  if (!isFirebaseReady()) return;
+  await deleteDoc(doc(firestoreDb, 'guild_posts', postId));
+  const q = query(collection(firestoreDb, 'guild_post_reports'), where('postId', '==', postId));
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+}
+
 // ── 테마 미션 제출·승인 ───────────────────────────────────────────
 
 export async function submitThemeMission(guildId, userId, displayName, missionId, missionLabel, missionXp, weekKey) {
@@ -426,6 +549,7 @@ export async function dissolveGuild(guildId, userId) {
     query(collection(firestoreDb, 'guild_scores'), where('guildId', '==', guildId)),
     query(collection(firestoreDb, 'guild_posts'), where('guildId', '==', guildId)),
     query(collection(firestoreDb, 'guild_theme_missions'), where('guildId', '==', guildId)),
+    query(collection(firestoreDb, 'guild_join_requests'), where('guildId', '==', guildId)),
   ];
 
   await Promise.all(
@@ -439,6 +563,32 @@ export async function dissolveGuild(guildId, userId) {
   await deleteDoc(doc(firestoreDb, 'guilds', guildId));
 }
 
+// ── 운영자 권한 위임 ─────────────────────────────────────────────
+
+export async function delegateAuthority(guildId, ownerId, deputyUserId, expiresAt) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  const guildSnap = await getDoc(doc(firestoreDb, 'guilds', guildId));
+  if (!guildSnap.exists()) throw new Error('길드를 찾을 수 없습니다.');
+  if (guildSnap.data().creatorId !== ownerId) throw new Error('운영자만 권한을 위임할 수 있습니다.');
+  const memberSnap = await getDoc(doc(firestoreDb, 'guild_members', `${guildId}_${deputyUserId}`));
+  if (!memberSnap.exists() || !memberSnap.data().isDeputy) throw new Error('부운영자에게만 권한을 위임할 수 있습니다.');
+  await updateDoc(doc(firestoreDb, 'guilds', guildId), {
+    delegatedTo: deputyUserId,
+    delegationExpiresAt: expiresAt,
+  });
+}
+
+export async function revokeDelegation(guildId, ownerId) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  const guildSnap = await getDoc(doc(firestoreDb, 'guilds', guildId));
+  if (!guildSnap.exists()) throw new Error('길드를 찾을 수 없습니다.');
+  if (guildSnap.data().creatorId !== ownerId) throw new Error('운영자만 위임을 회수할 수 있습니다.');
+  await updateDoc(doc(firestoreDb, 'guilds', guildId), {
+    delegatedTo: null,
+    delegationExpiresAt: null,
+  });
+}
+
 // ── 부운영자 임명 / 해제 ──────────────────────────────────────────
 
 export async function appointDeputy(guildId, userId) {
@@ -449,4 +599,42 @@ export async function appointDeputy(guildId, userId) {
 export async function revokeDeputy(guildId, userId) {
   if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
   await updateDoc(doc(firestoreDb, 'guild_members', `${guildId}_${userId}`), { isDeputy: false });
+}
+
+// ── 앱 운영자 전용 ────────────────────────────────────────────────
+
+const ADMIN_USER_ID = 'nireat';
+
+export async function getAllGuilds() {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  const snap = await getDocs(collection(firestoreDb, 'guilds'));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+}
+
+export async function forceDissolveGuild(guildId, requesterId) {
+  if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
+  if (requesterId !== ADMIN_USER_ID) throw new Error('앱 운영자만 강제 폐쇄할 수 있습니다.');
+
+  const guildSnap = await getDoc(doc(firestoreDb, 'guilds', guildId));
+  if (!guildSnap.exists()) throw new Error('길드를 찾을 수 없습니다.');
+
+  const relatedQueries = [
+    query(collection(firestoreDb, 'guild_members'), where('guildId', '==', guildId)),
+    query(collection(firestoreDb, 'guild_scores'), where('guildId', '==', guildId)),
+    query(collection(firestoreDb, 'guild_posts'), where('guildId', '==', guildId)),
+    query(collection(firestoreDb, 'guild_theme_missions'), where('guildId', '==', guildId)),
+    query(collection(firestoreDb, 'guild_join_requests'), where('guildId', '==', guildId)),
+  ];
+
+  await Promise.all(
+    relatedQueries.map(async (q) => {
+      const snap = await getDocs(q);
+      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+    })
+  );
+
+  await deleteDoc(doc(firestoreDb, 'guild_reading', guildId));
+  await deleteDoc(doc(firestoreDb, 'guilds', guildId));
 }

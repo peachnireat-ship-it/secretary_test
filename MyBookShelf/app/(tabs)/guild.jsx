@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, Modal, TextInput, Switch, Image,
@@ -12,10 +12,12 @@ import {
 import {
   getGuildInfo, getGuildWeeklyScores, getGuildRankings,
   syncWeeklyScore, removeMemberFromGuild, getUserGuilds,
-  getGuildPosts, createGuildPost, deleteGuildPost, updateGuildInfo,
+  getGuildPosts, createGuildPost, deleteGuildPost, reportGuildPost, updateGuildInfo,
   getGuildThemeMissionSubmissions, reviewThemeMission,
   getGuildReading, setGuildReading, endGuildReading,
   getGuildMembers, appointDeputy, revokeDeputy, dissolveGuild,
+  getGuildJoinRequests, approveJoinRequest, rejectJoinRequest,
+  delegateAuthority, revokeDelegation,
 } from '../../database/guildDatabase';
 import { isFirebaseReady } from '../../database/firebaseConfig';
 
@@ -25,6 +27,23 @@ const SEGMENT_TABS = ['주간 목표', '멤버 순위', '길드 대항전', '게
 const ALADIN_TTB_KEY = process.env.EXPO_PUBLIC_ALADIN_TTB_KEY;
 const cleanAladinAuthor = (str) =>
   str ? str.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() || '저자 미상' : '저자 미상';
+
+function isDelegationActive(guildData) {
+  if (!guildData?.delegatedTo || !guildData?.delegationExpiresAt) return false;
+  const ms = typeof guildData.delegationExpiresAt === 'object' && guildData.delegationExpiresAt?.seconds
+    ? guildData.delegationExpiresAt.seconds * 1000
+    : Number(guildData.delegationExpiresAt);
+  return Date.now() < ms;
+}
+
+function formatDelegationExpiry(expiresAt) {
+  if (!expiresAt) return '';
+  const ms = typeof expiresAt === 'object' && expiresAt?.seconds
+    ? expiresAt.seconds * 1000
+    : Number(expiresAt);
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 function formatPostDate(createdAt) {
   if (!createdAt) return '';
@@ -65,6 +84,9 @@ export default function GuildScreen() {
   const [editSaving, setEditSaving] = useState(false);
   const [dissolving, setDissolving] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [showDelegateForm, setShowDelegateForm] = useState(false);
+  const [selectedDeputyId, setSelectedDeputyId] = useState('');
+  const [delegateDays, setDelegateDays] = useState(3);
 
   const AGE_POLICIES = [
     { value: 'all',   label: '전체 이용',    icon: 'people-outline', color: '#4CAF50', bg: '#E8F5E9' },
@@ -85,12 +107,52 @@ export default function GuildScreen() {
   const [readingSaving, setReadingSaving] = useState(false);
   const [readingLoaded, setReadingLoaded] = useState(false);
   const [members, setMembers] = useState([]);
+  const [joinRequests, setJoinRequests] = useState([]);
+  const [showJoinRequestModal, setShowJoinRequestModal] = useState(false);
+  const [pendingRequestCounts, setPendingRequestCounts] = useState({});
+  const joinAlertShown = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
       load();
     }, []),
   );
+
+  useEffect(() => {
+    if (viewMode === 'detail' && !loading && joinRequests.length > 0 && !joinAlertShown.current) {
+      joinAlertShown.current = true;
+      Alert.alert(
+        '가입 신청 알림',
+        `${guild?.name}\n가입 신청자가 ${joinRequests.length}명 있습니다.`,
+        [
+          { text: '나중에', style: 'cancel' },
+          { text: '확인하러 가기', onPress: () => setShowJoinRequestModal(true) },
+        ],
+      );
+    }
+  }, [viewMode, loading, joinRequests]);
+
+  const loadPendingCounts = async (guilds) => {
+    const userId = getUserId();
+    const ownedGuilds = guilds.filter((g) => g.creatorId === userId);
+    if (ownedGuilds.length === 0) {
+      setPendingRequestCounts({});
+      return {};
+    }
+    const counts = {};
+    await Promise.all(
+      ownedGuilds.map(async (g) => {
+        try {
+          const requests = await getGuildJoinRequests(g.id);
+          if (requests.length > 0) counts[g.id] = requests.length;
+        } catch (err) {
+          console.error('[길드] 가입 신청 건수 조회 오류:', g.id, err);
+        }
+      }),
+    );
+    setPendingRequestCounts(counts);
+    return counts;
+  };
 
   const load = async () => {
     setLoading(true);
@@ -106,6 +168,25 @@ export default function GuildScreen() {
       const userId = getUserId();
       const guilds = await getUserGuilds(userId);
       setMyGuilds(guilds);
+      const counts = await loadPendingCounts(guilds);
+      const entries = Object.entries(counts);
+      if (entries.length > 0) {
+        let message;
+        if (entries.length === 1) {
+          const [guildId, count] = entries[0];
+          const g = guilds.find((gl) => gl.id === guildId);
+          message = `'${g?.name || '길드'}'에 ${count}명의 가입 신청이 대기 중입니다.`;
+        } else {
+          const lines = entries
+            .map(([guildId, count]) => {
+              const g = guilds.find((gl) => gl.id === guildId);
+              return `· ${g?.name || '길드'}: ${count}명`;
+            })
+            .join('\n');
+          message = `여러 길드에 가입 신청이 대기 중입니다:\n${lines}`;
+        }
+        Alert.alert('가입 신청 알림', message, [{ text: '확인' }]);
+      }
     } catch (e) {
       setLoadError(e.message || '길드 목록을 불러오지 못했습니다.');
     } finally {
@@ -139,15 +220,22 @@ export default function GuildScreen() {
       setGuildRankings(rankings);
       setMembers(memberList);
 
-      // 운영자/부운영자인 경우 테마 미션 제출 목록 로드
+      // 운영자/부운영자인 경우 테마 미션 제출 목록 및 가입 신청 목록 로드
       const myMemberData = memberList.find(m => m.userId === getUserId());
       if (info?.creatorId === getUserId() || myMemberData?.isDeputy) {
         try {
           const subs = await getGuildThemeMissionSubmissions(guildId, getWeekKey());
           setThemeMissionSubs(subs);
         } catch (_) {}
+        try {
+          const requests = await getGuildJoinRequests(guildId);
+          setJoinRequests(requests);
+        } catch (err) {
+          console.error('[길드] 가입 신청 조회 오류:', err);
+        }
       }
 
+      joinAlertShown.current = false;
       setViewMode('detail');
     } catch (e) {
       setLoadError(e.message || '길드 정보를 불러오지 못했습니다.');
@@ -168,6 +256,9 @@ export default function GuildScreen() {
     setGuildReading(null);
     setReadingLoaded(false);
     setMembers([]);
+    setJoinRequests([]);
+    joinAlertShown.current = false;
+    loadPendingCounts(myGuilds);
   };
 
   const loadPosts = async (guildId) => {
@@ -213,6 +304,24 @@ export default function GuildScreen() {
             setPosts((prev) => prev.filter((p) => p.id !== postId));
           } catch (e) {
             Alert.alert('오류', e.message || '삭제에 실패했습니다.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleReportPost = (postId) => {
+    Alert.alert('신고', '이 게시글을 신고하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '신고',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await reportGuildPost(postId, selectedGuildId, getUserId());
+            Alert.alert('신고 완료', '신고가 접수되었습니다.\n검토 후 조치하겠습니다.');
+          } catch (e) {
+            Alert.alert('오류', e.message || '신고에 실패했습니다.');
           }
         },
       },
@@ -286,6 +395,10 @@ export default function GuildScreen() {
   };
 
   const handleLeave = () => {
+    if (isDelegated) {
+      Alert.alert('탈퇴 불가', '권한 위임 중에는 길드를 탈퇴할 수 없습니다.\n운영자에게 위임 회수를 요청해주세요.');
+      return;
+    }
     Alert.alert(
       '길드 탈퇴',
       `'${guild?.name}' 길드를 탈퇴하시겠습니까?\n탈퇴 후에는 길드 활동 내역이 사라집니다.`,
@@ -545,6 +658,108 @@ export default function GuildScreen() {
     );
   };
 
+  const handleApproveJoin = (req) => {
+    Alert.alert(
+      '가입 승인',
+      `${req.displayName}님의 가입 신청을 승인하시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '승인',
+          onPress: async () => {
+            try {
+              await approveJoinRequest(selectedGuildId, req.userId);
+              setJoinRequests((prev) => prev.filter((r) => r.userId !== req.userId));
+              setMembers((prev) => [...prev, {
+                guildId: selectedGuildId,
+                userId: req.userId,
+                displayName: req.displayName,
+                school: req.school || '',
+                schoolLevel: req.schoolLevel || '',
+                isOwner: false,
+                isDeputy: false,
+                isAdult: req.isAdult,
+              }]);
+              setGuild((prev) => ({ ...prev, memberCount: (prev?.memberCount || 0) + 1 }));
+            } catch (e) {
+              Alert.alert('오류', e.message || '승인에 실패했습니다.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleRejectJoin = (req) => {
+    Alert.alert(
+      '가입 거절',
+      `${req.displayName}님의 가입 신청을 거절하시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '거절',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await rejectJoinRequest(selectedGuildId, req.userId);
+              setJoinRequests((prev) => prev.filter((r) => r.userId !== req.userId));
+            } catch (e) {
+              Alert.alert('오류', e.message || '거절에 실패했습니다.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDelegateAuthority = async () => {
+    const targetId = selectedDeputyId || deputies[0]?.userId;
+    if (!targetId) { Alert.alert('알림', '위임할 부운영자를 선택해주세요.'); return; }
+    const targetName = members.find(m => m.userId === targetId)?.displayName || '부운영자';
+    Alert.alert(
+      '권한 위임 확인',
+      `${targetName}님에게 ${delegateDays}일간 운영자 권한을 위임합니다.\n위임 기간 중 길드 정보 수정 및 멤버 관리 권한이 부여됩니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '위임',
+          onPress: async () => {
+            try {
+              const expiresAt = Date.now() + delegateDays * 24 * 60 * 60 * 1000;
+              await delegateAuthority(selectedGuildId, getUserId(), targetId, expiresAt);
+              setGuild(prev => ({ ...prev, delegatedTo: targetId, delegationExpiresAt: expiresAt }));
+              setShowDelegateForm(false);
+            } catch (e) {
+              Alert.alert('오류', e.message || '권한 위임에 실패했습니다.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleRevokeDelegation = () => {
+    Alert.alert(
+      '위임 회수',
+      '권한 위임을 회수하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '회수',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await revokeDelegation(selectedGuildId, getUserId());
+              setGuild(prev => ({ ...prev, delegatedTo: null, delegationExpiresAt: null }));
+            } catch (e) {
+              Alert.alert('오류', e.message || '위임 회수에 실패했습니다.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const copyCode = async () => {
     await Clipboard.setStringAsync(guild?.inviteCode || '');
     Alert.alert('복사 완료', '초대 코드가 클립보드에 복사되었습니다.');
@@ -668,6 +883,12 @@ export default function GuildScreen() {
                     멤버 {g.memberCount || 0}명 · 주간 목표 {g.weeklyGoal || 0}권
                   </Text>
                 </View>
+                {pendingRequestCounts[g.id] > 0 && (
+                  <View style={styles.requestCountBadge}>
+                    <Ionicons name="person-add-outline" size={11} color="#fff" />
+                    <Text style={styles.requestCountText}>신청 {pendingRequestCounts[g.id]}</Text>
+                  </View>
+                )}
                 <Ionicons name="chevron-forward" size={18} color="#C4B9DC" />
               </TouchableOpacity>
             ))}
@@ -691,6 +912,10 @@ export default function GuildScreen() {
 
   const isOwner = guild?.creatorId === getUserId();
   const isDeputy = members.find(m => m.userId === getUserId())?.isDeputy || false;
+  const isAdmin = getUserId() === 'nireat';
+  const isDelegated = isDelegationActive(guild) && guild?.delegatedTo === getUserId();
+  const isEffectiveOwner = isOwner || isDelegated;
+  const deputies = members.filter(m => m.isDeputy && !m.isOwner);
 
   const mergedMembers = (() => {
     if (members.length === 0) return memberScores;
@@ -717,7 +942,7 @@ export default function GuildScreen() {
           </TouchableOpacity>
           <Text style={styles.guildName} numberOfLines={1}>{guild?.name || '내 길드'}</Text>
           <View style={styles.headerRightBtns}>
-            {isOwner ? (
+            {(isOwner || isDelegated) ? (
               <TouchableOpacity onPress={openEditModal} hitSlop={8}>
                 <Ionicons name="settings-outline" size={19} color="rgba(255,255,255,0.75)" />
               </TouchableOpacity>
@@ -729,33 +954,51 @@ export default function GuildScreen() {
           </View>
         </View>
         <View style={styles.guildMeta}>
-          <View style={styles.metaChip}>
-            <Ionicons name="people-outline" size={12} color="#D0BCFF" />
-            <Text style={styles.metaChipText}>멤버 {guild?.memberCount || 0}명</Text>
+          <View style={styles.guildMetaRow}>
+            <View style={styles.metaChip}>
+              <Ionicons name="people-outline" size={12} color="#D0BCFF" />
+              <Text style={styles.metaChipText}>멤버 {guild?.memberCount || 0}명</Text>
+            </View>
+            <TouchableOpacity onPress={copyCode} style={styles.metaChip}>
+              <Ionicons name="copy-outline" size={12} color="#D0BCFF" />
+              <Text style={styles.metaChipText}>코드: {guild?.inviteCode}</Text>
+            </TouchableOpacity>
+            {myRank && (
+              <View style={[styles.metaChip, styles.rankChip]}>
+                <Text style={styles.rankChipText}>
+                  {myRank <= 3 ? MEDALS[myRank - 1] : `#${myRank}`} 대항전
+                </Text>
+              </View>
+            )}
+            {guild?.agePolicy && guild.agePolicy !== 'all' && (
+              <View style={[styles.metaChip, guild.agePolicy === 'adult' ? styles.agePolicyAdultChip : styles.agePolicyMinorChip]}>
+                <Text style={guild.agePolicy === 'adult' ? styles.agePolicyAdultText : styles.agePolicyMinorText}>
+                  {guild.agePolicy === 'adult' ? '성인 전용' : '미성년자 전용'}
+                </Text>
+              </View>
+            )}
+            {isDelegationActive(guild) && isOwner && (
+              <View style={[styles.metaChip, styles.delegatingChip]}>
+                <Ionicons name="swap-horizontal-outline" size={11} color="#FFD54F" />
+                <Text style={styles.delegatingChipText}>위임 중</Text>
+              </View>
+            )}
+            {isDelegated && (
+              <View style={[styles.metaChip, styles.delegatedChip]}>
+                <Ionicons name="shield-checkmark-outline" size={11} color="#A5D6A7" />
+                <Text style={styles.delegatedChipText}>대리 운영 중</Text>
+              </View>
+            )}
           </View>
-          <TouchableOpacity onPress={copyCode} style={styles.metaChip}>
-            <Ionicons name="copy-outline" size={12} color="#D0BCFF" />
-            <Text style={styles.metaChipText}>코드: {guild?.inviteCode}</Text>
-          </TouchableOpacity>
-          {myRank && (
-            <View style={[styles.metaChip, styles.rankChip]}>
-              <Text style={styles.rankChipText}>
-                {myRank <= 3 ? MEDALS[myRank - 1] : `#${myRank}`} 대항전
-              </Text>
+          {(guild?.keywords || []).length > 0 && (
+            <View style={styles.guildMetaRow}>
+              {(guild?.keywords || []).map((kw) => (
+                <View key={kw} style={[styles.metaChip, styles.kwTagChip]}>
+                  <Text style={styles.kwTagChipText}>#{kw}</Text>
+                </View>
+              ))}
             </View>
           )}
-          {guild?.agePolicy && guild.agePolicy !== 'all' && (
-            <View style={[styles.metaChip, guild.agePolicy === 'adult' ? styles.agePolicyAdultChip : styles.agePolicyMinorChip]}>
-              <Text style={guild.agePolicy === 'adult' ? styles.agePolicyAdultText : styles.agePolicyMinorText}>
-                {guild.agePolicy === 'adult' ? '성인 전용' : '미성년자 전용'}
-              </Text>
-            </View>
-          )}
-          {(guild?.keywords || []).map((kw) => (
-            <View key={kw} style={[styles.metaChip, styles.kwTagChip]}>
-              <Text style={styles.kwTagChipText}>#{kw}</Text>
-            </View>
-          ))}
         </View>
       </View>
 
@@ -805,6 +1048,36 @@ export default function GuildScreen() {
                 ))
               )}
             </View>
+
+            {(isOwner || isDeputy) && joinRequests.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>
+                  가입 신청 관리 ({joinRequests.length})
+                </Text>
+                {joinRequests.map((req) => (
+                  <View key={req.id} style={styles.missionSubRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subMissionLabel}>{req.displayName}</Text>
+                      <Text style={styles.subMemberName}>{req.isAdult ? '성인' : '미성년자'}</Text>
+                    </View>
+                    <View style={styles.subActionRow}>
+                      <TouchableOpacity
+                        style={styles.approveBtn}
+                        onPress={() => handleApproveJoin(req)}
+                      >
+                        <Text style={styles.approveBtnText}>승인</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.rejectBtn}
+                        onPress={() => handleRejectJoin(req)}
+                      >
+                        <Text style={styles.rejectBtnText}>거절</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {(isOwner || isDeputy) && (
               <View style={styles.card}>
@@ -892,7 +1165,7 @@ export default function GuildScreen() {
                       )}
                     </View>
                     <Text style={styles.rankScore}>{(m.score || 0).toLocaleString()}점</Text>
-                    {isOwner && !m.isOwner && (
+                    {isEffectiveOwner && !m.isOwner && (
                       <TouchableOpacity
                         onPress={() => handleMemberAction(m)}
                         hitSlop={8}
@@ -906,7 +1179,7 @@ export default function GuildScreen() {
               )}
             </View>
 
-            {!isOwner && (
+            {!isOwner && !isDelegated && (
               <View style={styles.leaveSection}>
                 <TouchableOpacity
                   style={[styles.leaveBtn, leaving && { opacity: 0.6 }]}
@@ -993,7 +1266,7 @@ export default function GuildScreen() {
                     </View>
                   </View>
                 </View>
-                {isOwner && (
+                {isEffectiveOwner && (
                   <View style={styles.readingOwnerBtns}>
                     <TouchableOpacity style={styles.readingChangeBtn} onPress={openReadingModal}>
                       <Ionicons name="swap-horizontal-outline" size={14} color="#6750A4" />
@@ -1009,9 +1282,9 @@ export default function GuildScreen() {
             ) : (
               <View style={styles.card}>
                 <Text style={styles.emptyText}>
-                  현재 선정된 도서가 없습니다.{isOwner ? '\n아래 버튼으로 도서를 선정해보세요.' : ''}
+                  현재 선정된 도서가 없습니다.{isEffectiveOwner ? '\n아래 버튼으로 도서를 선정해보세요.' : ''}
                 </Text>
-                {isOwner && (
+                {isEffectiveOwner && (
                   <TouchableOpacity style={styles.readingSelectBtn} onPress={openReadingModal}>
                     <Ionicons name="add-circle-outline" size={16} color="#fff" />
                     <Text style={styles.readingSelectBtnText}>도서 선정하기</Text>
@@ -1058,11 +1331,18 @@ export default function GuildScreen() {
                       <Text style={styles.postTitle} numberOfLines={isExpanded ? 0 : 1}>
                         {p.title}
                       </Text>
-                      {isOwn && (
-                        <TouchableOpacity onPress={() => handleDeletePost(p.id)} hitSlop={8}>
-                          <Ionicons name="trash-outline" size={15} color="#ccc" />
-                        </TouchableOpacity>
-                      )}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        {!isOwn && (
+                          <TouchableOpacity onPress={() => handleReportPost(p.id)} hitSlop={8}>
+                            <Ionicons name="flag-outline" size={15} color="#ccc" />
+                          </TouchableOpacity>
+                        )}
+                        {(isOwn || isOwner || isAdmin) && (
+                          <TouchableOpacity onPress={() => handleDeletePost(p.id)} hitSlop={8}>
+                            <Ionicons name="trash-outline" size={15} color="#ccc" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
                     <Text style={styles.postMeta}>
                       {p.displayName} · {formatPostDate(p.createdAt)}
@@ -1193,6 +1473,94 @@ export default function GuildScreen() {
                 </TouchableOpacity>
               </View>
 
+              {isOwner && (
+                <View style={styles.delegateSection}>
+                  <Text style={[styles.editLabel, { marginTop: 4 }]}>운영자 권한 위임</Text>
+                  {isDelegationActive(guild) ? (
+                    <View style={styles.delegateStatusBox}>
+                      <Ionicons name="swap-horizontal-outline" size={14} color="#6750A4" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.delegateStatusText}>
+                          {members.find(m => m.userId === guild.delegatedTo)?.displayName || '부운영자'}에게 위임 중
+                        </Text>
+                        <Text style={styles.delegateExpiryText}>
+                          만료: {formatDelegationExpiry(guild.delegationExpiresAt)}
+                        </Text>
+                      </View>
+                      <TouchableOpacity style={styles.revokeBtn} onPress={handleRevokeDelegation}>
+                        <Text style={styles.revokeBtnText}>회수</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : deputies.length === 0 ? (
+                    <Text style={styles.editHint}>부운영자가 없습니다. 먼저 멤버를 부운영자로 임명해주세요.</Text>
+                  ) : !showDelegateForm ? (
+                    <TouchableOpacity style={styles.delegateOpenBtn} onPress={() => {
+                      setSelectedDeputyId(deputies[0]?.userId || '');
+                      setDelegateDays(3);
+                      setShowDelegateForm(true);
+                    }}>
+                      <Ionicons name="swap-horizontal-outline" size={14} color="#6750A4" />
+                      <Text style={styles.delegateOpenBtnText}>권한 위임하기</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.delegateForm}>
+                      {deputies.length > 1 && (
+                        <>
+                          <Text style={styles.delegateFormLabel}>위임 대상</Text>
+                          <View style={{ gap: 6, marginBottom: 10 }}>
+                            {deputies.map(d => (
+                              <TouchableOpacity
+                                key={d.userId}
+                                style={[styles.deputyPickerItem, selectedDeputyId === d.userId && styles.deputyPickerItemActive]}
+                                onPress={() => setSelectedDeputyId(d.userId)}
+                              >
+                                <Text style={[styles.deputyPickerText, selectedDeputyId === d.userId && styles.deputyPickerTextActive]}>
+                                  {d.displayName}
+                                </Text>
+                                {selectedDeputyId === d.userId && (
+                                  <Ionicons name="checkmark" size={14} color="#6750A4" />
+                                )}
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </>
+                      )}
+                      {deputies.length === 1 && (
+                        <Text style={[styles.editHint, { marginBottom: 8 }]}>
+                          위임 대상: {deputies[0].displayName}
+                        </Text>
+                      )}
+                      <Text style={styles.delegateFormLabel}>위임 기간</Text>
+                      <View style={styles.dayPickerRow}>
+                        {[1, 3, 7, 30].map(d => (
+                          <TouchableOpacity
+                            key={d}
+                            style={[styles.dayBtn, delegateDays === d && styles.dayBtnActive]}
+                            onPress={() => setDelegateDays(d)}
+                          >
+                            <Text style={[styles.dayBtnText, delegateDays === d && styles.dayBtnTextActive]}>
+                              {d}일
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                        <TouchableOpacity
+                          style={[styles.modalCancelBtn, { flex: 0, paddingHorizontal: 20 }]}
+                          onPress={() => setShowDelegateForm(false)}
+                        >
+                          <Text style={styles.modalCancelText}>취소</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.delegateConfirmBtn, { flex: 1 }]} onPress={handleDelegateAuthority}>
+                          <Text style={styles.delegateConfirmText}>위임 확인</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {isOwner && (
               <View style={styles.dissolveSection}>
                 <TouchableOpacity
                   style={[styles.dissolveBtn, dissolving && { opacity: 0.6 }]}
@@ -1210,12 +1578,56 @@ export default function GuildScreen() {
                   )}
                 </TouchableOpacity>
               </View>
+              )}
             </ScrollView>
           </View>
         </View>
       </Modal>
 
       {/* 도서 선정 모달 */}
+      {/* ── 가입 신청자 목록 모달 ── */}
+      <Modal visible={showJoinRequestModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModalBox}>
+            <Text style={styles.modalTitle}>{guild?.name} 가입 신청자 목록</Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
+              {joinRequests.length === 0 ? (
+                <Text style={styles.emptyText}>처리할 가입 신청이 없습니다.</Text>
+              ) : (
+                joinRequests.map((req) => (
+                  <View key={req.id} style={styles.missionSubRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subMissionLabel}>{req.displayName}</Text>
+                      <Text style={styles.subMemberName}>{req.isAdult ? '성인' : '미성년자'}</Text>
+                    </View>
+                    <View style={styles.subActionRow}>
+                      <TouchableOpacity
+                        style={styles.approveBtn}
+                        onPress={() => handleApproveJoin(req)}
+                      >
+                        <Text style={styles.approveBtnText}>승인</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.rejectBtn}
+                        onPress={() => handleRejectJoin(req)}
+                      >
+                        <Text style={styles.rejectBtnText}>거절</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.modalCancelBtn, { marginTop: 16 }]}
+              onPress={() => setShowJoinRequestModal(false)}
+            >
+              <Text style={styles.modalCancelText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showReadingModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.editModalBox}>
@@ -1502,6 +1914,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9B93B0',
   },
+  requestCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#6750A4',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginRight: 6,
+  },
+  requestCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
   emptyGuide: {
     alignItems: 'center',
     paddingVertical: 28,
@@ -1662,6 +2089,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   guildMeta: {
+    flexDirection: 'column',
+    gap: 6,
+  },
+  guildMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -2451,5 +2882,153 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#1976D2',
+  },
+
+  // ── 권한 위임 ─────────────────────────────────────────────────
+  delegatingChip: {
+    backgroundColor: 'rgba(255,180,50,0.18)',
+  },
+  delegatingChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFD54F',
+  },
+  delegatedChip: {
+    backgroundColor: 'rgba(100,200,100,0.18)',
+  },
+  delegatedChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#A5D6A7',
+  },
+  delegateSection: {
+    borderTopWidth: 1,
+    borderTopColor: '#F0EBF8',
+    marginTop: 8,
+    paddingTop: 14,
+    marginBottom: 4,
+  },
+  delegateStatusBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#EDE7F6',
+    borderRadius: 10,
+    padding: 12,
+  },
+  delegateStatusText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4A3870',
+  },
+  delegateExpiryText: {
+    fontSize: 11,
+    color: '#9B93B0',
+    marginTop: 2,
+  },
+  revokeBtn: {
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  revokeBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#E57373',
+  },
+  delegateOpenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#D4C8F0',
+  },
+  delegateOpenBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6750A4',
+  },
+  delegateForm: {
+    backgroundColor: '#F8F6FC',
+    borderRadius: 12,
+    padding: 14,
+  },
+  delegateFormLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6750A4',
+    marginBottom: 8,
+  },
+  deputyPickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0D6F0',
+    backgroundColor: '#fff',
+  },
+  deputyPickerItemActive: {
+    borderColor: '#6750A4',
+    backgroundColor: '#EDE7F6',
+  },
+  deputyPickerText: {
+    fontSize: 13,
+    color: '#5F5870',
+    fontWeight: '500',
+  },
+  deputyPickerTextActive: {
+    color: '#4A3870',
+    fontWeight: '700',
+  },
+  dayPickerRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  dayBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#E0D6F0',
+    backgroundColor: '#fff',
+  },
+  dayBtnActive: {
+    borderColor: '#6750A4',
+    backgroundColor: '#EDE7F6',
+  },
+  dayBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9B93B0',
+  },
+  dayBtnTextActive: {
+    color: '#6750A4',
+  },
+  delegateConfirmBtn: {
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: '#6750A4',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#6750A4',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  delegateConfirmText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
