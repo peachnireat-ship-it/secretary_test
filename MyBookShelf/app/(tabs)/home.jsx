@@ -19,6 +19,66 @@ function buildEquipped(pet) {
   };
 }
 
+function TamagotchiFrame({ petType, petStats, equipped, bgTheme }) {
+  return (
+    <View style={tamStyles.shell}>
+      <View style={tamStyles.screen}>
+        <PixelPet
+          petType={petType}
+          stats={petStats}
+          equipped={equipped}
+          bgTheme={bgTheme}
+          faceOnly
+        />
+      </View>
+      <View style={tamStyles.btnRow}>
+        <View style={[tamStyles.btn, { backgroundColor: '#E91E8C' }]} />
+        <View style={[tamStyles.btn, { backgroundColor: '#AB47BC' }]} />
+        <View style={[tamStyles.btn, { backgroundColor: '#5C6BC0' }]} />
+      </View>
+    </View>
+  );
+}
+
+const tamStyles = StyleSheet.create({
+  shell: {
+    width: 74,
+    height: 100,
+    borderRadius: 37,
+    backgroundColor: '#FCE4EC',
+    borderWidth: 3,
+    borderColor: '#F48FB1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 6,
+    elevation: 4,
+    shadowColor: '#E91E63',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  screen: {
+    width: 58,
+    height: 44,
+    backgroundColor: '#C8E6C9',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#4E342E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  btn: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+});
 
 const ENCOURAGEMENT = {
   '초등': [
@@ -459,15 +519,16 @@ export default function HomeScreen() {
     <View style={styles.root}>
     <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/shop')} style={styles.avatarBtn}>
-          <PixelPet
-            petType={pet?.type}
-            stats={{ hunger: pet?.hunger, happiness: pet?.happiness, cleanliness: pet?.cleanliness }}
-            equipped={buildEquipped(pet)}
-            bgTheme={pet?.room_theme || 'classic'}
-            faceOnly
-          />
-        </TouchableOpacity>
+        {pet && (
+          <TouchableOpacity onPress={() => router.push('/(tabs)/shop')} style={styles.avatarBtn}>
+            <TamagotchiFrame
+              petType={pet.type}
+              petStats={{ hunger: pet.hunger, happiness: pet.happiness, cleanliness: pet.cleanliness }}
+              equipped={buildEquipped(pet)}
+              bgTheme={pet.room_theme || 'classic'}
+            />
+          </TouchableOpacity>
+        )}
         <View style={styles.headerInfo}>
           <Text style={styles.greeting}>안녕하세요 👋</Text>
           <View style={styles.profileNameRow}>
@@ -619,8 +680,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   avatarBtn: {
-    width: 60,
-    height: 35,
     alignItems: 'center',
     justifyContent: 'center',
   },
