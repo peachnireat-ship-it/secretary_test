@@ -1,6 +1,6 @@
 import { View, Animated, Text, StyleSheet } from 'react-native';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { PIXEL_PETS } from '../constants/pixelSprites';
+import { PIXEL_PETS, PIXEL_COSTUMES } from '../constants/pixelSprites';
 // import { PET_VIDEO_CONFIG, PET_VIDEO_W, PET_VIDEO_H } from '../constants/petVideos';
 // import PetVideo from './PetVideo';
 
@@ -215,25 +215,33 @@ export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = 
           },
         ]}
       >
-        {/* 코스튬 오버레이 — scaleX 방향 반전 보정 */}
-        {equipped.hat?.emoji ? (
-          <Text style={[styles.costumeOverlay, { top: -18, fontSize: 14,
-            transform: [{ scaleX: facingRight ? 1 : -1 }] }]}>
-            {equipped.hat.emoji}
-          </Text>
-        ) : null}
-        {equipped.clothes?.emoji ? (
-          <Text style={[styles.costumeOverlay, { bottom: 0, fontSize: 12,
-            transform: [{ scaleX: facingRight ? 1 : -1 }] }]}>
-            {equipped.clothes.emoji}
-          </Text>
-        ) : null}
-        {equipped.accessory?.emoji ? (
-          <Text style={[styles.costumeOverlay, { top: Math.round(petH * 0.3), right: -8, left: 'auto', fontSize: 11,
-            transform: [{ scaleX: facingRight ? 1 : -1 }] }]}>
-            {equipped.accessory.emoji}
-          </Text>
-        ) : null}
+        {/* 픽셀 코스튬 오버레이 */}
+        {['hat', 'clothes', 'accessory'].map(slot => {
+          const item = equipped[slot];
+          if (!item?.id) return null;
+          const costume = PIXEL_COSTUMES[item.id];
+          if (!costume) return null;
+          const left = Math.floor((sprite.cols - costume.cols) / 2) * PIXEL;
+          const top = costume.offsetY * PIXEL;
+          return (
+            <View key={slot} style={{ position: 'absolute', top, left }}>
+              {costume.pixels.map((row, ri) => (
+                <View key={ri} style={{ flexDirection: 'row' }}>
+                  {row.map((colorIdx, ci) => (
+                    <View
+                      key={ci}
+                      style={{
+                        width: PIXEL,
+                        height: PIXEL,
+                        backgroundColor: colorIdx === 0 ? 'transparent' : costume.palette[colorIdx],
+                      }}
+                    />
+                  ))}
+                </View>
+              ))}
+            </View>
+          );
+        })}
 
         {isEating && (
           <Animated.Text
@@ -332,12 +340,6 @@ const styles = StyleSheet.create({
   },
   petAnchor: {
     position: 'absolute',
-  },
-  costumeOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    textAlign: 'center',
   },
   pixelRow: {
     flexDirection: 'row',

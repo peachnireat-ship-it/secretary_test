@@ -1,5 +1,113 @@
 const _ = 0;
 
+// offsetY: 펫 스프라이트 top 기준 행 오프셋 (음수 = 위, 양수 = 아래)
+export const PIXEL_COSTUMES = {
+  hat_crown: {
+    cols: 9, rows: 3,
+    palette: ['transparent', '#FFD700', '#CC8800', '#EE2222'],
+    offsetY: -1,
+    pixels: [
+      [1,_,1,_,1,_,1,_,1],
+      [1,1,1,1,1,1,1,1,1],
+      [2,2,3,2,2,2,3,2,2],
+    ],
+  },
+  hat_cap: {
+    cols: 10, rows: 3,
+    palette: ['transparent', '#2266EE', '#1144BB'],
+    offsetY: -1,
+    pixels: [
+      [_,_,1,1,1,1,1,_,_,_],
+      [_,1,1,1,1,1,1,1,_,_],
+      [2,2,2,2,2,2,2,2,2,_],
+    ],
+  },
+  hat_tophat: {
+    cols: 8, rows: 5,
+    palette: ['transparent', '#111111', '#555555'],
+    offsetY: -4,
+    pixels: [
+      [_,1,1,1,1,1,1,_],
+      [_,1,_,_,_,_,1,_],
+      [_,1,2,2,2,2,1,_],
+      [_,1,_,_,_,_,1,_],
+      [1,1,1,1,1,1,1,1],
+    ],
+  },
+  hat_grad: {
+    cols: 10, rows: 4,
+    palette: ['transparent', '#111111', '#333333', '#FFD700'],
+    offsetY: -3,
+    pixels: [
+      [_,1,1,1,1,1,1,_,_,3],
+      [1,1,1,1,1,1,1,1,_,3],
+      [_,_,2,_,_,_,2,_,_,3],
+      [_,_,2,2,2,2,2,_,_,3],
+    ],
+  },
+  clothes_shirt: {
+    cols: 10, rows: 4,
+    palette: ['transparent', '#EE5555', '#CC2222', '#FFFFFF'],
+    offsetY: 6,
+    pixels: [
+      [2,1,1,1,1,1,1,1,1,2],
+      [1,_,1,1,1,1,1,1,_,1],
+      [1,1,1,1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1,1,1,1],
+    ],
+  },
+  clothes_dress: {
+    cols: 10, rows: 4,
+    palette: ['transparent', '#FF88BB', '#EE44AA', '#FFFFFF'],
+    offsetY: 6,
+    pixels: [
+      [_,1,1,1,1,1,1,1,_,_],
+      [1,1,2,1,1,1,2,1,1,_],
+      [1,_,1,_,_,_,1,_,1,_],
+      [1,1,_,1,1,1,_,1,1,_],
+    ],
+  },
+  clothes_uniform: {
+    cols: 10, rows: 3,
+    palette: ['transparent', '#4488FF', '#2255CC', '#FFFFFF'],
+    offsetY: 6,
+    pixels: [
+      [1,1,3,1,1,1,1,3,1,1],
+      [1,3,3,1,1,1,1,3,3,1],
+      [1,1,3,1,1,1,1,3,1,1],
+    ],
+  },
+  acc_glasses: {
+    cols: 9, rows: 2,
+    palette: ['transparent', '#111111', '#8B5A2B', '#333333'],
+    offsetY: 3,
+    pixels: [
+      [1,2,2,1,_,1,2,2,1],
+      [_,2,2,_,3,_,2,2,_],
+    ],
+  },
+  acc_ribbon: {
+    cols: 5, rows: 3,
+    palette: ['transparent', '#FF4499', '#CC1166', '#FFFFFF'],
+    offsetY: 0,
+    pixels: [
+      [1,_,2,_,1],
+      [1,1,2,1,1],
+      [_,1,2,1,_],
+    ],
+  },
+  acc_gem: {
+    cols: 7, rows: 3,
+    palette: ['transparent', '#AAAAAA', '#44DDFF', '#FFFFFF'],
+    offsetY: 5,
+    pixels: [
+      [_,1,_,_,_,1,_],
+      [1,_,1,_,1,_,1],
+      [_,_,2,3,2,_,_],
+    ],
+  },
+};
+
 export const PIXEL_PETS = {
   cat: {
     cols: 12, rows: 14,
