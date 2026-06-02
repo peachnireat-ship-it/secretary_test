@@ -14,7 +14,7 @@ import { ROOM_THEMES, COLOR_VARIANTS, FRAME_THEMES } from '../../constants/sprit
 import PetSprite from '../../components/PetSprite';
 import { usePetState } from '../../hooks/usePetState';
 
-const SHOP_TABS = ['food', 'toy', 'clean', 'cosmetic'];
+const SHOP_TABS = ['food', 'toy', 'clean', 'cosmetic', 'theme'];
 
 // ── Adoption screen ────────────────────────────────────────────
 function AdoptionScreen({ onAdopt }) {
@@ -99,22 +99,25 @@ function RarityBadge({ rarity }) {
 // ── Main screen ───────────────────────────────────────────────
 export default function PetScreen() {
   const {
-    pet, coins, inventory, ownedCosmetics,
+    pet, pets, coins, inventory, ownedCosmetics,
     animState, actionTick, actionEmojiRef,
     refresh, triggerAction, toggleCosmetic, equipped,
     changeTheme, roomTheme,
     changeColorVariant, colorVariant,
     changeFrameTheme, frameTheme,
+    switchPet,
   } = usePetState();
 
   const ft = FRAME_THEMES[frameTheme] ?? FRAME_THEMES.purple;
 
-  const [shopVisible,  setShopVisible]  = useState(false);
-  const [shopCategory, setShopCategory] = useState('food');
+  const [shopVisible,   setShopVisible]   = useState(false);
+  const [shopCategory,  setShopCategory]  = useState('food');
+  const [adoptVisible,  setAdoptVisible]  = useState(false);
 
   const handleAdopt = (type, name) => {
     adoptPet(type, name);
     refresh();
+    setAdoptVisible(false);
   };
 
   const handleUseItem = (itemId) => {
@@ -145,7 +148,7 @@ export default function PetScreen() {
 
   if (!pet) return <AdoptionScreen onAdopt={handleAdopt} />;
 
-  const petType     = PET_TYPES.find(p => p.id === pet.type);
+  const petType   = PET_TYPES.find(p => p.id === pet.type);
   const stage       = PET_STAGES.find(s => s.id === pet.stage) ?? PET_STAGES[0];
   const nextStage   = PET_STAGES[PET_STAGES.indexOf(stage) + 1];
   const stagePct    = nextStage ? Math.round((pet.stageXp / nextStage.xpRequired) * 100) : 100;
@@ -163,11 +166,43 @@ export default function PetScreen() {
         <View style={styles.topBar}>
           <Ionicons name="logo-bitcoin" size={16} color="#FFC107" />
           <Text style={styles.coinText}>{coins} 코인</Text>
+          <TouchableOpacity style={styles.adoptNewBtn} onPress={() => setAdoptVisible(true)}>
+            <Ionicons name="add-circle-outline" size={15} color="#4CAF50" />
+            <Text style={styles.adoptNewBtnText}>새 입양</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.shopBtn} onPress={() => setShopVisible(true)}>
             <Ionicons name="storefront-outline" size={15} color="#6750A4" />
             <Text style={styles.shopBtnText}>상점</Text>
           </TouchableOpacity>
         </View>
+
+        {/* ── Pet switcher (multiple pets) ── */}
+        {pets.length > 1 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.petSwitcherWrap}
+            contentContainerStyle={styles.petSwitcherContent}
+          >
+            {pets.map(p => {
+              const pt = PET_TYPES.find(t => t.id === p.type);
+              const active = p.id === pet?.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[styles.petChip, active && styles.petChipActive]}
+                  onPress={() => !active && switchPet(p.id)}
+                >
+                  <Text style={styles.petChipEmoji}>{pt?.emoji ?? '🐾'}</Text>
+                  <Text style={[styles.petChipName, active && styles.petChipNameActive]} numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  {active && <View style={styles.petChipDot} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
 
         {/* ── Tamagotchi Shell ── */}
         <View style={[styles.tamaShell, { backgroundColor: ft.shell, borderColor: ft.border, shadowColor: ft.border }]}>
@@ -194,6 +229,11 @@ export default function PetScreen() {
                 bgTheme={roomTheme}
                 colorVariant={colorVariant}
               />
+              <View style={styles.statsOverlay}>
+                <Text style={styles.statsOverlayText}>🍽{pet.hunger}</Text>
+                <Text style={styles.statsOverlayText}>😊{pet.happiness}</Text>
+                <Text style={styles.statsOverlayText}>✨{pet.cleanliness}</Text>
+              </View>
             </View>
           </View>
 
@@ -232,77 +272,6 @@ export default function PetScreen() {
           </View>
         </View>
 
-        {/* ── 방 배경 테마 선택 ── */}
-        <View style={styles.themeCard}>
-          <Text style={styles.sectionTitle}>방 배경</Text>
-          <View style={styles.themeRow}>
-            {Object.values(ROOM_THEMES).map(t => (
-              <TouchableOpacity
-                key={t.id}
-                style={[
-                  styles.themeCircle,
-                  { backgroundColor: t.bg, borderColor: t.floor },
-                  roomTheme === t.id && styles.themeCircleActive,
-                ]}
-                onPress={() => changeTheme(t.id)}
-              >
-                {roomTheme === t.id && (
-                  <View style={styles.themeCheckDot} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.themeNameLabel}>
-            {ROOM_THEMES[roomTheme]?.name ?? '클래식'}
-          </Text>
-        </View>
-
-        {/* ── 펫 색상 바리에이션 선택 ── */}
-        {COLOR_VARIANTS[pet.type] && (
-          <View style={styles.themeCard}>
-            <Text style={styles.sectionTitle}>펫 색상</Text>
-            <View style={styles.colorVariantRow}>
-              {COLOR_VARIANTS[pet.type].map(v => {
-                const active = colorVariant === v.id;
-                return (
-                  <TouchableOpacity
-                    key={v.id}
-                    style={[styles.colorVariantBtn, active && styles.colorVariantBtnActive]}
-                    onPress={() => changeColorVariant(v.id)}
-                  >
-                    <View style={[styles.colorSwatch, { backgroundColor: v.swatch }]} />
-                    <Text style={[styles.colorVariantLabel, active && styles.colorVariantLabelActive]}>
-                      {v.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        {/* ── 프레임 테마 선택 ── */}
-        <View style={styles.themeCard}>
-          <Text style={styles.sectionTitle}>프레임</Text>
-          <View style={styles.colorVariantRow}>
-            {Object.values(FRAME_THEMES).map(t => {
-              const active = frameTheme === t.id;
-              return (
-                <TouchableOpacity
-                  key={t.id}
-                  style={[styles.colorVariantBtn, active && styles.colorVariantBtnActive]}
-                  onPress={() => changeFrameTheme(t.id)}
-                >
-                  <View style={[styles.colorSwatch, { backgroundColor: t.swatch, borderColor: t.border }]} />
-                  <Text style={[styles.colorVariantLabel, active && styles.colorVariantLabelActive]}>
-                    {t.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
         {/* ── Status ── */}
         <View style={styles.statusCard}>
           <Text style={styles.sectionTitle}>상태</Text>
@@ -337,6 +306,21 @@ export default function PetScreen() {
         )}
       </ScrollView>
 
+      {/* ── Adoption modal ── */}
+      <Modal visible={adoptVisible} animationType="slide" transparent onRequestClose={() => setAdoptVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { paddingBottom: 16 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>새 반려동물 입양</Text>
+              <TouchableOpacity onPress={() => setAdoptVisible(false)}>
+                <Ionicons name="close" size={22} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <AdoptionScreen onAdopt={handleAdopt} />
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Shop modal ── */}
       <Modal visible={shopVisible} animationType="slide" transparent onRequestClose={() => setShopVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -366,7 +350,61 @@ export default function PetScreen() {
               ))}
             </View>
 
-            {shopCategory === 'cosmetic' ? (
+            {shopCategory === 'theme' ? (
+              <ScrollView contentContainerStyle={styles.themeModalContent}>
+                <Text style={styles.themeModalSection}>방 배경</Text>
+                <View style={styles.themeRow}>
+                  {Object.values(ROOM_THEMES).map(t => (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={[styles.themeCircle, { backgroundColor: t.bg, borderColor: t.floor }, roomTheme === t.id && styles.themeCircleActive]}
+                      onPress={() => changeTheme(t.id)}
+                    >
+                      {roomTheme === t.id && <View style={styles.themeCheckDot} />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.themeNameLabel}>{ROOM_THEMES[roomTheme]?.name ?? '클래식'}</Text>
+
+                {COLOR_VARIANTS[pet.type] && (
+                  <>
+                    <Text style={styles.themeModalSection}>펫 색상</Text>
+                    <View style={styles.colorVariantRow}>
+                      {COLOR_VARIANTS[pet.type].map(v => {
+                        const active = colorVariant === v.id;
+                        return (
+                          <TouchableOpacity
+                            key={v.id}
+                            style={[styles.colorVariantBtn, active && styles.colorVariantBtnActive]}
+                            onPress={() => changeColorVariant(v.id)}
+                          >
+                            <View style={[styles.colorSwatch, { backgroundColor: v.swatch, borderColor: v.border }]} />
+                            <Text style={[styles.colorVariantLabel, active && styles.colorVariantLabelActive]}>{v.name}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+
+                <Text style={styles.themeModalSection}>프레임</Text>
+                <View style={styles.colorVariantRow}>
+                  {Object.values(FRAME_THEMES).map(t => {
+                    const active = frameTheme === t.id;
+                    return (
+                      <TouchableOpacity
+                        key={t.id}
+                        style={[styles.colorVariantBtn, active && styles.colorVariantBtnActive]}
+                        onPress={() => changeFrameTheme(t.id)}
+                      >
+                        <View style={[styles.colorSwatch, { backgroundColor: t.swatch, borderColor: t.border }]} />
+                        <Text style={[styles.colorVariantLabel, active && styles.colorVariantLabelActive]}>{t.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            ) : shopCategory === 'cosmetic' ? (
               <FlatList
                 data={COSMETIC_ITEMS}
                 keyExtractor={i => i.id}
@@ -477,8 +515,24 @@ const styles = StyleSheet.create({
   // Top bar
   topBar:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
   coinText:   { fontSize: 14, fontWeight: '600', color: '#555', flex: 1 },
+  adoptNewBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E8F5E9', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  adoptNewBtnText:{ fontSize: 13, color: '#388E3C', fontWeight: '600' },
   shopBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EDE7F6', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
   shopBtnText:{ fontSize: 13, color: '#6750A4', fontWeight: '600' },
+
+  // Pet switcher
+  petSwitcherWrap:    { marginBottom: 12 },
+  petSwitcherContent: { gap: 8, paddingHorizontal: 2, paddingVertical: 4 },
+  petChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 2, borderColor: '#E8E0F0', elevation: 1,
+  },
+  petChipActive: { borderColor: '#6750A4', backgroundColor: '#F3EFFE' },
+  petChipEmoji:  { fontSize: 18 },
+  petChipName:   { fontSize: 12, color: '#555', maxWidth: 60 },
+  petChipNameActive: { color: '#6750A4', fontWeight: '700' },
+  petChipDot:    { width: 7, height: 7, borderRadius: 4, backgroundColor: '#6750A4' },
 
   // Tamagotchi Shell
   tamaShell: {
@@ -536,6 +590,29 @@ const styles = StyleSheet.create({
   tamaScreen: {
     borderRadius: 12,
     overflow: 'hidden',
+    position: 'relative',
+  },
+  statsOverlay: {
+    position: 'absolute',
+    top: 6,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    zIndex: 10,
+  },
+  statsOverlayText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   tamaInfoStrip: {
     backgroundColor: 'rgba(255,255,255,0.92)',
@@ -596,6 +673,8 @@ const styles = StyleSheet.create({
   themeCircleActive: { borderWidth: 3, borderColor: '#6750A4' },
   themeCheckDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#6750A4' },
   themeNameLabel: { fontSize: 12, color: '#6750A4', fontWeight: '600' },
+  themeModalContent: { paddingHorizontal: 4, paddingBottom: 16 },
+  themeModalSection: { fontSize: 13, fontWeight: '700', color: '#444', marginTop: 16, marginBottom: 8 },
 
   // Color variant selector
   colorVariantRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
@@ -631,12 +710,13 @@ const styles = StyleSheet.create({
   modalBox: {
     backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
     paddingTop: 20, paddingHorizontal: 16, paddingBottom: 32, maxHeight: '78%',
+    flex: 1,
   },
   modalHeader:   { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   modalTitle:    { fontSize: 17, fontWeight: 'bold', color: '#333', flex: 1 },
   coinRowSmall:  { flexDirection: 'row', alignItems: 'center', gap: 3, marginRight: 12 },
   coinTextSmall: { fontSize: 14, fontWeight: '600', color: '#555' },
-  categoryRow:   { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  categoryRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   catTab:        { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#F0EAF8' },
   catTabActive:  { backgroundColor: '#6750A4' },
   catTabText:    { fontSize: 13, color: '#6750A4' },

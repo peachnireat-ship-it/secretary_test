@@ -518,21 +518,46 @@ export const getCoins = () => {
   return row?.avatarCoins ?? 0;
 };
 
+export const getActivePetId = () => {
+  const row = db.getFirstSync("SELECT value FROM user_prefs WHERE key = 'activePetId'");
+  if (row) return parseInt(row.value, 10);
+  const existing = db.getFirstSync('SELECT id FROM pets WHERE id = 1');
+  if (existing) {
+    db.runSync("INSERT OR REPLACE INTO user_prefs (key, value) VALUES ('activePetId', '1')");
+    return 1;
+  }
+  return null;
+};
+
+export const setActivePetId = (id) => {
+  db.runSync("INSERT OR REPLACE INTO user_prefs (key, value) VALUES ('activePetId', ?)", [String(id)]);
+};
+
+export const getAllPets = () => {
+  return db.getAllSync('SELECT * FROM pets ORDER BY adoptedAt ASC');
+};
+
 export const getPet = () => {
-  return db.getFirstSync('SELECT * FROM pets WHERE id = 1') ?? null;
+  const id = getActivePetId();
+  if (!id) return null;
+  return db.getFirstSync('SELECT * FROM pets WHERE id = ?', [id]) ?? null;
 };
 
 export const adoptPet = (type, name) => {
   const now = Date.now();
   db.runSync(
-    `INSERT OR REPLACE INTO pets (id, type, name, hunger, happiness, cleanliness, stage, stageXp, lastDecayAt, adoptedAt)
-     VALUES (1, ?, ?, 80, 80, 80, 'baby', 0, ?, ?)`,
+    `INSERT INTO pets (type, name, hunger, happiness, cleanliness, stage, stageXp, lastDecayAt, adoptedAt)
+     VALUES (?, ?, 80, 80, 80, 'baby', 0, ?, ?)`,
     [type, name, now, now]
   );
+  const newPet = db.getFirstSync('SELECT id FROM pets ORDER BY id DESC LIMIT 1');
+  if (newPet) setActivePetId(newPet.id);
 };
 
 export const applyPetDecay = () => {
-  const pet = db.getFirstSync('SELECT * FROM pets WHERE id = 1');
+  const id = getActivePetId();
+  if (!id) return null;
+  const pet = db.getFirstSync('SELECT * FROM pets WHERE id = ?', [id]);
   if (!pet || !pet.lastDecayAt) return pet;
   const now = Date.now();
   const hoursElapsed = (now - pet.lastDecayAt) / 3600000;
@@ -541,8 +566,8 @@ export const applyPetDecay = () => {
   const happiness   = Math.max(0, pet.happiness   - Math.floor(hoursElapsed * 1));
   const cleanliness = Math.max(0, pet.cleanliness - Math.floor(hoursElapsed * 0.5));
   db.runSync(
-    'UPDATE pets SET hunger=?, happiness=?, cleanliness=?, lastDecayAt=? WHERE id=1',
-    [hunger, happiness, cleanliness, now]
+    'UPDATE pets SET hunger=?, happiness=?, cleanliness=?, lastDecayAt=? WHERE id=?',
+    [hunger, happiness, cleanliness, now, id]
   );
   return { ...pet, hunger, happiness, cleanliness };
 };
@@ -551,19 +576,23 @@ export const usePetItem = (itemId, effect) => {
   const row = db.getFirstSync('SELECT quantity FROM pet_inventory WHERE item_id = ?', [itemId]);
   if (!row || row.quantity < 1) throw new Error('아이템이 없습니다');
   db.runSync('UPDATE pet_inventory SET quantity = quantity - 1 WHERE item_id = ?', [itemId]);
-  const pet = db.getFirstSync('SELECT * FROM pets WHERE id = 1');
+  const id = getActivePetId();
+  if (!id) return;
+  const pet = db.getFirstSync('SELECT * FROM pets WHERE id = ?', [id]);
   if (!pet) return;
   const hunger      = Math.min(100, pet.hunger      + (effect.hunger      ?? 0));
   const happiness   = Math.min(100, pet.happiness   + (effect.happiness   ?? 0));
   const cleanliness = Math.min(100, pet.cleanliness + (effect.cleanliness ?? 0));
   db.runSync(
-    'UPDATE pets SET hunger=?, happiness=?, cleanliness=? WHERE id=1',
-    [hunger, happiness, cleanliness]
+    'UPDATE pets SET hunger=?, happiness=?, cleanliness=? WHERE id=?',
+    [hunger, happiness, cleanliness, id]
   );
 };
 
 export const addPetXp = (amount) => {
-  const pet = db.getFirstSync('SELECT stage, stageXp FROM pets WHERE id = 1');
+  const id = getActivePetId();
+  if (!id) return;
+  const pet = db.getFirstSync('SELECT stage, stageXp FROM pets WHERE id = ?', [id]);
   if (!pet) return;
   const STAGE_XP = { baby: 500, junior: 2000, adult: 5000, senior: Infinity };
   const NEXT_STAGE = { baby: 'junior', junior: 'adult', adult: 'senior' };
@@ -574,7 +603,7 @@ export const addPetXp = (amount) => {
     stage = NEXT_STAGE[stage];
     stageXp = 0;
   }
-  db.runSync('UPDATE pets SET stage=?, stageXp=? WHERE id=1', [stage, stageXp]);
+  db.runSync('UPDATE pets SET stage=?, stageXp=? WHERE id=?', [stage, stageXp, id]);
 };
 
 export const getPetInventory = () => {
@@ -609,24 +638,34 @@ export const purchasePetCosmetic = (itemId, cost) => {
 
 export const equipPetCosmetic = (category, itemId) => {
   if (!VALID_COSMETIC_CATS.includes(category)) return;
-  db.runSync(`UPDATE pets SET equipped_${category} = ? WHERE id = 1`, [itemId]);
+  const id = getActivePetId();
+  if (!id) return;
+  db.runSync(`UPDATE pets SET equipped_${category} = ? WHERE id = ?`, [itemId, id]);
 };
 
 export const unequipPetCosmetic = (category) => {
   if (!VALID_COSMETIC_CATS.includes(category)) return;
-  db.runSync(`UPDATE pets SET equipped_${category} = NULL WHERE id = 1`);
+  const id = getActivePetId();
+  if (!id) return;
+  db.runSync(`UPDATE pets SET equipped_${category} = NULL WHERE id = ?`, [id]);
 };
 
 export const setRoomTheme = (themeId) => {
-  db.runSync(`UPDATE pets SET room_theme = ? WHERE id = 1`, [themeId]);
+  const id = getActivePetId();
+  if (!id) return;
+  db.runSync(`UPDATE pets SET room_theme = ? WHERE id = ?`, [themeId, id]);
 };
 
 export const setPetColorVariant = (variantId) => {
-  db.runSync(`UPDATE pets SET color_variant = ? WHERE id = 1`, [variantId]);
+  const id = getActivePetId();
+  if (!id) return;
+  db.runSync(`UPDATE pets SET color_variant = ? WHERE id = ?`, [variantId, id]);
 };
 
 export const setPetFrameTheme = (themeId) => {
-  db.runSync(`UPDATE pets SET frame_theme = ? WHERE id = 1`, [themeId]);
+  const id = getActivePetId();
+  if (!id) return;
+  db.runSync(`UPDATE pets SET frame_theme = ? WHERE id = ?`, [themeId, id]);
 };
 
 export const getDisplayedBadges = () => {

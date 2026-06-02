@@ -5,6 +5,7 @@ import {
   getPetInventory, getCoins,
   getOwnedCosmetics, equipPetCosmetic, unequipPetCosmetic,
   setRoomTheme, setPetColorVariant, setPetFrameTheme,
+  getAllPets, setActivePetId,
 } from '../database/database';
 import { COSMETIC_ITEMS, SHOP_ITEM_MAP } from '../constants/itemData';
 
@@ -30,6 +31,7 @@ function buildEquipped(pet) {
 
 export function usePetState() {
   const [pet, setPet]                   = useState(null);
+  const [pets, setPets]                 = useState([]);
   const [coins, setCoins]               = useState(0);
   const [inventory, setInventory]       = useState({});
   const [ownedCosmetics, setOwned]      = useState([]);
@@ -45,6 +47,7 @@ export function usePetState() {
     const p = applyPetDecay();
     petRef.current = p;
     setPet(p);
+    setPets(getAllPets());
     setCoins(getCoins());
     setInventory(getPetInventory());
     setOwned(getOwnedCosmetics());
@@ -122,8 +125,14 @@ export function usePetState() {
     refresh();
   }, [refresh]);
 
+  const switchPet = useCallback((petId) => {
+    setActivePetId(petId);
+    refresh();
+  }, [refresh]);
+
   return {
     pet,
+    pets,
     coins,
     inventory,
     ownedCosmetics,
@@ -136,6 +145,7 @@ export function usePetState() {
     changeTheme,
     changeColorVariant,
     changeFrameTheme,
+    switchPet,
     equipped: pet ? buildEquipped(pet) : { hat: null, clothes: null, accessory: null },
     roomTheme: pet?.room_theme || 'classic',
     colorVariant: pet?.color_variant || 'default',
