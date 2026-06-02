@@ -7,8 +7,7 @@ import { getUserGuilds, getUserThemeMissionStatus, submitThemeMission, getUnread
 import { setPendingLibraryStatus } from './_libraryFilter';
 import { checkAndUnlockBadges, checkAndUnlockWeeklyAllMissionsBadge } from '../../database/badges';
 import BookCard from '../../components/BookCard';
-import PetDisplay from '../../components/PetDisplay';
-import { fetchPetVideoUrl } from '../../constants/pixabayService';
+import PixelPet from '../../components/PixelPet';
 import { COSMETIC_ITEMS } from '../../constants/petItems';
 
 function buildEquipped(pet) {
@@ -250,7 +249,6 @@ export default function HomeScreen() {
   const [claimedMissions, setClaimedMissions] = useState([]);
   const [schoolLevel, setSchoolLevel] = useState('');
   const [pet, setPetState] = useState(null);
-  const [petVideoUrl, setPetVideoUrl] = useState(null);
   const [doubleXpEvent, setDoubleXpEvent] = useState(null);
   const [newBadges, setNewBadges] = useState([]);
   const [extraMissions, setExtraMissions] = useState([]);
@@ -264,13 +262,6 @@ export default function HomeScreen() {
   const [noticeModal, setNoticeModal] = useState(null);
   const noticeCheckedRef = useRef(false);
   const toastAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!pet?.type) return;
-    fetchPetVideoUrl(pet.type).then(url => {
-      if (url) setPetVideoUrl(url);
-    });
-  }, [pet?.type]);
 
   // 앱이 열린 채로 주차가 바뀌면 미션 즉시 갱신
   useEffect(() => {
@@ -469,12 +460,12 @@ export default function HomeScreen() {
     <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.push('/(tabs)/shop')} style={styles.avatarBtn}>
-          <PetDisplay
-            videoUrl={petVideoUrl}
+          <PixelPet
             petType={pet?.type}
+            stats={{ hunger: pet?.hunger, happiness: pet?.happiness, cleanliness: pet?.cleanliness }}
             equipped={buildEquipped(pet)}
-            width={90}
-            height={90}
+            bgTheme={pet?.room_theme || 'classic'}
+            faceOnly
           />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
@@ -628,9 +619,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   avatarBtn: {
+    width: 60,
+    height: 35,
     alignItems: 'center',
-    width: 90,
-    height: 64,
     justifyContent: 'center',
   },
   petMiniEmoji: {

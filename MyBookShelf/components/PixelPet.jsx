@@ -1,13 +1,13 @@
 import { View, Animated, Text, StyleSheet } from 'react-native';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { PIXEL_PETS, PIXEL_COSTUMES } from '../constants/pixelSprites';
+import { PIXEL_PETS, PIXEL_COSTUMES, ROOM_THEMES } from '../constants/pixelSprites';
 // import { PET_VIDEO_CONFIG, PET_VIDEO_W, PET_VIDEO_H } from '../constants/petVideos';
 // import PetVideo from './PetVideo';
 
 const PIXEL = 5;
 const ROOM_H = 140;
 
-export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = '🍖', equipped = {} }) {
+export default function PixelPet({ petType, stats = {}, actionTick = 0, actionEmoji = '🍖', actionType = 'eat', equipped = {}, bgTheme = 'classic', faceOnly = false }) {
   const [roomWidth, setRoomWidth] = useState(0);
   const posX = useRef(new Animated.Value(8)).current;
   const bounce = useRef(new Animated.Value(0)).current;
@@ -19,14 +19,16 @@ export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = 
   const timerRef = useRef(null);
   const bounceAnim = useRef(null);
 
-  const [isEating, setIsEating] = useState(false);
+  const [isActing, setIsActing] = useState(false);
   const [useEatFrame, setUseEatFrame] = useState(false);
-  const eatBounce = useRef(new Animated.Value(0)).current;
-  const foodY = useRef(new Animated.Value(-28)).current;
-  const foodOpacity = useRef(new Animated.Value(0)).current;
-  const heartY = useRef(new Animated.Value(0)).current;
-  const heartOpacity = useRef(new Animated.Value(0)).current;
-  const eatFrameTimer = useRef(null);
+  const actionBounce = useRef(new Animated.Value(0)).current;
+  const itemY = useRef(new Animated.Value(-28)).current;
+  const itemOpacity = useRef(new Animated.Value(0)).current;
+  const effectY = useRef(new Animated.Value(0)).current;
+  const effectOpacity = useRef(new Animated.Value(0)).current;
+  const cleanShakeX = useRef(new Animated.Value(0)).current;
+  const actionFrameTimer = useRef(null);
+  const actionAnim = useRef(null);
 
   // const videoCfg = PET_VIDEO_CONFIG[petType];
   // const isVideoMode = !!(videoCfg?.enabled && videoCfg?.sources);
@@ -40,7 +42,9 @@ export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = 
     stats.happiness ?? 100,
     stats.cleanliness ?? 100
   );
-  const mode = isEating ? 'idle' : (minStat < 20 ? 'sleep' : minStat < 40 ? 'idle' : 'walk');
+  const mode = isActing
+    ? (actionType === 'play' ? 'walk' : 'idle')
+    : (minStat < 20 ? 'sleep' : minStat < 40 ? 'idle' : 'walk');
 
   useEffect(() => {
     mountedRef.current = true;
@@ -48,60 +52,117 @@ export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = 
       mountedRef.current = false;
       animRef.current?.stop?.();
       bounceAnim.current?.stop?.();
+      actionAnim.current?.stop?.();
       clearTimeout(timerRef.current);
-      clearInterval(eatFrameTimer.current);
+      clearInterval(actionFrameTimer.current);
     };
   }, []);
 
-  // 먹기 애니메이션: 음식 낙하 → 씹기(eat 프레임 토글) → 하트 상승
+  // 아이템 사용 애니메이션: eat(먹기) / play(장난감) / clean(청결)
   useEffect(() => {
-    if (eatTick === 0) return;
-    setIsEating(true);
+    if (actionTick === 0) return;
+    actionAnim.current?.stop?.();
+    clearInterval(actionFrameTimer.current);
+    setIsActing(true);
     setUseEatFrame(false);
-    eatBounce.setValue(0);
-    foodY.setValue(-28);
-    foodOpacity.setValue(0);
-    heartY.setValue(0);
-    heartOpacity.setValue(0);
+    actionBounce.setValue(0);
+    itemY.setValue(-28);
+    itemOpacity.setValue(0);
+    effectY.setValue(0);
+    effectOpacity.setValue(0);
+    cleanShakeX.setValue(0);
 
-    // 씹기 프레임: idle(0) ↔ eat(3) 150ms 간격으로 토글
-    let toggle = false;
-    eatFrameTimer.current = setInterval(() => {
-      toggle = !toggle;
-      if (mountedRef.current) setUseEatFrame(toggle);
-    }, 150);
+    if (actionType === 'eat') {
+      // idle ↔ eat 프레임 토글 (150ms)
+      let toggle = false;
+      actionFrameTimer.current = setInterval(() => {
+        toggle = !toggle;
+        if (mountedRef.current) setUseEatFrame(toggle);
+      }, 150);
 
-    Animated.sequence([
-      // ① 음식 이모지 낙하
-      Animated.parallel([
-        Animated.timing(foodY,       { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(foodOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      ]),
-      // ② 씹는 바운스 (3회)
-      Animated.sequence([
-        Animated.timing(eatBounce, { toValue: -6, duration: 100, useNativeDriver: true }),
-        Animated.timing(eatBounce, { toValue:  0, duration: 80,  useNativeDriver: true }),
-        Animated.timing(eatBounce, { toValue: -6, duration: 100, useNativeDriver: true }),
-        Animated.timing(eatBounce, { toValue:  0, duration: 80,  useNativeDriver: true }),
-        Animated.timing(eatBounce, { toValue: -5, duration: 90,  useNativeDriver: true }),
-        Animated.timing(eatBounce, { toValue:  0, duration: 80,  useNativeDriver: true }),
-      ]),
-      // ③ 음식 페이드 아웃
-      Animated.timing(foodOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-      // ④ 하트 위로 둥실
-      Animated.parallel([
-        Animated.timing(heartOpacity, { toValue: 1,   duration: 120, useNativeDriver: true }),
-        Animated.timing(heartY,       { toValue: -36, duration: 580, useNativeDriver: true }),
-      ]),
-      Animated.timing(heartOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start(() => {
-      clearInterval(eatFrameTimer.current);
-      if (mountedRef.current) {
-        setIsEating(false);
-        setUseEatFrame(false);
-      }
-    });
-  }, [eatTick]); // eslint-disable-line react-hooks/exhaustive-deps
+      actionAnim.current = Animated.sequence([
+        Animated.parallel([
+          Animated.timing(itemY,      { toValue: 0, duration: 200, useNativeDriver: true }),
+          Animated.timing(itemOpacity,{ toValue: 1, duration: 200, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(actionBounce, { toValue: -6, duration: 100, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue:  0, duration: 80,  useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue: -6, duration: 100, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue:  0, duration: 80,  useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue: -5, duration: 90,  useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue:  0, duration: 80,  useNativeDriver: true }),
+        ]),
+        Animated.timing(itemOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.parallel([
+          Animated.timing(effectOpacity, { toValue: 1,   duration: 120, useNativeDriver: true }),
+          Animated.timing(effectY,       { toValue: -36, duration: 580, useNativeDriver: true }),
+        ]),
+        Animated.timing(effectOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]);
+      actionAnim.current.start(() => {
+        clearInterval(actionFrameTimer.current);
+        if (mountedRef.current) { setIsActing(false); setUseEatFrame(false); }
+      });
+
+    } else if (actionType === 'play') {
+      // 아이템 등장 → 신나는 점프 5회 → 별 상승
+      actionAnim.current = Animated.sequence([
+        Animated.parallel([
+          Animated.timing(itemY,      { toValue: 0, duration: 180, useNativeDriver: true }),
+          Animated.timing(itemOpacity,{ toValue: 1, duration: 180, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(actionBounce, { toValue: -14, duration: 90, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue:   0, duration: 70, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue: -14, duration: 90, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue:   0, duration: 70, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue: -12, duration: 80, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue:   0, duration: 70, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue: -12, duration: 80, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue:   0, duration: 70, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue: -10, duration: 80, useNativeDriver: true }),
+          Animated.timing(actionBounce, { toValue:   0, duration: 70, useNativeDriver: true }),
+        ]),
+        Animated.timing(itemOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.parallel([
+          Animated.timing(effectOpacity, { toValue: 1,   duration: 100, useNativeDriver: true }),
+          Animated.timing(effectY,       { toValue: -40, duration: 600, useNativeDriver: true }),
+        ]),
+        Animated.timing(effectOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]);
+      actionAnim.current.start(() => {
+        if (mountedRef.current) setIsActing(false);
+      });
+
+    } else if (actionType === 'clean') {
+      // 아이템 등장 → 좌우 흔들기 → 반짝이 상승
+      actionAnim.current = Animated.sequence([
+        Animated.parallel([
+          Animated.timing(itemY,      { toValue: 0, duration: 150, useNativeDriver: true }),
+          Animated.timing(itemOpacity,{ toValue: 1, duration: 150, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(cleanShakeX, { toValue:  6, duration: 60, useNativeDriver: true }),
+          Animated.timing(cleanShakeX, { toValue: -6, duration: 60, useNativeDriver: true }),
+          Animated.timing(cleanShakeX, { toValue:  6, duration: 60, useNativeDriver: true }),
+          Animated.timing(cleanShakeX, { toValue: -6, duration: 60, useNativeDriver: true }),
+          Animated.timing(cleanShakeX, { toValue:  4, duration: 60, useNativeDriver: true }),
+          Animated.timing(cleanShakeX, { toValue: -4, duration: 60, useNativeDriver: true }),
+          Animated.timing(cleanShakeX, { toValue:  0, duration: 60, useNativeDriver: true }),
+        ]),
+        Animated.timing(itemOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.parallel([
+          Animated.timing(effectOpacity, { toValue: 1,   duration: 100, useNativeDriver: true }),
+          Animated.timing(effectY,       { toValue: -38, duration: 550, useNativeDriver: true }),
+        ]),
+        Animated.timing(effectOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]);
+      actionAnim.current.start(() => {
+        if (mountedRef.current) { setIsActing(false); cleanShakeX.setValue(0); }
+      });
+    }
+  }, [actionTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Frame switching
   useEffect(() => {
@@ -175,16 +236,39 @@ export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = 
     setRoomWidth(e.nativeEvent.layout.width);
   }, []);
 
-  const frameIdx = mode === 'sleep' ? 2 : isEating && useEatFrame ? 3 : mode === 'idle' ? 0 : frame;
+  const frameIdx = mode === 'sleep' ? 2 : (isActing && actionType === 'eat' && useEatFrame) ? 3 : mode === 'idle' ? 0 : frame;
   const frameData = sprite.frames[Math.min(frameIdx, sprite.frames.length - 1)];
   const palette = sprite.palette;
 
   const isFish = petType === 'fish';
+  const theme  = ROOM_THEMES[bgTheme] ?? ROOM_THEMES.classic;
+
+  if (faceOnly) {
+    const idleFrame = sprite.frames[0];
+    return (
+      <View>
+        {idleFrame.slice(0, 7).map((row, ri) => (
+          <View key={ri} style={styles.pixelRow}>
+            {row.map((colorIdx, ci) => (
+              <View
+                key={ci}
+                style={{
+                  width: PIXEL,
+                  height: PIXEL,
+                  backgroundColor: colorIdx === 0 ? 'transparent' : palette[colorIdx],
+                }}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.room, isFish && styles.tankBg]} onLayout={onLayout}>
+    <View style={[styles.room, isFish ? styles.tankBg : { backgroundColor: theme.bg }]} onLayout={onLayout}>
       {/* Decorations */}
-      {!isFish && <View style={styles.floorLine} />}
+      {!isFish && <View style={[styles.floorLine, { backgroundColor: theme.floor }]} />}
       {isFish && (
         <>
           <View style={styles.waterLine1} />
@@ -209,7 +293,8 @@ export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = 
             bottom: isFish ? ROOM_H / 2 - petH / 2 : 12,
             transform: [
               { translateX: posX },
-              { translateY: isEating ? eatBounce : bounce },
+              { translateY: isActing ? actionBounce : bounce },
+              { translateX: cleanShakeX },
               { scaleX: facingRight ? 1 : -1 },
             ],
           },
@@ -243,7 +328,7 @@ export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = 
           );
         })}
 
-        {isEating && (
+        {isActing && (
           <Animated.Text
             style={{
               position: 'absolute',
@@ -252,11 +337,11 @@ export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = 
               right: 0,
               textAlign: 'center',
               fontSize: 18,
-              transform: [{ translateY: foodY }, { scaleX: facingRight ? 1 : -1 }],
-              opacity: foodOpacity,
+              transform: [{ translateY: itemY }, { scaleX: facingRight ? 1 : -1 }],
+              opacity: itemOpacity,
             }}
           >
-            {eatEmoji}
+            {actionEmoji}
           </Animated.Text>
         )}
         <Animated.Text
@@ -267,11 +352,11 @@ export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = 
             right: 0,
             textAlign: 'center',
             fontSize: 13,
-            transform: [{ translateY: heartY }, { scaleX: facingRight ? 1 : -1 }],
-            opacity: heartOpacity,
+            transform: [{ translateY: effectY }, { scaleX: facingRight ? 1 : -1 }],
+            opacity: effectOpacity,
           }}
         >
-          💕
+          {actionType === 'play' ? '⭐' : actionType === 'clean' ? '✨' : '💕'}
         </Animated.Text>
         {(frameData ?? []).map((row, ri) => (
           <View key={ri} style={styles.pixelRow}>
