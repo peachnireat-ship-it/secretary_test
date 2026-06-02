@@ -10,7 +10,7 @@ import {
   SHOP_ITEMS_BY_CATEGORY, COSMETIC_ITEMS, CATEGORY_LABELS,
   ITEM_RARITY, ALL_SHOP_ITEMS,
 } from '../../constants/itemData';
-import { ROOM_THEMES, COLOR_VARIANTS } from '../../constants/spriteConfig';
+import { ROOM_THEMES, COLOR_VARIANTS, FRAME_THEMES } from '../../constants/spriteConfig';
 import PetSprite from '../../components/PetSprite';
 import { usePetState } from '../../hooks/usePetState';
 
@@ -104,7 +104,10 @@ export default function PetScreen() {
     refresh, triggerAction, toggleCosmetic, equipped,
     changeTheme, roomTheme,
     changeColorVariant, colorVariant,
+    changeFrameTheme, frameTheme,
   } = usePetState();
+
+  const ft = FRAME_THEMES[frameTheme] ?? FRAME_THEMES.purple;
 
   const [shopVisible,  setShopVisible]  = useState(false);
   const [shopCategory, setShopCategory] = useState('food');
@@ -167,13 +170,13 @@ export default function PetScreen() {
         </View>
 
         {/* ── Tamagotchi Shell ── */}
-        <View style={styles.tamaShell}>
+        <View style={[styles.tamaShell, { backgroundColor: ft.shell, borderColor: ft.border, shadowColor: ft.border }]}>
           {/* 키체인 고리 */}
-          <View style={styles.tamaHookRing} />
+          <View style={[styles.tamaHookRing, { borderColor: ft.border }]} />
 
           {/* 스크린 위 장식 */}
           <View style={styles.tamaDecoRow}>
-            {['🌸','💫','⭐','💗','🦋'].map((e, i) => (
+            {ft.decoTop.map((e, i) => (
               <Text key={i} style={styles.tamaDecoEmoji}>{e}</Text>
             ))}
           </View>
@@ -196,7 +199,7 @@ export default function PetScreen() {
 
           {/* 스크린 아래 장식 */}
           <View style={styles.tamaDecoRow}>
-            {['✨','🌟','💕','🌼','🎀'].map((e, i) => (
+            {ft.decoBottom.map((e, i) => (
               <Text key={i} style={styles.tamaDecoEmoji}>{e}</Text>
             ))}
           </View>
@@ -223,9 +226,9 @@ export default function PetScreen() {
 
           {/* 버튼 3개 */}
           <View style={styles.tamaButtonRow}>
-            <View style={styles.tamaBtn} />
-            <View style={[styles.tamaBtn, styles.tamaBtnCenter]} />
-            <View style={styles.tamaBtn} />
+            <View style={[styles.tamaBtn, { backgroundColor: ft.btnSide, borderColor: ft.border, shadowColor: ft.border }]} />
+            <View style={[styles.tamaBtn, styles.tamaBtnCenter, { backgroundColor: ft.btnCenter, borderColor: ft.btnCenterBorder }]} />
+            <View style={[styles.tamaBtn, { backgroundColor: ft.btnSide, borderColor: ft.border, shadowColor: ft.border }]} />
           </View>
         </View>
 
@@ -277,6 +280,28 @@ export default function PetScreen() {
             </View>
           </View>
         )}
+
+        {/* ── 프레임 테마 선택 ── */}
+        <View style={styles.themeCard}>
+          <Text style={styles.sectionTitle}>프레임</Text>
+          <View style={styles.colorVariantRow}>
+            {Object.values(FRAME_THEMES).map(t => {
+              const active = frameTheme === t.id;
+              return (
+                <TouchableOpacity
+                  key={t.id}
+                  style={[styles.colorVariantBtn, active && styles.colorVariantBtnActive]}
+                  onPress={() => changeFrameTheme(t.id)}
+                >
+                  <View style={[styles.colorSwatch, { backgroundColor: t.swatch, borderColor: t.border }]} />
+                  <Text style={[styles.colorVariantLabel, active && styles.colorVariantLabelActive]}>
+                    {t.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
 
         {/* ── Status ── */}
         <View style={styles.statusCard}>

@@ -9,6 +9,7 @@ import { checkAndUnlockBadges, checkAndUnlockWeeklyAllMissionsBadge } from '../.
 import BookCard from '../../components/BookCard';
 import PixelPet from '../../components/PixelPet';
 import { COSMETIC_ITEMS } from '../../constants/petItems';
+import { FRAME_THEMES } from '../../constants/spriteConfig';
 
 function buildEquipped(pet) {
   const find = (id) => COSMETIC_ITEMS.find(i => i.id === id) ?? null;
@@ -19,9 +20,10 @@ function buildEquipped(pet) {
   };
 }
 
-function TamagotchiFrame({ petType, petStats, equipped, bgTheme, colorVariant }) {
+function TamagotchiFrame({ petType, petStats, equipped, bgTheme, colorVariant, frameTheme }) {
+  const ft = FRAME_THEMES[frameTheme] ?? FRAME_THEMES.purple;
   return (
-    <View style={tamStyles.shell}>
+    <View style={[tamStyles.shell, { backgroundColor: ft.shellLight, borderColor: ft.shell, shadowColor: ft.shell }]}>
       <View style={tamStyles.screen}>
         <PixelPet
           petType={petType}
@@ -33,9 +35,9 @@ function TamagotchiFrame({ petType, petStats, equipped, bgTheme, colorVariant })
         />
       </View>
       <View style={tamStyles.btnRow}>
-        <View style={[tamStyles.btn, { backgroundColor: '#E91E8C' }]} />
-        <View style={[tamStyles.btn, { backgroundColor: '#AB47BC' }]} />
-        <View style={[tamStyles.btn, { backgroundColor: '#5C6BC0' }]} />
+        <View style={[tamStyles.btn, { backgroundColor: ft.btnSide }]} />
+        <View style={[tamStyles.btn, { backgroundColor: ft.btnCenter }]} />
+        <View style={[tamStyles.btn, { backgroundColor: ft.btnSide }]} />
       </View>
     </View>
   );
@@ -528,6 +530,7 @@ export default function HomeScreen() {
               equipped={buildEquipped(pet)}
               bgTheme={pet.room_theme || 'classic'}
               colorVariant={pet.color_variant || 'default'}
+              frameTheme={pet.frame_theme || 'purple'}
             />
           </TouchableOpacity>
         )}

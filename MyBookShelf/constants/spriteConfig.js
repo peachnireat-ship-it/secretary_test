@@ -474,5 +474,69 @@ export const COLOR_VARIANTS = {
   ],
 };
 
+// ── 다마고치 프레임 테마 ──────────────────────────────────────────────────────
+// shell: 본체 색 / shellLight: 홈 미니 배경 / border: 테두리·그림자
+// btnSide: 사이드 버튼 / btnCenter: 중앙 버튼 / btnCenterBorder: 중앙 버튼 테두리
+// decoTop / decoBottom: 스크린 위아래 장식 이모지 5개
+
+export const FRAME_THEMES = {
+  purple: {
+    id: 'purple', name: '퍼플',
+    swatch: '#7C5CBF', shell: '#7C5CBF', shellLight: '#EDE7F6', border: '#3D2470',
+    btnSide: '#9575CD', btnCenter: '#EF9A9A', btnCenterBorder: '#B71C1C',
+    decoTop:    ['🌸','💫','⭐','💗','🦋'],
+    decoBottom: ['✨','🌟','💕','🌼','🎀'],
+  },
+  pink: {
+    id: 'pink', name: '핑크',
+    swatch: '#E87AA0', shell: '#E87AA0', shellLight: '#FCE4EC', border: '#A03060',
+    btnSide: '#F4A0C0', btnCenter: '#FFE082', btnCenterBorder: '#B08000',
+    decoTop:    ['🌺','💝','🌹','💖','🌷'],
+    decoBottom: ['🎀','💗','🌸','🌺','🎵'],
+  },
+  mint: {
+    id: 'mint', name: '민트',
+    swatch: '#4BBFA0', shell: '#4BBFA0', shellLight: '#E0F2EE', border: '#1A7860',
+    btnSide: '#70D0B0', btnCenter: '#FFD700', btnCenterBorder: '#A08000',
+    decoTop:    ['🌿','🍃','🌊','🌴','🍀'],
+    decoBottom: ['✨','💚','🌱','🌾','🍃'],
+  },
+  yellow: {
+    id: 'yellow', name: '옐로',
+    swatch: '#E8B840', shell: '#E8B840', shellLight: '#FFF8E1', border: '#A07820',
+    btnSide: '#F0D070', btnCenter: '#FF7043', btnCenterBorder: '#BF360C',
+    decoTop:    ['🌟','⭐','🌙','☀️','🌻'],
+    decoBottom: ['🍋','🌼','💛','⭐','🌟'],
+  },
+  sky: {
+    id: 'sky', name: '스카이',
+    swatch: '#5090D8', shell: '#5090D8', shellLight: '#E3F2FD', border: '#184880',
+    btnSide: '#70B0F0', btnCenter: '#FF9800', btnCenterBorder: '#E65100',
+    decoTop:    ['☁️','⭐','🌙','💫','🌟'],
+    decoBottom: ['🌊','💙','☁️','⭐','✨'],
+  },
+  red: {
+    id: 'red', name: '레드',
+    swatch: '#D84040', shell: '#D84040', shellLight: '#FFEBEE', border: '#780808',
+    btnSide: '#E07070', btnCenter: '#FFD700', btnCenterBorder: '#A08000',
+    decoTop:    ['🔥','💥','🌹','❤️','💢'],
+    decoBottom: ['💔','🌹','🔥','❤️','💫'],
+  },
+  dark: {
+    id: 'dark', name: '다크',
+    swatch: '#302838', shell: '#302838', shellLight: '#EDE7F6', border: '#100818',
+    btnSide: '#484058', btnCenter: '#9C27B0', btnCenterBorder: '#4A148C',
+    decoTop:    ['🖤','✨','💫','⭐','🌑'],
+    decoBottom: ['🌑','✨','💫','🖤','⭐'],
+  },
+  beige: {
+    id: 'beige', name: '베이지',
+    swatch: '#C8A878', shell: '#C8A878', shellLight: '#FFF8EE', border: '#806040',
+    btnSide: '#E0C898', btnCenter: '#8BC34A', btnCenterBorder: '#33691E',
+    decoTop:    ['🌸','🍵','🌿','🤍','🌾'],
+    decoBottom: ['🌼','🍃','🌸','☕','🌿'],
+  },
+};
+
 // Re-export all sprite-related data so PetSprite only needs one import
 export { PIXEL_COSTUMES, EXPR_OVERLAYS, ROOM_THEMES, PIXEL_ITEMS, PIXEL_EFFECTS } from './pixelSprites';

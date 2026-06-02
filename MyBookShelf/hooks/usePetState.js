@@ -3,7 +3,8 @@ import { useFocusEffect } from 'expo-router';
 import {
   getPet, applyPetDecay, usePetItem,
   getPetInventory, getCoins,
-  getOwnedCosmetics, equipPetCosmetic, unequipPetCosmetic, setRoomTheme, setPetColorVariant,
+  getOwnedCosmetics, equipPetCosmetic, unequipPetCosmetic,
+  setRoomTheme, setPetColorVariant, setPetFrameTheme,
 } from '../database/database';
 import { COSMETIC_ITEMS, SHOP_ITEM_MAP } from '../constants/itemData';
 
@@ -116,6 +117,11 @@ export function usePetState() {
     refresh();
   }, [refresh]);
 
+  const changeFrameTheme = useCallback((themeId) => {
+    setPetFrameTheme(themeId);
+    refresh();
+  }, [refresh]);
+
   return {
     pet,
     coins,
@@ -129,8 +135,10 @@ export function usePetState() {
     toggleCosmetic,
     changeTheme,
     changeColorVariant,
+    changeFrameTheme,
     equipped: pet ? buildEquipped(pet) : { hat: null, clothes: null, accessory: null },
     roomTheme: pet?.room_theme || 'classic',
     colorVariant: pet?.color_variant || 'default',
+    frameTheme: pet?.frame_theme || 'purple',
   };
 }
