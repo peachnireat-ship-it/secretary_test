@@ -1,13 +1,14 @@
 import { View, Animated, Text, StyleSheet } from 'react-native';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { PIXEL_PETS, PIXEL_COSTUMES, ROOM_THEMES } from '../constants/pixelSprites';
+import { COLOR_VARIANTS } from '../constants/spriteConfig';
 // import { PET_VIDEO_CONFIG, PET_VIDEO_W, PET_VIDEO_H } from '../constants/petVideos';
 // import PetVideo from './PetVideo';
 
 const PIXEL = 5;
 const ROOM_H = 140;
 
-export default function PixelPet({ petType, stats = {}, actionTick = 0, actionEmoji = '🍖', actionType = 'eat', equipped = {}, bgTheme = 'classic', faceOnly = false }) {
+export default function PixelPet({ petType, stats = {}, actionTick = 0, actionEmoji = '🍖', actionType = 'eat', equipped = {}, bgTheme = 'classic', faceOnly = false, colorVariant = 'default' }) {
   const [roomWidth, setRoomWidth] = useState(0);
   const posX = useRef(new Animated.Value(8)).current;
   const bounce = useRef(new Animated.Value(0)).current;
@@ -238,7 +239,8 @@ export default function PixelPet({ petType, stats = {}, actionTick = 0, actionEm
 
   const frameIdx = mode === 'sleep' ? 2 : (isActing && actionType === 'eat' && useEatFrame) ? 3 : mode === 'idle' ? 0 : frame;
   const frameData = sprite.frames[Math.min(frameIdx, sprite.frames.length - 1)];
-  const palette = sprite.palette;
+  const variantDef = COLOR_VARIANTS[petType]?.find(v => v.id === colorVariant);
+  const palette = variantDef?.palette ?? sprite.palette;
 
   const isFish = petType === 'fish';
   const theme  = ROOM_THEMES[bgTheme] ?? ROOM_THEMES.classic;

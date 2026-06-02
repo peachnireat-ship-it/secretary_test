@@ -1,6 +1,6 @@
 import { View, Animated, Text, StyleSheet } from 'react-native';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { SPRITE_DATA, ANIM_CONFIG, PIXEL_COSTUMES, EXPR_OVERLAYS, ROOM_THEMES } from '../constants/spriteConfig';
+import { SPRITE_DATA, ANIM_CONFIG, PIXEL_COSTUMES, EXPR_OVERLAYS, ROOM_THEMES, COLOR_VARIANTS } from '../constants/spriteConfig';
 import { PIXEL_PETS } from '../constants/pixelSprites';
 
 const PIXEL = 5;
@@ -19,12 +19,13 @@ function resolveFrame(spriteData, frameKey) {
 
 export default function PetSprite({
   petType = 'cat',
-  animState = 'idle',   // idle | walking | sleeping | eating | happy | sad | surprised | angry | excited
-  equipped = {},        // { hat, clothes, accessory } — each is a COSMETIC_ITEMS entry or null
-  actionTick = 0,       // increment to trigger action animation overlay
+  animState = 'idle',     // idle | walking | sleeping | eating | happy | sad | surprised | angry | excited
+  equipped = {},          // { hat, clothes, accessory } — each is a COSMETIC_ITEMS entry or null
+  actionTick = 0,         // increment to trigger action animation overlay
   actionEmoji = '🍖',
-  actionType = 'eat',   // eat | play | clean
-  bgTheme = 'classic',  // room background theme id
+  actionType = 'eat',     // eat | play | clean
+  bgTheme = 'classic',    // room background theme id
+  colorVariant = 'default', // color variant id
 }) {
   const [roomWidth, setRoomWidth] = useState(0);
   const [frameKey, setFrameKey]   = useState('idle');
@@ -61,7 +62,8 @@ export default function PetSprite({
   const sprite     = newSprite ?? legacySprite;
   const petW       = sprite.cols * PIXEL;
   const petH       = sprite.rows * PIXEL;
-  const palette    = sprite.palette;
+  const variantDef = COLOR_VARIANTS[petType]?.find(v => v.id === colorVariant);
+  const palette    = variantDef?.palette ?? sprite.palette;
   const isFish     = petType === 'fish';
 
   // Room theme

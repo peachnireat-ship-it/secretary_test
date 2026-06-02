@@ -10,7 +10,7 @@ import {
   SHOP_ITEMS_BY_CATEGORY, COSMETIC_ITEMS, CATEGORY_LABELS,
   ITEM_RARITY, ALL_SHOP_ITEMS,
 } from '../../constants/itemData';
-import { ROOM_THEMES } from '../../constants/spriteConfig';
+import { ROOM_THEMES, COLOR_VARIANTS } from '../../constants/spriteConfig';
 import PetSprite from '../../components/PetSprite';
 import { usePetState } from '../../hooks/usePetState';
 
@@ -103,6 +103,7 @@ export default function PetScreen() {
     animState, actionTick, actionEmojiRef,
     refresh, triggerAction, toggleCosmetic, equipped,
     changeTheme, roomTheme,
+    changeColorVariant, colorVariant,
   } = usePetState();
 
   const [shopVisible,  setShopVisible]  = useState(false);
@@ -188,6 +189,7 @@ export default function PetScreen() {
                 actionEmoji={actionEmojiRef.current}
                 actionType={actionType}
                 bgTheme={roomTheme}
+                colorVariant={colorVariant}
               />
             </View>
           </View>
@@ -251,6 +253,30 @@ export default function PetScreen() {
             {ROOM_THEMES[roomTheme]?.name ?? '클래식'}
           </Text>
         </View>
+
+        {/* ── 펫 색상 바리에이션 선택 ── */}
+        {COLOR_VARIANTS[pet.type] && (
+          <View style={styles.themeCard}>
+            <Text style={styles.sectionTitle}>펫 색상</Text>
+            <View style={styles.colorVariantRow}>
+              {COLOR_VARIANTS[pet.type].map(v => {
+                const active = colorVariant === v.id;
+                return (
+                  <TouchableOpacity
+                    key={v.id}
+                    style={[styles.colorVariantBtn, active && styles.colorVariantBtnActive]}
+                    onPress={() => changeColorVariant(v.id)}
+                  >
+                    <View style={[styles.colorSwatch, { backgroundColor: v.swatch }]} />
+                    <Text style={[styles.colorVariantLabel, active && styles.colorVariantLabelActive]}>
+                      {v.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* ── Status ── */}
         <View style={styles.statusCard}>
@@ -545,6 +571,17 @@ const styles = StyleSheet.create({
   themeCircleActive: { borderWidth: 3, borderColor: '#6750A4' },
   themeCheckDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#6750A4' },
   themeNameLabel: { fontSize: 12, color: '#6750A4', fontWeight: '600' },
+
+  // Color variant selector
+  colorVariantRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  colorVariantBtn: {
+    alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 6,
+    borderRadius: 10, borderWidth: 2, borderColor: 'transparent',
+  },
+  colorVariantBtnActive: { borderColor: '#6750A4', backgroundColor: '#F3EFFE' },
+  colorSwatch: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#E0D8F0' },
+  colorVariantLabel: { fontSize: 10, color: '#888' },
+  colorVariantLabelActive: { color: '#6750A4', fontWeight: '700' },
 
   // Status
   statusCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, elevation: 2 },

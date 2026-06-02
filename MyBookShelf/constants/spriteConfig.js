@@ -436,5 +436,43 @@ export const SPRITE_DATA = {
   },
 };
 
+// ── 컬러 바리에이션 ─────────────────────────────────────────────────────────
+// 각 팔레트: [transparent, body, outline, eye, pink/nose, white/highlight, shadow]
+
+export const COLOR_VARIANTS = {
+  cat: [
+    { id: 'default',  name: '크림',    swatch: '#EDD5BC',
+      palette: ['transparent','#EDD5BC','#A07860','#2A1F1F','#F0A0B0','#FFFFFF','#C8A890'] },
+    { id: 'orange',   name: '주황',    swatch: '#F5A055',
+      palette: ['transparent','#F5A055','#B85B20','#2A1F1F','#F0A0B0','#FFFFFF','#D07030'] },
+    { id: 'gray',     name: '회색',    swatch: '#B8C0C8',
+      palette: ['transparent','#B8C0C8','#607888','#2A1F1F','#F0A0B0','#FFFFFF','#9AB0B8'] },
+    { id: 'white',    name: '흰색',    swatch: '#F4F0EC',
+      palette: ['transparent','#F4F0EC','#BEB0A0','#2A1F1F','#F0A0B0','#FFFFFF','#E0D8D0'] },
+    { id: 'black',    name: '검정',    swatch: '#484040',
+      palette: ['transparent','#484040','#242020','#2A1F1F','#F0A0B0','#FFFFFF','#363030'] },
+    { id: 'brown',    name: '갈색',    swatch: '#C89060',
+      palette: ['transparent','#C89060','#7A5030','#2A1F1F','#F0A0B0','#FFFFFF','#A87850'] },
+    { id: 'mint',     name: '민트',    swatch: '#A0DCC0',
+      palette: ['transparent','#A0DCC0','#508A70','#2A1F1F','#F0A0B0','#FFFFFF','#80C4A8'] },
+    { id: 'lavender', name: '라벤더',  swatch: '#C8A8E0',
+      palette: ['transparent','#C8A8E0','#7858A8','#2A1F1F','#F0A0B0','#FFFFFF','#A888C8'] },
+  ],
+  chinchilla: [
+    { id: 'default',  name: '라벤더',  swatch: '#C0B8D0',
+      palette: ['transparent','#C0B8D0','#807888','#2A2A2A','#FF9898','#FFFFFF','#D8D0E8'] },
+    { id: 'white',    name: '흰색',    swatch: '#F0EEF8',
+      palette: ['transparent','#F0EEF8','#B0A8C0','#2A2A2A','#FF9898','#FFFFFF','#E8E0F4'] },
+    { id: 'charcoal', name: '차콜',    swatch: '#606068',
+      palette: ['transparent','#606068','#303038','#2A2A2A','#FF9898','#FFFFFF','#888890'] },
+    { id: 'beige',    name: '베이지',  swatch: '#D8C8A8',
+      palette: ['transparent','#D8C8A8','#9A8860','#2A2A2A','#FF9898','#FFFFFF','#E8D8B8'] },
+    { id: 'pink',     name: '핑크',    swatch: '#EEC0D0',
+      palette: ['transparent','#EEC0D0','#C07898','#2A2A2A','#FF9898','#FFFFFF','#F8D0E0'] },
+    { id: 'blue',     name: '블루',    swatch: '#A8C8E8',
+      palette: ['transparent','#A8C8E8','#5080B8','#2A2A2A','#FF9898','#FFFFFF','#B8D8F8'] },
+  ],
+};
+
 // Re-export all sprite-related data so PetSprite only needs one import
 export { PIXEL_COSTUMES, EXPR_OVERLAYS, ROOM_THEMES, PIXEL_ITEMS, PIXEL_EFFECTS } from './pixelSprites';

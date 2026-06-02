@@ -19,7 +19,7 @@ function buildEquipped(pet) {
   };
 }
 
-function TamagotchiFrame({ petType, petStats, equipped, bgTheme }) {
+function TamagotchiFrame({ petType, petStats, equipped, bgTheme, colorVariant }) {
   return (
     <View style={tamStyles.shell}>
       <View style={tamStyles.screen}>
@@ -28,6 +28,7 @@ function TamagotchiFrame({ petType, petStats, equipped, bgTheme }) {
           stats={petStats}
           equipped={equipped}
           bgTheme={bgTheme}
+          colorVariant={colorVariant}
           faceOnly
         />
       </View>
@@ -526,6 +527,7 @@ export default function HomeScreen() {
               petStats={{ hunger: pet.hunger, happiness: pet.happiness, cleanliness: pet.cleanliness }}
               equipped={buildEquipped(pet)}
               bgTheme={pet.room_theme || 'classic'}
+              colorVariant={pet.color_variant || 'default'}
             />
           </TouchableOpacity>
         )}

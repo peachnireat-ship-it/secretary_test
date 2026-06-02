@@ -196,6 +196,8 @@ db.execSync(`
 try { db.execSync(`ALTER TABLE pets ADD COLUMN equipped_hat TEXT`);       } catch (_) {}
 try { db.execSync(`ALTER TABLE pets ADD COLUMN equipped_clothes TEXT`);   } catch (_) {}
 try { db.execSync(`ALTER TABLE pets ADD COLUMN equipped_accessory TEXT`); } catch (_) {}
+try { db.execSync(`ALTER TABLE pets ADD COLUMN room_theme TEXT DEFAULT 'classic'`); } catch (_) {}
+try { db.execSync(`ALTER TABLE pets ADD COLUMN color_variant TEXT DEFAULT 'default'`); } catch (_) {}
 
 // 보유 코스튬 테이블 (구매 시 추가, 소모되지 않음)
 db.execSync(`
@@ -612,6 +614,14 @@ export const equipPetCosmetic = (category, itemId) => {
 export const unequipPetCosmetic = (category) => {
   if (!VALID_COSMETIC_CATS.includes(category)) return;
   db.runSync(`UPDATE pets SET equipped_${category} = NULL WHERE id = 1`);
+};
+
+export const setRoomTheme = (themeId) => {
+  db.runSync(`UPDATE pets SET room_theme = ? WHERE id = 1`, [themeId]);
+};
+
+export const setPetColorVariant = (variantId) => {
+  db.runSync(`UPDATE pets SET color_variant = ? WHERE id = 1`, [variantId]);
 };
 
 export const getDisplayedBadges = () => {
