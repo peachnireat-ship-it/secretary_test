@@ -1,5 +1,56 @@
 const _ = 0;
 
+// ── 표정 오버레이 (animState별, petAnchor 좌표계 기준 dx/dy) ─────────────────
+// dx/dy: pet anchor 좌우상하 오프셋 (픽셀 단위, PIXEL=5 기준 스프라이트 크기에 맞게 설정)
+export const EXPR_OVERLAYS = {
+  happy: {
+    particles: [
+      { palette: ['transparent', '#FF5577'], pixels: [[1,_,1],[1,1,1],[_,1,_]], dx: -13, dy: 8 },
+      { palette: ['transparent', '#FF5577'], pixels: [[1,_,1],[1,1,1],[_,1,_]], dx: 53,  dy: 8 },
+    ],
+  },
+  sad: {
+    particles: [
+      { palette: ['transparent', '#66AAFF'], pixels: [[_,1],[1,1],[1,1],[_,1]], dx: 11, dy: 19 },
+      { palette: ['transparent', '#66AAFF'], pixels: [[_,1],[1,1],[1,1],[_,1]], dx: 35, dy: 19 },
+    ],
+  },
+  surprised: {
+    particles: [
+      { palette: ['transparent', '#FFAA22'], pixels: [[1],[1],[1],[_],[1]], dx: 54, dy: -2 },
+      { palette: ['transparent', '#AADDFF'], pixels: [[_,1],[1,1],[1,1],[_,1]], dx: 50, dy: 9  },
+    ],
+  },
+  eating: {
+    particles: [
+      { palette: ['transparent', '#FFD700'], pixels: [[_,1,_],[1,1,1],[_,1,_]], dx: -13, dy: 3 },
+      { palette: ['transparent', '#FFD700'], pixels: [[_,1,_],[1,1,1],[_,1,_]], dx: 53,  dy: 8 },
+    ],
+  },
+  excited: {
+    particles: [
+      { palette: ['transparent', '#FF4488'], pixels: [[_,1],[1,1],[_,1]], dx: -12, dy: 5 },
+      { palette: ['transparent', '#FF4488'], pixels: [[1,_],[1,1],[1,_]], dx: 48,  dy: 5 },
+    ],
+  },
+  angry: {
+    particles: [
+      { palette: ['transparent', '#FF2222'], pixels: [[1,_,1],[_,1,_],[1,_,1]], dx: 14, dy: -8 },
+    ],
+  },
+};
+
+// ── 방 배경 테마 ───────────────────────────────────────────────────────────────
+export const ROOM_THEMES = {
+  classic:  { id: 'classic',  name: '클래식', bg: '#FFF8F0', floor: '#E8D5C0' },
+  lavender: { id: 'lavender', name: '라벤더', bg: '#F0EAFF', floor: '#D0BFEE' },
+  purple:   { id: 'purple',   name: '퍼플',   bg: '#E8DEFF', floor: '#C4AAEE' },
+  mint:     { id: 'mint',     name: '민트',   bg: '#EEFBF4', floor: '#C4E0CC' },
+  sky:      { id: 'sky',      name: '하늘',   bg: '#EEF4FF', floor: '#C4D4EE' },
+  sunset:   { id: 'sunset',   name: '선셋',   bg: '#FFF0E8', floor: '#E8CEB0' },
+  night:    { id: 'night',    name: '야간',   bg: '#1E1A2E', floor: '#2E2848' },
+};
+
 // offsetY: 펫 스프라이트 top 기준 행 오프셋 (음수 = 위, 양수 = 아래)
 export const PIXEL_COSTUMES = {
   hat_crown: {
@@ -631,6 +682,166 @@ export const PIXEL_PETS = {
         [_,_,_,_,_,_,_,_,_,_,_,_],
         [_,_,_,_,_,_,_,_,_,_,_,_],
       ],
+    ],
+  },
+};
+
+// ── 픽셀 아트 아이템 (행동 연출용) ──────────────────────────────────────────
+export const PIXEL_ITEMS = {
+  donut: {
+    cols: 7, rows: 7,
+    palette: ['transparent','#DDA06A','#7B4020','#FF88CC','#FFFFFF'],
+    pixels: [
+      [_,2,2,2,2,2,_],
+      [2,3,3,3,3,3,2],
+      [2,1,_,_,_,1,2],
+      [2,1,_,_,_,1,2],
+      [2,1,_,_,_,1,2],
+      [2,1,1,1,1,1,2],
+      [_,2,2,2,2,2,_],
+    ],
+  },
+  bread: {
+    cols: 7, rows: 5,
+    palette: ['transparent','#E8B878','#B87828','#FFFFFF'],
+    pixels: [
+      [_,2,2,2,2,2,_],
+      [2,1,1,1,1,1,2],
+      [2,1,3,1,3,1,2],
+      [2,1,1,1,1,1,2],
+      [_,2,2,2,2,2,_],
+    ],
+  },
+  apple: {
+    cols: 6, rows: 7,
+    palette: ['transparent','#E83838','#883838','#58A858','#FFFFFF'],
+    pixels: [
+      [_,_,3,_,_,_],
+      [_,1,1,1,_,_],
+      [1,1,1,1,1,_],
+      [1,1,4,1,1,_],
+      [1,1,1,1,1,_],
+      [_,1,1,1,_,_],
+      [_,_,2,2,_,_],
+    ],
+  },
+  food_fish: {
+    cols: 8, rows: 6,
+    palette: ['transparent','#70B0F0','#A0C8FF','#1A4080','#FF6060'],
+    pixels: [
+      [_,_,1,1,1,1,2,2],
+      [_,1,1,3,1,1,1,_],
+      [2,1,1,1,4,1,1,_],
+      [2,1,1,1,1,1,1,_],
+      [_,1,1,1,1,1,1,_],
+      [_,_,1,1,1,1,2,2],
+    ],
+  },
+  cookie: {
+    cols: 7, rows: 7,
+    palette: ['transparent','#C8884A','#8B5520','#FFDDAA','#884400'],
+    pixels: [
+      [_,2,2,2,2,2,_],
+      [2,1,1,1,1,1,2],
+      [2,1,4,1,4,1,2],
+      [2,1,1,4,1,1,2],
+      [2,1,4,1,4,1,2],
+      [2,1,1,1,1,1,2],
+      [_,2,2,2,2,2,_],
+    ],
+  },
+  toy_ball: {
+    cols: 7, rows: 7,
+    palette: ['transparent','#FF5555','#EE2222','#FF9999','#FFFFFF'],
+    pixels: [
+      [_,2,2,2,2,_,_],
+      [2,1,1,1,1,2,_],
+      [2,1,4,1,1,1,2],
+      [2,1,1,1,1,1,2],
+      [2,1,1,1,1,1,2],
+      [_,2,1,1,1,2,_],
+      [_,_,2,2,2,_,_],
+    ],
+  },
+  shampoo: {
+    cols: 5, rows: 7,
+    palette: ['transparent','#6699FF','#3366CC','#AACCFF','#FFFFFF'],
+    pixels: [
+      [_,2,2,2,_],
+      [_,1,1,1,_],
+      [2,1,1,1,2],
+      [2,1,4,1,2],
+      [2,1,1,1,2],
+      [2,1,1,1,2],
+      [_,2,2,2,_],
+    ],
+  },
+};
+
+// ── 픽셀 아트 이펙트 ──────────────────────────────────────────────────────────
+export const PIXEL_EFFECTS = {
+  sparkle: {
+    cols: 5, rows: 5,
+    palette: ['transparent','#FFEE44','#FFFFFF'],
+    pixels: [
+      [_,_,1,_,_],
+      [_,2,1,2,_],
+      [1,1,2,1,1],
+      [_,2,1,2,_],
+      [_,_,1,_,_],
+    ],
+  },
+  heart: {
+    cols: 5, rows: 5,
+    palette: ['transparent','#FF4477'],
+    pixels: [
+      [_,1,_,1,_],
+      [1,1,1,1,1],
+      [1,1,1,1,1],
+      [_,1,1,1,_],
+      [_,_,1,_,_],
+    ],
+  },
+  star: {
+    cols: 5, rows: 5,
+    palette: ['transparent','#FFD700','#FFAA00'],
+    pixels: [
+      [_,_,1,_,_],
+      [_,1,1,1,_],
+      [1,1,2,1,1],
+      [_,1,1,1,_],
+      [_,_,1,_,_],
+    ],
+  },
+  zzz: {
+    cols: 5, rows: 4,
+    palette: ['transparent','#8888FF','#AAAAFF'],
+    pixels: [
+      [1,1,1,_,_],
+      [_,_,1,_,_],
+      [_,1,_,_,_],
+      [1,1,1,_,_],
+    ],
+  },
+  angry_mark: {
+    cols: 5, rows: 4,
+    palette: ['transparent','#FF4444'],
+    pixels: [
+      [1,_,_,_,1],
+      [_,1,_,1,_],
+      [_,1,_,1,_],
+      [1,_,_,_,1],
+    ],
+  },
+  bubble: {
+    cols: 5, rows: 5,
+    palette: ['transparent','#AADDFF','#FFFFFF'],
+    pixels: [
+      [_,1,1,1,_],
+      [1,_,2,_,1],
+      [1,_,_,_,1],
+      [1,_,_,_,1],
+      [_,1,1,1,_],
     ],
   },
 };
