@@ -131,6 +131,12 @@ try {
   db.execSync(`ALTER TABLE user_stats ADD COLUMN testOriginalUsername TEXT DEFAULT ''`);
 } catch (_) {}
 try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN testOriginalUserId TEXT DEFAULT ''`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN testOriginalGuildId TEXT DEFAULT '__UNSET__'`);
+} catch (_) {}
+try {
   db.execSync(`ALTER TABLE book_reviews ADD COLUMN xpEarned INTEGER DEFAULT 10`);
 } catch (_) {}
 try {
@@ -157,6 +163,46 @@ try {
 try {
   db.execSync(`ALTER TABLE books ADD COLUMN readHistory TEXT DEFAULT '[]'`);
 } catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN avatarCoins INTEGER DEFAULT 0`);
+} catch (_) {}
+try {
+  db.execSync(`ALTER TABLE user_stats ADD COLUMN displayedBadges TEXT DEFAULT '[]'`);
+} catch (_) {}
+
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS pets (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    type TEXT DEFAULT 'cat',
+    name TEXT DEFAULT '내 반려동물',
+    hunger INTEGER DEFAULT 80,
+    happiness INTEGER DEFAULT 80,
+    cleanliness INTEGER DEFAULT 80,
+    stage TEXT DEFAULT 'baby',
+    stageXp INTEGER DEFAULT 0,
+    lastDecayAt INTEGER DEFAULT 0,
+    adoptedAt INTEGER DEFAULT 0
+  );
+`);
+
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS pet_inventory (
+    item_id TEXT PRIMARY KEY,
+    quantity INTEGER DEFAULT 0
+  );
+`);
+
+// 코스튬 장착 컬럼 (기존 DB 마이그레이션)
+try { db.execSync(`ALTER TABLE pets ADD COLUMN equipped_hat TEXT`);       } catch (_) {}
+try { db.execSync(`ALTER TABLE pets ADD COLUMN equipped_clothes TEXT`);   } catch (_) {}
+try { db.execSync(`ALTER TABLE pets ADD COLUMN equipped_accessory TEXT`); } catch (_) {}
+
+// 보유 코스튬 테이블 (구매 시 추가, 소모되지 않음)
+db.execSync(`
+  CREATE TABLE IF NOT EXISTS pet_cosmetics (
+    item_id TEXT PRIMARY KEY
+  );
+`);
 
 db.execSync(`
   CREATE TABLE IF NOT EXISTS user_prefs (
@@ -453,11 +499,137 @@ export const getUserStats = () => {
 
 export const addXp = (amount) => {
   db.runSync('UPDATE user_stats SET xp = MAX(0, xp + ?) WHERE id = 1', [amount]);
+  if (amount > 0) {
+    db.runSync('UPDATE user_stats SET avatarCoins = avatarCoins + ? WHERE id = 1', [amount]);
+    try { addPetXp(amount); } catch (_) {}
+  }
   const row = db.getFirstSync('SELECT xp FROM user_stats WHERE id = 1');
   const newLevel = calcLevel(row?.xp ?? 0);
   db.runSync('UPDATE user_stats SET level = ? WHERE id = 1', [newLevel]);
   if (amount > 0) emitXpGain(amount);
   return getUserStats();
+};
+
+export const getCoins = () => {
+  const row = db.getFirstSync('SELECT avatarCoins FROM user_stats WHERE id = 1');
+  return row?.avatarCoins ?? 0;
+};
+
+export const getPet = () => {
+  return db.getFirstSync('SELECT * FROM pets WHERE id = 1') ?? null;
+};
+
+export const adoptPet = (type, name) => {
+  const now = Date.now();
+  db.runSync(
+    `INSERT OR REPLACE INTO pets (id, type, name, hunger, happiness, cleanliness, stage, stageXp, lastDecayAt, adoptedAt)
+     VALUES (1, ?, ?, 80, 80, 80, 'baby', 0, ?, ?)`,
+    [type, name, now, now]
+  );
+};
+
+export const applyPetDecay = () => {
+  const pet = db.getFirstSync('SELECT * FROM pets WHERE id = 1');
+  if (!pet || !pet.lastDecayAt) return pet;
+  const now = Date.now();
+  const hoursElapsed = (now - pet.lastDecayAt) / 3600000;
+  if (hoursElapsed < 0.05) return pet;
+  const hunger      = Math.max(0, pet.hunger      - Math.floor(hoursElapsed * 2));
+  const happiness   = Math.max(0, pet.happiness   - Math.floor(hoursElapsed * 1));
+  const cleanliness = Math.max(0, pet.cleanliness - Math.floor(hoursElapsed * 0.5));
+  db.runSync(
+    'UPDATE pets SET hunger=?, happiness=?, cleanliness=?, lastDecayAt=? WHERE id=1',
+    [hunger, happiness, cleanliness, now]
+  );
+  return { ...pet, hunger, happiness, cleanliness };
+};
+
+export const usePetItem = (itemId, effect) => {
+  const row = db.getFirstSync('SELECT quantity FROM pet_inventory WHERE item_id = ?', [itemId]);
+  if (!row || row.quantity < 1) throw new Error('아이템이 없습니다');
+  db.runSync('UPDATE pet_inventory SET quantity = quantity - 1 WHERE item_id = ?', [itemId]);
+  const pet = db.getFirstSync('SELECT * FROM pets WHERE id = 1');
+  if (!pet) return;
+  const hunger      = Math.min(100, pet.hunger      + (effect.hunger      ?? 0));
+  const happiness   = Math.min(100, pet.happiness   + (effect.happiness   ?? 0));
+  const cleanliness = Math.min(100, pet.cleanliness + (effect.cleanliness ?? 0));
+  db.runSync(
+    'UPDATE pets SET hunger=?, happiness=?, cleanliness=? WHERE id=1',
+    [hunger, happiness, cleanliness]
+  );
+};
+
+export const addPetXp = (amount) => {
+  const pet = db.getFirstSync('SELECT stage, stageXp FROM pets WHERE id = 1');
+  if (!pet) return;
+  const STAGE_XP = { baby: 500, junior: 2000, adult: 5000, senior: Infinity };
+  const NEXT_STAGE = { baby: 'junior', junior: 'adult', adult: 'senior' };
+  let { stage, stageXp } = pet;
+  stageXp += amount;
+  const threshold = STAGE_XP[stage] ?? Infinity;
+  if (stageXp >= threshold && NEXT_STAGE[stage]) {
+    stage = NEXT_STAGE[stage];
+    stageXp = 0;
+  }
+  db.runSync('UPDATE pets SET stage=?, stageXp=? WHERE id=1', [stage, stageXp]);
+};
+
+export const getPetInventory = () => {
+  const rows = db.getAllSync('SELECT item_id, quantity FROM pet_inventory WHERE quantity > 0');
+  const map = {};
+  rows.forEach(r => { map[r.item_id] = r.quantity; });
+  return map;
+};
+
+export const purchasePetItem = (itemId, cost) => {
+  const coins = getCoins();
+  if (coins < cost) throw new Error('코인이 부족합니다');
+  db.runSync('UPDATE user_stats SET avatarCoins = avatarCoins - ? WHERE id = 1', [cost]);
+  db.runSync(
+    'INSERT INTO pet_inventory (item_id, quantity) VALUES (?, 1) ON CONFLICT(item_id) DO UPDATE SET quantity = quantity + 1',
+    [itemId]
+  );
+};
+
+const VALID_COSMETIC_CATS = ['hat', 'clothes', 'accessory'];
+
+export const getOwnedCosmetics = () => {
+  return db.getAllSync('SELECT item_id FROM pet_cosmetics').map(r => r.item_id);
+};
+
+export const purchasePetCosmetic = (itemId, cost) => {
+  const coins = getCoins();
+  if (coins < cost) throw new Error('코인이 부족합니다');
+  db.runSync('UPDATE user_stats SET avatarCoins = avatarCoins - ? WHERE id = 1', [cost]);
+  db.runSync('INSERT OR IGNORE INTO pet_cosmetics (item_id) VALUES (?)', [itemId]);
+};
+
+export const equipPetCosmetic = (category, itemId) => {
+  if (!VALID_COSMETIC_CATS.includes(category)) return;
+  db.runSync(`UPDATE pets SET equipped_${category} = ? WHERE id = 1`, [itemId]);
+};
+
+export const unequipPetCosmetic = (category) => {
+  if (!VALID_COSMETIC_CATS.includes(category)) return;
+  db.runSync(`UPDATE pets SET equipped_${category} = NULL WHERE id = 1`);
+};
+
+export const getDisplayedBadges = () => {
+  const row = db.getFirstSync('SELECT displayedBadges FROM user_stats WHERE id = 1');
+  try {
+    const parsed = JSON.parse(row?.displayedBadges);
+    if (Array.isArray(parsed)) return parsed;
+  } catch (_) {}
+  return [];
+};
+
+export const setDisplayedBadges = (badgeIds) => {
+  db.runSync('UPDATE user_stats SET displayedBadges = ? WHERE id = 1', [JSON.stringify(badgeIds)]);
+};
+
+export const getUnlockedBadgeIds = () => {
+  const rows = db.getAllSync('SELECT badgeId FROM user_badges');
+  return rows.map(r => r.badgeId);
 };
 
 const STATUS_ORDER = "CASE status WHEN 'want_to_read' THEN 1 WHEN 'reading' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END";
@@ -670,6 +842,28 @@ export const getTestOriginalUsername = () => {
 
 export const saveTestOriginalUsername = (name) => {
   db.runSync('UPDATE user_stats SET testOriginalUsername = ? WHERE id = 1', [name]);
+};
+
+export const getTestOriginalUserId = () => {
+  const row = db.getFirstSync('SELECT testOriginalUserId FROM user_stats WHERE id = 1');
+  return row?.testOriginalUserId || '';
+};
+
+export const saveTestOriginalUserId = (id) => {
+  db.runSync('UPDATE user_stats SET testOriginalUserId = ? WHERE id = 1', [id]);
+};
+
+export const getTestOriginalGuildId = () => {
+  const row = db.getFirstSync('SELECT testOriginalGuildId FROM user_stats WHERE id = 1');
+  return row?.testOriginalGuildId ?? '__UNSET__';
+};
+
+export const saveTestOriginalGuildId = (id) => {
+  db.runSync('UPDATE user_stats SET testOriginalGuildId = ? WHERE id = 1', [id]);
+};
+
+export const saveUserId = (id) => {
+  db.runSync('UPDATE user_stats SET userId = ? WHERE id = 1', [id]);
 };
 
 export const getStats = (excludeAdult = false) => {

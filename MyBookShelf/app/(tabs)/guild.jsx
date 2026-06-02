@@ -111,6 +111,7 @@ export default function GuildScreen() {
   const [showJoinRequestModal, setShowJoinRequestModal] = useState(false);
   const [pendingRequestCounts, setPendingRequestCounts] = useState({});
   const joinAlertShown = useRef(false);
+  const [isNoticePost, setIsNoticePost] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -168,6 +169,7 @@ export default function GuildScreen() {
       const userId = getUserId();
       const guilds = await getUserGuilds(userId);
       setMyGuilds(guilds);
+
       const counts = await loadPendingCounts(guilds);
       const entries = Object.entries(counts);
       if (entries.length > 0) {
@@ -236,6 +238,7 @@ export default function GuildScreen() {
       }
 
       joinAlertShown.current = false;
+
       setViewMode('detail');
     } catch (e) {
       setLoadError(e.message || '길드 정보를 불러오지 못했습니다.');
@@ -334,10 +337,11 @@ export default function GuildScreen() {
     try {
       const userId = getUserId();
       const displayName = getUsername() || '독서가';
-      await createGuildPost(selectedGuildId, userId, displayName, newTitle, newContent);
+      await createGuildPost(selectedGuildId, userId, displayName, newTitle, newContent, isNoticePost);
       setShowWriteForm(false);
       setNewTitle('');
       setNewContent('');
+      setIsNoticePost(false);
       await loadPosts(selectedGuildId);
     } catch (e) {
       Alert.alert('오류', e.message || '게시글 등록에 실패했습니다.');
@@ -1323,11 +1327,17 @@ export default function GuildScreen() {
                 return (
                   <TouchableOpacity
                     key={p.id}
-                    style={styles.postCard}
+                    style={[styles.postCard, p.isNotice && styles.noticePostCard]}
                     onPress={() => setExpandedPostId(isExpanded ? null : p.id)}
                     activeOpacity={0.8}
                   >
                     <View style={styles.postHeader}>
+                      {p.isNotice && (
+                        <View style={styles.noticeBadge}>
+                          <Ionicons name="megaphone-outline" size={10} color="#6750A4" />
+                          <Text style={styles.noticeBadgeText}>공지</Text>
+                        </View>
+                      )}
                       <Text style={styles.postTitle} numberOfLines={isExpanded ? 0 : 1}>
                         {p.title}
                       </Text>
@@ -1782,10 +1792,24 @@ export default function GuildScreen() {
               maxLength={500}
               textAlignVertical="top"
             />
+            {(isOwner || isDeputy || isDelegated) && (
+              <View style={styles.noticeToggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.noticeToggleLabel}>공지로 등록</Text>
+                  <Text style={styles.noticeToggleHint}>길드 회원 접속 시 알림 모달로 표시됩니다</Text>
+                </View>
+                <Switch
+                  value={isNoticePost}
+                  onValueChange={setIsNoticePost}
+                  thumbColor={isNoticePost ? '#6750A4' : '#ccc'}
+                  trackColor={{ false: '#e0e0e0', true: '#D0BCFF' }}
+                />
+              </View>
+            )}
             <View style={styles.modalBtns}>
               <TouchableOpacity
                 style={styles.modalCancelBtn}
-                onPress={() => { setShowWriteForm(false); setNewTitle(''); setNewContent(''); }}
+                onPress={() => { setShowWriteForm(false); setNewTitle(''); setNewContent(''); setIsNoticePost(false); }}
               >
                 <Text style={styles.modalCancelText}>취소</Text>
               </TouchableOpacity>
@@ -1796,6 +1820,7 @@ export default function GuildScreen() {
           </View>
         </View>
       </Modal>
+
     </View>
   );
 }
@@ -3031,4 +3056,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+
+  // ── 공지 토글 (글쓰기 모달) ──────────────────────────────────────
+  noticeToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8F5FF',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#DDD0F8',
+  },
+  noticeToggleLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4A3870',
+  },
+  noticeToggleHint: {
+    fontSize: 11,
+    color: '#9B93B0',
+    marginTop: 2,
+  },
+
+  // ── 공지 배지 (게시판 카드) ──────────────────────────────────────
+  noticePostCard: {
+    borderColor: '#C4B0EE',
+    borderLeftWidth: 3,
+    borderLeftColor: '#6750A4',
+  },
+  noticeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#EDE7F6',
+    borderRadius: 10,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  noticeBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#6750A4',
+  },
+
 });

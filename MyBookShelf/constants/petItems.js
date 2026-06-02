@@ -32,10 +32,27 @@ export const PET_SHOP_ITEMS = {
   ],
 };
 
+export const COSMETIC_ITEMS = [
+  // 모자
+  { id: 'hat_crown',  name: '왕관',     emoji: '👑', category: 'hat',       cost: 150 },
+  { id: 'hat_cap',    name: '야구모자', emoji: '🧢', category: 'hat',       cost: 80  },
+  { id: 'hat_tophat', name: '실크햇',   emoji: '🎩', category: 'hat',       cost: 120 },
+  { id: 'hat_grad',   name: '졸업모자', emoji: '🎓', category: 'hat',       cost: 100 },
+  // 옷
+  { id: 'clothes_shirt',   name: '티셔츠',  emoji: '👕', category: 'clothes', cost: 100 },
+  { id: 'clothes_dress',   name: '드레스',  emoji: '👗', category: 'clothes', cost: 150 },
+  { id: 'clothes_uniform', name: '운동복',  emoji: '🎽', category: 'clothes', cost: 80  },
+  // 악세사리
+  { id: 'acc_glasses', name: '선글라스',     emoji: '🕶️', category: 'accessory', cost: 70  },
+  { id: 'acc_ribbon',  name: '리본',         emoji: '🎀', category: 'accessory', cost: 60  },
+  { id: 'acc_gem',     name: '보석 목걸이',  emoji: '💎', category: 'accessory', cost: 130 },
+];
+
 export const CATEGORY_LABELS = {
-  food:  '먹이',
-  toy:   '장난감',
-  clean: '청결 용품',
+  food:      '먹이',
+  toy:       '장난감',
+  clean:     '청결 용품',
+  cosmetic:  '코스튬',
 };
 
 // 시간당 감소량

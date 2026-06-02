@@ -1,5 +1,5 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,11 +12,22 @@ import {
   banUser,
   unbanUser,
   getBannedUsers,
+  getUsername,
 } from '../database/database';
+import {
+  getAllGuilds, forceDissolveGuild,
+  getGuildPostReports, dismissGuildPostReports, deleteGuildPostAndReports,
+} from '../database/guildDatabase';
 
 function formatDate(ts) {
   const d = new Date(ts);
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatGuildDate(ts) {
+  if (!ts) return '';
+  const d = ts?.toDate ? ts.toDate() : new Date(ts);
+  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
 }
 
 export default function AdminReportsScreen() {
@@ -30,6 +41,10 @@ export default function AdminReportsScreen() {
   const [highlightedUser, setHighlightedUser] = useState(null);
   const [suspendModal, setSuspendModal] = useState({ visible: false, username: '', days: '' });
   const [selectedItems, setSelectedItems] = useState(new Set());
+  const [guilds, setGuilds] = useState([]);
+  const [guildLoading, setGuildLoading] = useState(false);
+  const [postReports, setPostReports] = useState([]);
+  const [postReportsLoading, setPostReportsLoading] = useState(false);
 
   const load = useCallback(() => {
     setGroups(getReportGroups());
@@ -52,6 +67,204 @@ export default function AdminReportsScreen() {
   }, []);
 
   useFocusEffect(load);
+
+  const loadGuilds = useCallback(async () => {
+    setGuildLoading(true);
+    try {
+      const all = await getAllGuilds();
+      setGuilds(all);
+    } catch (e) {
+      Alert.alert('오류', e.message || '길드 목록을 불러오지 못했습니다.');
+    } finally {
+      setGuildLoading(false);
+    }
+  }, []);
+
+  const loadPostReports = useCallback(async () => {
+    setPostReportsLoading(true);
+    try {
+      const data = await getGuildPostReports();
+      setPostReports(data);
+    } catch (e) {
+      Alert.alert('오류', e.message || '신고 목록을 불러오지 못했습니다.');
+    } finally {
+      setPostReportsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'guild') loadGuilds();
+    if (tab === 'guildPost') loadPostReports();
+  }, [tab, loadGuilds, loadPostReports]);
+
+  const handleDismissPostReport = (postId, title) => {
+    Alert.alert('신고 무시', `'${title || '(삭제된 게시글)'}'\n신고 내역을 무시하시겠습니까?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '무시',
+        onPress: async () => {
+          try {
+            await dismissGuildPostReports(postId);
+            setPostReports((prev) => prev.filter((r) => r.postId !== postId));
+          } catch (e) {
+            Alert.alert('오류', e.message || '처리에 실패했습니다.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleDeleteGuildPost = (postId, title) => {
+    Alert.alert('게시글 삭제', `'${title || '(삭제된 게시글)'}'\n게시글을 삭제하고 신고 내역도 제거합니다.`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteGuildPostAndReports(postId);
+            setPostReports((prev) => prev.filter((r) => r.postId !== postId));
+          } catch (e) {
+            Alert.alert('오류', e.message || '삭제에 실패했습니다.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const renderPostReportItem = ({ item }) => (
+    <View style={styles.card}>
+      {item.deleted ? (
+        <View style={[styles.typeBadge, { backgroundColor: '#9E9E9E', alignSelf: 'flex-start' }]}>
+          <Text style={styles.typeBadgeText}>삭제된 게시글</Text>
+        </View>
+      ) : (
+        <View style={[styles.typeBadge, { backgroundColor: '#6750A4', alignSelf: 'flex-start' }]}>
+          <Text style={styles.typeBadgeText}>길드 게시글</Text>
+        </View>
+      )}
+
+      {!!item.guildId && (
+        <View style={styles.guildInfoRow}>
+          <Ionicons name="shield-half-outline" size={13} color="#9E9E9E" />
+          <Text style={styles.guildInfoText}>길드 ID: {item.guildId}</Text>
+        </View>
+      )}
+
+      {!item.deleted && (
+        <>
+          <Text style={styles.postReportTitle} numberOfLines={1}>{item.title}</Text>
+          <Text style={styles.postReportContent} numberOfLines={3}>{item.content}</Text>
+          <View style={styles.guildInfoRow}>
+            <Ionicons name="person-outline" size={13} color="#9E9E9E" />
+            <Text style={styles.guildInfoText}>작성자: {item.authorName} ({item.authorId})</Text>
+          </View>
+        </>
+      )}
+
+      <Text style={styles.reportCount}>신고 {item.reportCount}건</Text>
+
+      {item.reporters.length > 0 && (
+        <View style={styles.reporterListContainer}>
+          {item.reporters.map((r, i) => (
+            <View key={i} style={styles.reporterListRow}>
+              <Text style={styles.reporterListText}>신고 계정: {r.reporterId}</Text>
+              {r.createdAt && (
+                <Text style={styles.reporterListText}>
+                  신고 일시: {formatGuildDate(r.createdAt)}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={styles.dismissBtn}
+          onPress={() => handleDismissPostReport(item.postId, item.title)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="checkmark-circle-outline" size={15} color="#6750A4" />
+          <Text style={styles.dismissBtnText}>무시</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.deleteBtn, item.deleted && { backgroundColor: '#BDBDBD' }]}
+          onPress={() => !item.deleted && handleDeleteGuildPost(item.postId, item.title)}
+          activeOpacity={item.deleted ? 1 : 0.8}
+        >
+          <Ionicons name="trash-outline" size={15} color="#fff" />
+          <Text style={styles.deleteBtnText}>{item.deleted ? '이미 삭제됨' : '게시글 삭제'}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const handleForceDissolve = (guild) => {
+    Alert.alert(
+      '길드 강제 폐쇄',
+      `'${guild.name}' 길드를 강제 폐쇄하시겠습니까?\n\n운영자: ${guild.creatorId}\n멤버 수: ${guild.memberCount}명\n\n모든 데이터가 영구 삭제됩니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '강제 폐쇄',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              '최종 확인',
+              `정말로 '${guild.name}' 길드를 폐쇄합니까?\n이 작업은 되돌릴 수 없습니다.`,
+              [
+                { text: '취소', style: 'cancel' },
+                {
+                  text: '폐쇄 확인',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const requesterId = getUsername();
+                      await forceDissolveGuild(guild.id, requesterId);
+                      setGuilds((prev) => prev.filter((g) => g.id !== guild.id));
+                    } catch (e) {
+                      Alert.alert('오류', e.message || '길드 강제 폐쇄에 실패했습니다.');
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  const renderGuildItem = ({ item }) => (
+    <View style={styles.card}>
+      <View style={styles.guildCardHeader}>
+        <Ionicons name="people-outline" size={16} color="#6750A4" />
+        <Text style={styles.guildName} numberOfLines={1}>{item.name}</Text>
+        <View style={[styles.typeBadge, { backgroundColor: item.isPublic ? '#388E3C' : '#757575' }]}>
+          <Text style={styles.typeBadgeText}>{item.isPublic ? '공개' : '비공개'}</Text>
+        </View>
+      </View>
+      <View style={styles.guildInfoRow}>
+        <Ionicons name="person-outline" size={13} color="#9E9E9E" />
+        <Text style={styles.guildInfoText}>운영자: {item.creatorId}</Text>
+      </View>
+      <View style={styles.guildInfoRow}>
+        <Ionicons name="people-circle-outline" size={13} color="#9E9E9E" />
+        <Text style={styles.guildInfoText}>멤버 {item.memberCount}명</Text>
+        <Text style={styles.guildInfoSep}>·</Text>
+        <Text style={styles.guildInfoText}>생성일 {formatGuildDate(item.createdAt)}</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.forceDissolveBtn}
+        onPress={() => handleForceDissolve(item)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="close-circle-outline" size={15} color="#fff" />
+        <Text style={styles.forceDissolveBtnText}>강제 폐쇄</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   const navigateToContent = (targetType, targetId, parentDiscussionId) => {
     if (targetType === 'discussion') {
@@ -516,7 +729,11 @@ export default function AdminReportsScreen() {
     );
   };
 
-  const isEmpty = tab === 'content' ? groups.length === 0 : userGroups.length === 0;
+  const isEmpty =
+    tab === 'content' ? groups.length === 0
+    : tab === 'user' ? userGroups.length === 0
+    : tab === 'guild' ? guilds.length === 0
+    : postReports.length === 0;
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
@@ -543,12 +760,33 @@ export default function AdminReportsScreen() {
         >
           <Text style={[styles.tabBtnText, tab === 'user' && styles.tabBtnTextActive]}>사용자별</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, tab === 'guild' && styles.tabBtnActive]}
+          onPress={() => setTab('guild')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabBtnText, tab === 'guild' && styles.tabBtnTextActive]}>길드 관리</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, tab === 'guildPost' && styles.tabBtnActive]}
+          onPress={() => setTab('guildPost')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabBtnText, tab === 'guildPost' && styles.tabBtnTextActive]}>게시글 신고</Text>
+        </TouchableOpacity>
       </View>
 
-      {isEmpty ? (
+      {(tab === 'guild' && guildLoading) || (tab === 'guildPost' && postReportsLoading) ? (
+        <View style={styles.empty}>
+          <Ionicons name="sync-outline" size={36} color="#C4B4E0" />
+          <Text style={styles.emptyText}>불러오는 중...</Text>
+        </View>
+      ) : isEmpty ? (
         <View style={styles.empty}>
           <Ionicons name="shield-checkmark-outline" size={48} color="#C4B4E0" />
-          <Text style={styles.emptyText}>처리할 신고가 없습니다</Text>
+          <Text style={styles.emptyText}>
+            {tab === 'guild' ? '등록된 길드가 없습니다' : '처리할 신고가 없습니다'}
+          </Text>
         </View>
       ) : tab === 'content' ? (
         <FlatList
@@ -557,11 +795,25 @@ export default function AdminReportsScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
         />
-      ) : (
+      ) : tab === 'user' ? (
         <FlatList
           data={userGroups}
           keyExtractor={(item) => item.username}
           renderItem={renderUserItem}
+          contentContainerStyle={styles.list}
+        />
+      ) : tab === 'guild' ? (
+        <FlatList
+          data={guilds}
+          keyExtractor={(item) => item.id}
+          renderItem={renderGuildItem}
+          contentContainerStyle={styles.list}
+        />
+      ) : (
+        <FlatList
+          data={postReports}
+          keyExtractor={(item) => item.postId}
+          renderItem={renderPostReportItem}
           contentContainerStyle={styles.list}
         />
       )}
@@ -843,6 +1095,24 @@ const styles = StyleSheet.create({
     borderColor: '#6750A4',
     backgroundColor: '#F3EEFF',
   },
+  postReportTitle: { fontSize: 14, fontWeight: '700', color: '#1C1B1F' },
+  postReportContent: { fontSize: 13, color: '#616161', lineHeight: 19 },
+  guildCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  guildName: { fontSize: 15, fontWeight: '700', color: '#1C1B1F', flex: 1 },
+  guildInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  guildInfoText: { fontSize: 13, color: '#616161' },
+  guildInfoSep: { fontSize: 13, color: '#BDBDBD' },
+  forceDissolveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: '#B71C1C',
+    marginTop: 4,
+  },
+  forceDissolveBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   reporterListContainer: { gap: 6 },
   reporterListRow: {
     gap: 2,

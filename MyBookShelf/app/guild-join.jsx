@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getUserId, getUsername, getSchool, getSchoolLevel, saveGuildId, getAge } from '../database/database';
+import { getUserId, getUsername, getSchool, getSchoolLevel, getAge } from '../database/database';
 import { joinGuildByCode, searchPublicGuilds } from '../database/guildDatabase';
 
 export default function GuildJoinScreen() {
@@ -35,16 +35,15 @@ export default function GuildJoinScreen() {
     try {
       const userId = getUserId();
       const displayName = getUsername() || '독서가';
-      const { guildId, guildName } = await joinGuildByCode(
+      const { guildName } = await joinGuildByCode(
         code.trim(),
         userId,
         displayName,
         getSchool(),
         getSchoolLevel(),
       );
-      saveGuildId(guildId);
-      Alert.alert('길드 가입 완료!', `'${guildName}'에 가입했습니다.`, [
-        { text: '확인', onPress: () => router.navigate('/(tabs)/guild') },
+      Alert.alert('가입 신청 완료!', `'${guildName}'에 가입 신청했습니다.\n운영자 승인 후 길드에 참여할 수 있습니다.`, [
+        { text: '확인', onPress: () => router.back() },
       ]);
     } catch (e) {
       Alert.alert('오류', e.message || '가입에 실패했습니다.');
@@ -87,16 +86,15 @@ export default function GuildJoinScreen() {
     const userId = getUserId();
     try {
       const displayName = getUsername() || '독서가';
-      const { guildId } = await joinGuildByCode(
+      await joinGuildByCode(
         guild.inviteCode,
         userId,
         displayName,
         getSchool(),
         getSchoolLevel(),
       );
-      saveGuildId(guildId);
-      Alert.alert('길드 가입 완료!', `'${guild.name}'에 가입했습니다.`, [
-        { text: '확인', onPress: () => router.navigate('/(tabs)/guild') },
+      Alert.alert('가입 신청 완료!', `'${guild.name}'에 가입 신청했습니다.\n운영자 승인 후 길드에 참여할 수 있습니다.`, [
+        { text: '확인', onPress: () => router.back() },
       ]);
     } catch (e) {
       Alert.alert('오류', e.message || '가입에 실패했습니다.');
@@ -146,7 +144,7 @@ export default function GuildJoinScreen() {
             {codeLoading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.joinBtnText}>가입하기</Text>
+              <Text style={styles.joinBtnText}>가입 신청</Text>
             )}
           </TouchableOpacity>
         </View>

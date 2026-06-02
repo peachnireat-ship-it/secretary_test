@@ -2,19 +2,30 @@ import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Alert, Modal, FlatList,
 } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getPet, adoptPet, applyPetDecay, usePetItem,
   getPetInventory, purchasePetItem, getCoins,
+  getOwnedCosmetics, purchasePetCosmetic, equipPetCosmetic, unequipPetCosmetic,
 } from '../../database/database';
 import {
-  PET_TYPES, PET_STAGES, PET_SHOP_ITEMS, CATEGORY_LABELS,
+  PET_TYPES, PET_STAGES, PET_SHOP_ITEMS, CATEGORY_LABELS, COSMETIC_ITEMS,
 } from '../../constants/petItems';
 import PixelPet from '../../components/PixelPet';
 
-const SHOP_CATEGORIES = Object.keys(PET_SHOP_ITEMS);
+const SHOP_ITEM_CATEGORIES = ['food', 'toy', 'clean', 'cosmetic'];
+
+function buildEquipped(pet) {
+  const find = (id) => COSMETIC_ITEMS.find(i => i.id === id) ?? null;
+  return {
+    hat:       find(pet?.equipped_hat),
+    clothes:   find(pet?.equipped_clothes),
+    accessory: find(pet?.equipped_accessory),
+  };
+}
+
 
 function StatBar({ label, value, color }) {
   const pct = Math.max(0, Math.min(100, value));
@@ -91,12 +102,16 @@ export default function PetScreen() {
   const [inventory, setInventory] = useState({});
   const [shopVisible, setShopVisible] = useState(false);
   const [shopCategory, setShopCategory] = useState('food');
+  const [ownedCosmetics, setOwnedCosmetics] = useState([]);
+  const [eatTick, setEatTick] = useState(0);
+  const eatEmojiRef = useRef('🍖');
 
   const refresh = () => {
     const p = applyPetDecay();
     setPet(p);
     setCoins(getCoins());
     setInventory(getPetInventory());
+    setOwnedCosmetics(getOwnedCosmetics());
   };
 
   useFocusEffect(useCallback(() => { refresh(); }, []));
@@ -113,9 +128,33 @@ export default function PetScreen() {
     try {
       usePetItem(itemId, item.effect);
       refresh();
+      if (item.effect.hunger != null) {
+        eatEmojiRef.current = item.emoji;
+        setEatTick(t => t + 1);
+      }
     } catch (e) {
       Alert.alert('알림', e.message);
     }
+  };
+
+  const handleBuyCosmetic = (item) => {
+    try {
+      purchasePetCosmetic(item.id, item.cost);
+      refresh();
+    } catch (e) {
+      Alert.alert('알림', e.message);
+    }
+  };
+
+  const handleEquipToggle = (item) => {
+    const equipped = buildEquipped(pet);
+    const isEquipped = equipped[item.category]?.id === item.id;
+    if (isEquipped) {
+      unequipPetCosmetic(item.category);
+    } else {
+      equipPetCosmetic(item.category, item.id);
+    }
+    refresh();
   };
 
   const handleBuy = (item) => {
@@ -136,7 +175,6 @@ export default function PetScreen() {
     ? Math.round((pet.stageXp / nextStage.xpRequired) * 100)
     : 100;
 
-  const shopItems = PET_SHOP_ITEMS[shopCategory] ?? [];
 
   return (
     <View style={styles.container}>
@@ -153,10 +191,12 @@ export default function PetScreen() {
 
         {/* 펫 */}
         <View style={styles.petCard2}>
-          {/* 픽셀 펫 방 */}
           <PixelPet
             petType={pet.type}
             stats={{ hunger: pet.hunger, happiness: pet.happiness, cleanliness: pet.cleanliness }}
+            eatTick={eatTick}
+            eatEmoji={eatEmojiRef.current}
+            equipped={buildEquipped(pet)}
           />
 
           {/* 이름 & 단계 */}
@@ -230,7 +270,7 @@ export default function PetScreen() {
             </View>
 
             <View style={styles.categoryRow}>
-              {SHOP_CATEGORIES.map(cat => (
+              {SHOP_ITEM_CATEGORIES.map(cat => (
                 <TouchableOpacity
                   key={cat}
                   style={[styles.catTab, shopCategory === cat && styles.catTabActive]}
@@ -243,34 +283,76 @@ export default function PetScreen() {
               ))}
             </View>
 
-            <FlatList
-              data={shopItems}
-              keyExtractor={i => i.id}
-              renderItem={({ item }) => (
-                <View style={styles.shopItemRow}>
-                  <Text style={styles.shopItemEmoji}>{item.emoji}</Text>
-                  <View style={styles.shopItemInfo}>
-                    <Text style={styles.shopItemName}>{item.name}</Text>
-                    <Text style={styles.shopItemEffect}>
-                      {Object.entries(item.effect).map(([k, v]) => {
-                        const label = { hunger: '배고픔', happiness: '행복도', cleanliness: '청결도' }[k];
-                        return `${label} +${v}`;
-                      }).join('  ')}
-                    </Text>
+            {shopCategory === 'cosmetic' ? (
+              <FlatList
+                data={COSMETIC_ITEMS}
+                keyExtractor={i => i.id}
+                renderItem={({ item }) => {
+                  const owned    = ownedCosmetics.includes(item.id);
+                  const equipped = buildEquipped(pet);
+                  const isOn     = equipped[item.category]?.id === item.id;
+                  return (
+                    <View style={styles.shopItemRow}>
+                      <Text style={styles.shopItemEmoji}>{item.emoji}</Text>
+                      <View style={styles.shopItemInfo}>
+                        <Text style={styles.shopItemName}>{item.name}</Text>
+                        <Text style={styles.shopItemEffect}>{CATEGORY_LABELS[item.category]}</Text>
+                      </View>
+                      {owned ? (
+                        <TouchableOpacity
+                          style={[styles.equipBtn, isOn && styles.equipBtnOn]}
+                          onPress={() => handleEquipToggle(item)}
+                        >
+                          <Text style={[styles.equipBtnText, isOn && styles.equipBtnTextOn]}>
+                            {isOn ? '해제' : '장착'}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.buyBtn, coins < item.cost && styles.buyBtnDisabled]}
+                          onPress={() => handleBuyCosmetic(item)}
+                          disabled={coins < item.cost}
+                        >
+                          <Ionicons name="logo-bitcoin" size={12} color={coins < item.cost ? '#bbb' : '#FFC107'} />
+                          <Text style={[styles.buyBtnText, coins < item.cost && styles.buyBtnTextDisabled]}>
+                            {item.cost}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                }}
+              />
+            ) : (
+              <FlatList
+                data={PET_SHOP_ITEMS[shopCategory] ?? []}
+                keyExtractor={i => i.id}
+                renderItem={({ item }) => (
+                  <View style={styles.shopItemRow}>
+                    <Text style={styles.shopItemEmoji}>{item.emoji}</Text>
+                    <View style={styles.shopItemInfo}>
+                      <Text style={styles.shopItemName}>{item.name}</Text>
+                      <Text style={styles.shopItemEffect}>
+                        {Object.entries(item.effect).map(([k, v]) => {
+                          const label = { hunger: '배고픔', happiness: '행복도', cleanliness: '청결도' }[k];
+                          return `${label} +${v}`;
+                        }).join('  ')}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.buyBtn, coins < item.cost && styles.buyBtnDisabled]}
+                      onPress={() => handleBuy(item)}
+                      disabled={coins < item.cost}
+                    >
+                      <Ionicons name="logo-bitcoin" size={12} color={coins < item.cost ? '#bbb' : '#FFC107'} />
+                      <Text style={[styles.buyBtnText, coins < item.cost && styles.buyBtnTextDisabled]}>
+                        {item.cost}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={[styles.buyBtn, coins < item.cost && styles.buyBtnDisabled]}
-                    onPress={() => handleBuy(item)}
-                    disabled={coins < item.cost}
-                  >
-                    <Ionicons name="logo-bitcoin" size={12} color={coins < item.cost ? '#bbb' : '#FFC107'} />
-                    <Text style={[styles.buyBtnText, coins < item.cost && styles.buyBtnTextDisabled]}>
-                      {item.cost}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            />
+                )}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -325,6 +407,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', borderRadius: 20, padding: 16,
     marginBottom: 16, elevation: 2, overflow: 'hidden',
   },
+  petVideoWrap: { alignItems: 'center', marginBottom: 4 },
+  petFallbackEmoji: { fontSize: 100, textAlign: 'center' },
   petInfoRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginTop: 12, marginBottom: 2,
@@ -398,4 +482,11 @@ const styles = StyleSheet.create({
   buyBtnDisabled: { backgroundColor: '#f5f5f5', borderColor: '#ddd' },
   buyBtnText: { fontSize: 13, fontWeight: '600', color: '#E65100' },
   buyBtnTextDisabled: { color: '#bbb' },
+  equipBtn: {
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7,
+    backgroundColor: '#EDE7F6', borderWidth: 1, borderColor: '#D0BCFF',
+  },
+  equipBtnOn: { backgroundColor: '#6750A4', borderColor: '#6750A4' },
+  equipBtnText: { fontSize: 13, fontWeight: '600', color: '#6750A4' },
+  equipBtnTextOn: { color: '#fff' },
 });

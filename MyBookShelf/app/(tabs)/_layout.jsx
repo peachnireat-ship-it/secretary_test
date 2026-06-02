@@ -20,6 +20,7 @@ const ALL_TABS = [
   { name: 'book-event',      title: '이벤트',      icon: 'flash-outline' },
   { name: 'guild',           title: '독서 길드',   icon: 'people-outline' },
   { name: 'book-discussion', title: '독서 토론',   icon: 'chatbubbles-outline' },
+  { name: 'shop',            title: '반려동물',    icon: 'paw-outline' },
 ];
 
 const DEFAULT_VISIBLE = ['home', 'index'];

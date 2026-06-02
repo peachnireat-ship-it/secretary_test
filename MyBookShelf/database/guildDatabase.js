@@ -350,7 +350,7 @@ export async function getGuildPosts(guildId) {
 
 // ── 게시판 글 작성 ────────────────────────────────────────────────
 
-export async function createGuildPost(guildId, userId, displayName, title, content) {
+export async function createGuildPost(guildId, userId, displayName, title, content, isNotice = false) {
   if (!isFirebaseReady()) throw new Error('Firebase가 설정되지 않았습니다.');
   await addDoc(collection(firestoreDb, 'guild_posts'), {
     guildId,
@@ -358,7 +358,45 @@ export async function createGuildPost(guildId, userId, displayName, title, conte
     displayName,
     title: title.trim(),
     content: content.trim(),
+    isNotice: !!isNotice,
     createdAt: serverTimestamp(),
+  });
+}
+
+// ── 미확인 공지 조회 ──────────────────────────────────────────────
+
+export async function getUnreadGuildNotices(guildId, userId) {
+  if (!isFirebaseReady()) return [];
+  const q = query(
+    collection(firestoreDb, 'guild_posts'),
+    where('guildId', '==', guildId),
+    where('isNotice', '==', true),
+  );
+  const snap = await getDocs(q);
+  const notices = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  if (notices.length === 0) return [];
+
+  const readChecks = await Promise.all(
+    notices.map((n) =>
+      getDoc(doc(firestoreDb, 'guild_notice_reads', `${guildId}_${n.id}_${userId}`))
+        .then((s) => ({ id: n.id, isRead: s.exists() }))
+    )
+  );
+  const readIds = new Set(readChecks.filter((r) => r.isRead).map((r) => r.id));
+  return notices
+    .filter((n) => !readIds.has(n.id))
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+}
+
+// ── 공지 읽음 처리 ────────────────────────────────────────────────
+
+export async function markNoticeRead(guildId, postId, userId) {
+  if (!isFirebaseReady()) return;
+  await setDoc(doc(firestoreDb, 'guild_notice_reads', `${guildId}_${postId}_${userId}`), {
+    guildId,
+    postId,
+    userId,
+    readAt: serverTimestamp(),
   });
 }
 

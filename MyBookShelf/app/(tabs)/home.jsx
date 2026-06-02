@@ -1,12 +1,24 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Alert, Modal } from 'react-native';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, cancelMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent, getWeeklyMissions, getExtraMissions, getMissionProgress, getAge, getGuildThemeMissions, getUserId } from '../../database/database';
-import { getUserGuilds, getUserThemeMissionStatus, submitThemeMission } from '../../database/guildDatabase';
+import { getStats, getBooksByStatus, getUserStats, getUsername, getWeeklyProgress, isMissionClaimed, claimMissionReward, cancelMissionReward, getWeekKey, getSchoolLevel, getWeeklyDoubleXpEvent, getWeeklyMissions, getExtraMissions, getMissionProgress, getAge, getGuildThemeMissions, getUserId, getPet } from '../../database/database';
+import { getUserGuilds, getUserThemeMissionStatus, submitThemeMission, getUnreadGuildNotices, markNoticeRead } from '../../database/guildDatabase';
 import { setPendingLibraryStatus } from './_libraryFilter';
 import { checkAndUnlockBadges, checkAndUnlockWeeklyAllMissionsBadge } from '../../database/badges';
 import BookCard from '../../components/BookCard';
+import PetDisplay from '../../components/PetDisplay';
+import { fetchPetVideoUrl } from '../../constants/pixabayService';
+import { COSMETIC_ITEMS } from '../../constants/petItems';
+
+function buildEquipped(pet) {
+  const find = (id) => COSMETIC_ITEMS.find(i => i.id === id) ?? null;
+  return {
+    hat:       find(pet?.equipped_hat),
+    clothes:   find(pet?.equipped_clothes),
+    accessory: find(pet?.equipped_accessory),
+  };
+}
 
 
 const ENCOURAGEMENT = {
@@ -237,6 +249,8 @@ export default function HomeScreen() {
   const [weeklyProgress, setWeeklyProgress] = useState({ completed: 0, memos: 0, added: 0, streak: 0 });
   const [claimedMissions, setClaimedMissions] = useState([]);
   const [schoolLevel, setSchoolLevel] = useState('');
+  const [pet, setPetState] = useState(null);
+  const [petVideoUrl, setPetVideoUrl] = useState(null);
   const [doubleXpEvent, setDoubleXpEvent] = useState(null);
   const [newBadges, setNewBadges] = useState([]);
   const [extraMissions, setExtraMissions] = useState([]);
@@ -247,7 +261,16 @@ export default function HomeScreen() {
   const extraMissionsAcceptedRef = useRef(false);
   const lastWeekKeyRef = useRef('');
   const [weekTick, setWeekTick] = useState(0);
+  const [noticeModal, setNoticeModal] = useState(null);
+  const noticeCheckedRef = useRef(false);
   const toastAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!pet?.type) return;
+    fetchPetVideoUrl(pet.type).then(url => {
+      if (url) setPetVideoUrl(url);
+    });
+  }, [pet?.type]);
 
   // 앱이 열린 채로 주차가 바뀌면 미션 즉시 갱신
   useEffect(() => {
@@ -276,6 +299,7 @@ export default function HomeScreen() {
       scrollViewRef.current?.scrollTo({ y: 0, animated: false });
       setStats(getStats());
       setUsername(getUsername());
+      setPetState(getPet());
       const age = getAge();
       const adultFilter = (b) => !(age > 0 && age < 19 && b.isAdult);
       setReadingBooks(getBooksByStatus('reading').filter(adultFilter).slice(0, 3));
@@ -337,12 +361,29 @@ export default function HomeScreen() {
       setSchoolLevel(getSchoolLevel());
       setDoubleXpEvent(getWeeklyDoubleXpEvent());
 
-      // 길드 테마 미션 로드 (운영자 승인 후에만 XP 지급)
+      // 길드 테마 미션 로드 + 미읽 공지 확인 (운영자 승인 후에만 XP 지급)
       (async () => {
         try {
           const userId = getUserId();
           if (!userId) return;
           const guilds = await getUserGuilds(userId);
+
+          // 미읽 공지 확인 (세션당 1회)
+          if (!noticeCheckedRef.current && guilds && guilds.length > 0) {
+            noticeCheckedRef.current = true;
+            try {
+              const allUnread = (await Promise.all(
+                guilds.map((g) => getUnreadGuildNotices(g.id, userId).catch(() => []))
+              )).flat();
+              allUnread.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+              if (allUnread.length > 0) {
+                const first = allUnread[0];
+                const guildName = guilds.find((g) => g.id === first.guildId)?.name || '길드';
+                setNoticeModal({ ...first, guildName });
+              }
+            } catch (_) {}
+          }
+
           if (!guilds || guilds.length === 0) {
             setGuildThemeMissions([]); setGuildThemeLabel(''); setGuildThemeId(''); return;
           }
@@ -427,11 +468,17 @@ export default function HomeScreen() {
     <View style={styles.root}>
     <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/shop')} style={styles.avatarBtn}>
+          <PetDisplay
+            videoUrl={petVideoUrl}
+            petType={pet?.type}
+            equipped={buildEquipped(pet)}
+            width={90}
+            height={90}
+          />
+        </TouchableOpacity>
+        <View style={styles.headerInfo}>
           <Text style={styles.greeting}>안녕하세요 👋</Text>
-          <Text style={styles.subtitle}>오늘도 독서를 즐겨보세요</Text>
-        </View>
-        <View style={styles.profileBox}>
           <View style={styles.profileNameRow}>
             <Text style={styles.profileName}>{username}</Text>
             <View style={[styles.levelBadge, { borderColor: userStats.tierColor, backgroundColor: userStats.tierColor + '22' }]}>
@@ -541,6 +588,31 @@ export default function HomeScreen() {
         ))}
       </Animated.View>
     )}
+    <Modal visible={!!noticeModal} transparent animationType="fade">
+      <View style={styles.noticeOverlay}>
+        <View style={styles.noticeModalBox}>
+          <View style={styles.noticeModalHeader}>
+            <Ionicons name="megaphone-outline" size={18} color="#6750A4" />
+            <Text style={styles.noticeModalLabel}>
+              {noticeModal?.guildName ? `${noticeModal.guildName} 공지` : '길드 공지'}
+            </Text>
+          </View>
+          <Text style={styles.noticeModalTitle}>{noticeModal?.title}</Text>
+          <Text style={styles.noticeModalContent}>{noticeModal?.content}</Text>
+          <TouchableOpacity
+            style={styles.noticeModalBtn}
+            onPress={async () => {
+              if (noticeModal?.id) {
+                try { await markNoticeRead(noticeModal.guildId, noticeModal.id, getUserId()); } catch (_) {}
+              }
+              setNoticeModal(null);
+            }}
+          >
+            <Text style={styles.noticeModalBtnText}>확인</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
     </View>
   );
 }
@@ -552,25 +624,26 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     marginBottom: 20,
   },
-  headerLeft: {
+  avatarBtn: {
+    alignItems: 'center',
+    width: 90,
+    height: 64,
+    justifyContent: 'center',
+  },
+  petMiniEmoji: {
+    fontSize: 48,
+  },
+  headerInfo: {
     flex: 1,
+    gap: 4,
   },
   greeting: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#1C1B1F',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#49454F',
-    marginTop: 4,
-  },
-  profileBox: {
-    gap: 4,
-    width: 130,
   },
   profileName: {
     fontSize: 13,
@@ -934,5 +1007,65 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#fff',
+  },
+  noticeOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(20,15,35,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  noticeModalBox: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    elevation: 8,
+    shadowColor: '#4A3870',
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  noticeModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  noticeModalLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6750A4',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  noticeModalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#2D2440',
+    marginBottom: 10,
+    lineHeight: 24,
+  },
+  noticeModalContent: {
+    fontSize: 14,
+    color: '#5F5870',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  noticeModalBtn: {
+    backgroundColor: '#6750A4',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#6750A4',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  noticeModalBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

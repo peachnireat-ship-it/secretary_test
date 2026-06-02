@@ -2,7 +2,13 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingVi
 import { useState, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getUsername, saveUsername, getAge, saveAge, getTestOriginalUsername, saveTestOriginalUsername } from '../database/database';
+import {
+  getUsername, saveUsername, getAge, saveAge,
+  getTestOriginalUsername, saveTestOriginalUsername,
+  getTestOriginalUserId, saveTestOriginalUserId,
+  getTestOriginalGuildId, saveTestOriginalGuildId,
+  getUserId, saveUserId, getGuildId, saveGuildId,
+} from '../database/database';
 
 const AGE_GROUPS = [
   { label: '어린이 (~12세)', range: '15일 + 200페이지', min: 1, max: 12 },
@@ -101,9 +107,82 @@ export default function ProfileEditScreen() {
     if (!original) return;
     saveUsername(original);
     saveTestOriginalUsername('');
+
+    const originalUserId = getTestOriginalUserId();
+    if (originalUserId) {
+      saveUserId(originalUserId);
+      saveTestOriginalUserId('');
+      const originalGuildId = getTestOriginalGuildId();
+      if (originalGuildId !== '__UNSET__') {
+        saveGuildId(originalGuildId);
+      }
+      saveTestOriginalGuildId('__UNSET__');
+    }
+
     setName(original);
     setIsTestMode(false);
     Alert.alert('복원 완료', `"${original}" 계정으로 복원되었습니다.`);
+  };
+
+  const GUILD_LEADER_USER_ID = '217c1aa9-5d64-4f0b-b3d8-0f0da60aadb7';
+  const GUILD_LEADER_GUILD_ID = 'g_1780029876275_ykeem';
+  const GUILD_LEADER_USERNAME = '판타지모임장';
+
+  // 길드 회원 계정 — Firebase guild_members에서 조회한 멤버 userId로 교체
+  const GUILD_MEMBER_USER_ID = 'REPLACE_WITH_MEMBER_USER_ID';
+  const GUILD_MEMBER_GUILD_ID = 'g_1780029876275_ykeem';
+  const GUILD_MEMBER_USERNAME = '판타지모임원';
+
+  const handleSwitchToGuildLeader = () => {
+    const original = getUsername();
+    if (!original) return;
+    Alert.alert(
+      '길드 리더 계정으로 전환',
+      `현재 닉네임 "${original}"을 보존하고\n판타지 소설 모임 리더 계정으로 전환합니다.\n\n테스트 후 "원래 계정으로 복원"을 눌러주세요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '전환',
+          onPress: () => {
+            saveTestOriginalUsername(original);
+            saveTestOriginalUserId(getUserId());
+            saveTestOriginalGuildId(getGuildId());
+            saveUserId(GUILD_LEADER_USER_ID);
+            saveGuildId(GUILD_LEADER_GUILD_ID);
+            saveUsername(GUILD_LEADER_USERNAME);
+            setName(GUILD_LEADER_USERNAME);
+            setIsTestMode(true);
+            router.replace('/(tabs)/guild');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSwitchToGuildMember = () => {
+    const original = getUsername();
+    if (!original) return;
+    Alert.alert(
+      '길드 회원 계정으로 전환',
+      `현재 닉네임 "${original}"을 보존하고\n판타지 소설 모임 회원 계정으로 전환합니다.\n\n테스트 후 "원래 계정으로 복원"을 눌러주세요.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '전환',
+          onPress: () => {
+            saveTestOriginalUsername(original);
+            saveTestOriginalUserId(getUserId());
+            saveTestOriginalGuildId(getGuildId());
+            saveUserId(GUILD_MEMBER_USER_ID);
+            saveGuildId(GUILD_MEMBER_GUILD_ID);
+            saveUsername(GUILD_MEMBER_USERNAME);
+            setName(GUILD_MEMBER_USERNAME);
+            setIsTestMode(true);
+            router.replace('/(tabs)/guild');
+          },
+        },
+      ]
+    );
   };
 
   const parsedAge = parseInt(ageText, 10);
@@ -231,7 +310,7 @@ export default function ProfileEditScreen() {
               <View style={styles.testModeBadge}>
                 <Ionicons name="warning-outline" size={14} color="#FF9800" />
                 <Text style={styles.testModeBadgeText}>
-                  {name === 'nireat' ? '운영자 테스트 계정 사용 중' : name === '테스트_임시계정2' ? '임시 테스트 계정2 사용 중' : '임시 테스트 계정 사용 중'}
+                  {name === 'nireat' ? '운영자 테스트 계정 사용 중' : name === '테스트_임시계정2' ? '임시 테스트 계정2 사용 중' : name === GUILD_LEADER_USERNAME ? '판타지 소설 모임 리더 계정 사용 중' : '임시 테스트 계정 사용 중'}
                 </Text>
               </View>
               <TouchableOpacity style={styles.restoreBtn} onPress={handleRestoreAccount} activeOpacity={0.8}>
@@ -255,6 +334,14 @@ export default function ProfileEditScreen() {
                   <Text style={styles.testBtnText}>운영자 테스트 계정으로 전환</Text>
                 </TouchableOpacity>
               )}
+              <TouchableOpacity style={styles.testBtn} onPress={handleSwitchToGuildLeader} activeOpacity={0.8}>
+                <Ionicons name="people-circle-outline" size={15} color="#9E9E9E" />
+                <Text style={styles.testBtnText}>판타지 소설 모임 리더 계정으로 전환</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.testBtn} onPress={handleSwitchToGuildMember} activeOpacity={0.8}>
+                <Ionicons name="person-outline" size={15} color="#9E9E9E" />
+                <Text style={styles.testBtnText}>판타지 소설 모임 회원 계정으로 전환</Text>
+              </TouchableOpacity>
             </>
           )}
         </View>

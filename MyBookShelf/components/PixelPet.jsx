@@ -1,11 +1,13 @@
 import { View, Animated, Text, StyleSheet } from 'react-native';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { PIXEL_PETS } from '../constants/pixelSprites';
+// import { PET_VIDEO_CONFIG, PET_VIDEO_W, PET_VIDEO_H } from '../constants/petVideos';
+// import PetVideo from './PetVideo';
 
 const PIXEL = 5;
 const ROOM_H = 140;
 
-export default function PixelPet({ petType, stats = {} }) {
+export default function PixelPet({ petType, stats = {}, eatTick = 0, eatEmoji = '🍖', equipped = {} }) {
   const [roomWidth, setRoomWidth] = useState(0);
   const posX = useRef(new Animated.Value(8)).current;
   const bounce = useRef(new Animated.Value(0)).current;
@@ -17,6 +19,18 @@ export default function PixelPet({ petType, stats = {} }) {
   const timerRef = useRef(null);
   const bounceAnim = useRef(null);
 
+  const [isEating, setIsEating] = useState(false);
+  const [useEatFrame, setUseEatFrame] = useState(false);
+  const eatBounce = useRef(new Animated.Value(0)).current;
+  const foodY = useRef(new Animated.Value(-28)).current;
+  const foodOpacity = useRef(new Animated.Value(0)).current;
+  const heartY = useRef(new Animated.Value(0)).current;
+  const heartOpacity = useRef(new Animated.Value(0)).current;
+  const eatFrameTimer = useRef(null);
+
+  // const videoCfg = PET_VIDEO_CONFIG[petType];
+  // const isVideoMode = !!(videoCfg?.enabled && videoCfg?.sources);
+  const isVideoMode = false;
   const sprite = PIXEL_PETS[petType] ?? PIXEL_PETS.cat;
   const petW = sprite.cols * PIXEL;
   const petH = sprite.rows * PIXEL;
@@ -26,7 +40,7 @@ export default function PixelPet({ petType, stats = {} }) {
     stats.happiness ?? 100,
     stats.cleanliness ?? 100
   );
-  const mode = minStat < 20 ? 'sleep' : minStat < 40 ? 'idle' : 'walk';
+  const mode = isEating ? 'idle' : (minStat < 20 ? 'sleep' : minStat < 40 ? 'idle' : 'walk');
 
   useEffect(() => {
     mountedRef.current = true;
@@ -35,8 +49,59 @@ export default function PixelPet({ petType, stats = {} }) {
       animRef.current?.stop?.();
       bounceAnim.current?.stop?.();
       clearTimeout(timerRef.current);
+      clearInterval(eatFrameTimer.current);
     };
   }, []);
+
+  // 먹기 애니메이션: 음식 낙하 → 씹기(eat 프레임 토글) → 하트 상승
+  useEffect(() => {
+    if (eatTick === 0) return;
+    setIsEating(true);
+    setUseEatFrame(false);
+    eatBounce.setValue(0);
+    foodY.setValue(-28);
+    foodOpacity.setValue(0);
+    heartY.setValue(0);
+    heartOpacity.setValue(0);
+
+    // 씹기 프레임: idle(0) ↔ eat(3) 150ms 간격으로 토글
+    let toggle = false;
+    eatFrameTimer.current = setInterval(() => {
+      toggle = !toggle;
+      if (mountedRef.current) setUseEatFrame(toggle);
+    }, 150);
+
+    Animated.sequence([
+      // ① 음식 이모지 낙하
+      Animated.parallel([
+        Animated.timing(foodY,       { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(foodOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]),
+      // ② 씹는 바운스 (3회)
+      Animated.sequence([
+        Animated.timing(eatBounce, { toValue: -6, duration: 100, useNativeDriver: true }),
+        Animated.timing(eatBounce, { toValue:  0, duration: 80,  useNativeDriver: true }),
+        Animated.timing(eatBounce, { toValue: -6, duration: 100, useNativeDriver: true }),
+        Animated.timing(eatBounce, { toValue:  0, duration: 80,  useNativeDriver: true }),
+        Animated.timing(eatBounce, { toValue: -5, duration: 90,  useNativeDriver: true }),
+        Animated.timing(eatBounce, { toValue:  0, duration: 80,  useNativeDriver: true }),
+      ]),
+      // ③ 음식 페이드 아웃
+      Animated.timing(foodOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+      // ④ 하트 위로 둥실
+      Animated.parallel([
+        Animated.timing(heartOpacity, { toValue: 1,   duration: 120, useNativeDriver: true }),
+        Animated.timing(heartY,       { toValue: -36, duration: 580, useNativeDriver: true }),
+      ]),
+      Animated.timing(heartOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => {
+      clearInterval(eatFrameTimer.current);
+      if (mountedRef.current) {
+        setIsEating(false);
+        setUseEatFrame(false);
+      }
+    });
+  }, [eatTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Frame switching
   useEffect(() => {
@@ -110,7 +175,8 @@ export default function PixelPet({ petType, stats = {} }) {
     setRoomWidth(e.nativeEvent.layout.width);
   }, []);
 
-  const frameData = sprite.frames[Math.min(frame, sprite.frames.length - 1)];
+  const frameIdx = mode === 'sleep' ? 2 : isEating && useEatFrame ? 3 : mode === 'idle' ? 0 : frame;
+  const frameData = sprite.frames[Math.min(frameIdx, sprite.frames.length - 1)];
   const palette = sprite.palette;
 
   const isFish = petType === 'fish';
@@ -143,13 +209,63 @@ export default function PixelPet({ petType, stats = {} }) {
             bottom: isFish ? ROOM_H / 2 - petH / 2 : 12,
             transform: [
               { translateX: posX },
-              { translateY: bounce },
+              { translateY: isEating ? eatBounce : bounce },
               { scaleX: facingRight ? 1 : -1 },
             ],
           },
         ]}
       >
-        {frameData.map((row, ri) => (
+        {/* 코스튬 오버레이 — scaleX 방향 반전 보정 */}
+        {equipped.hat?.emoji ? (
+          <Text style={[styles.costumeOverlay, { top: -18, fontSize: 14,
+            transform: [{ scaleX: facingRight ? 1 : -1 }] }]}>
+            {equipped.hat.emoji}
+          </Text>
+        ) : null}
+        {equipped.clothes?.emoji ? (
+          <Text style={[styles.costumeOverlay, { bottom: 0, fontSize: 12,
+            transform: [{ scaleX: facingRight ? 1 : -1 }] }]}>
+            {equipped.clothes.emoji}
+          </Text>
+        ) : null}
+        {equipped.accessory?.emoji ? (
+          <Text style={[styles.costumeOverlay, { top: Math.round(petH * 0.3), right: -8, left: 'auto', fontSize: 11,
+            transform: [{ scaleX: facingRight ? 1 : -1 }] }]}>
+            {equipped.accessory.emoji}
+          </Text>
+        ) : null}
+
+        {isEating && (
+          <Animated.Text
+            style={{
+              position: 'absolute',
+              top: -26,
+              left: 0,
+              right: 0,
+              textAlign: 'center',
+              fontSize: 18,
+              transform: [{ translateY: foodY }, { scaleX: facingRight ? 1 : -1 }],
+              opacity: foodOpacity,
+            }}
+          >
+            {eatEmoji}
+          </Animated.Text>
+        )}
+        <Animated.Text
+          style={{
+            position: 'absolute',
+            top: -28,
+            left: 0,
+            right: 0,
+            textAlign: 'center',
+            fontSize: 13,
+            transform: [{ translateY: heartY }, { scaleX: facingRight ? 1 : -1 }],
+            opacity: heartOpacity,
+          }}
+        >
+          💕
+        </Animated.Text>
+        {(frameData ?? []).map((row, ri) => (
           <View key={ri} style={styles.pixelRow}>
             {row.map((colorIdx, ci) => (
               <View
@@ -216,6 +332,12 @@ const styles = StyleSheet.create({
   },
   petAnchor: {
     position: 'absolute',
+  },
+  costumeOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
   },
   pixelRow: {
     flexDirection: 'row',

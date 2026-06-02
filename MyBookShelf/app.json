@@ -22,7 +22,8 @@
           "cameraPermission": "책 인증을 위해 카메라 권한이 필요합니다.",
           "microphonePermission": "비디오 촬영 시 마이크 권한이 필요합니다."
         }
-      ]
+      ],
+      "expo-video"
     ],
     "extra": {
       "router": {},
