@@ -56,7 +56,17 @@ export default function MessageScreen() {
     setMessages(await getMessages());
   }
 
-  const filtered = messages.filter((m) => filter === '전체' || m.status === filter);
+  const STATUS_ORDER = { 미확인: 0, 처리중: 1, 확인: 2, 완료: 3 };
+  const PRIORITY_ORDER = { 긴급: 0, 일반: 1, 낮음: 2 };
+  const filtered = messages
+    .filter((m) => filter === '전체' || m.status === filter)
+    .sort((a, b) => {
+      if (STATUS_ORDER[a.status] !== STATUS_ORDER[b.status])
+        return STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+      if (PRIORITY_ORDER[a.priority] !== PRIORITY_ORDER[b.priority])
+        return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+      return (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt);
+    });
   const unreadCount = messages.filter((m) => m.status === '미확인').length;
 
   async function handleAdd() {
