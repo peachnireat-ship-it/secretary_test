@@ -57,6 +57,16 @@ export default function ProjectScreen() {
   const [newPriority, setNewPriority] = useState('보통');
   const [newNotes, setNewNotes] = useState('');
 
+  const [showDetail, setShowDetail] = useState(false);
+  const [detailProject, setDetailProject] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDeadline, setEditDeadline] = useState('');
+  const [editStatus, setEditStatus] = useState('진행중');
+  const [editProgress, setEditProgress] = useState('0');
+  const [editPriority, setEditPriority] = useState('보통');
+  const [editNotes, setEditNotes] = useState('');
+
   const [showAI, setShowAI] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { role: 'assistant', text: '안녕하세요! 프로젝트 지연 분석 AI입니다.\n\n"전체 지연 분석해줘", "가장 위험한 프로젝트가 뭐야?", "이번 주 조치 계획 세워줘" 와 같이 물어보세요.' },
@@ -99,6 +109,38 @@ export default function ProjectScreen() {
       { text: '취소', style: 'cancel' },
       { text: '삭제', style: 'destructive', onPress: async () => { setProjects(await deleteProject(id)); } },
     ]);
+  }
+
+  function openDetail(project) {
+    setDetailProject(project);
+    setEditMode(false);
+    setShowDetail(true);
+  }
+
+  function startEdit(project) {
+    setEditTitle(project.title);
+    setEditDeadline(project.deadline);
+    setEditStatus(project.status);
+    setEditProgress(String(project.progress));
+    setEditPriority(project.priority);
+    setEditNotes(project.notes || '');
+    setEditMode(true);
+  }
+
+  async function handleEditSave() {
+    if (!editTitle.trim() || !editDeadline.trim()) return;
+    const updated = await updateProject(detailProject.id, {
+      title: editTitle.trim(),
+      deadline: editDeadline.trim(),
+      status: editStatus,
+      progress: parseInt(editProgress) || 0,
+      priority: editPriority,
+      notes: editNotes.trim(),
+    });
+    setProjects(updated);
+    const refreshed = updated.find((p) => p.id === detailProject.id);
+    setDetailProject(refreshed);
+    setEditMode(false);
   }
 
   async function handleProgressUpdate(id, newProg) {
@@ -226,6 +268,7 @@ export default function ProjectScreen() {
                 key={item.id}
                 style={[s.card, risk && s.cardRisk]}
                 activeOpacity={0.75}
+                onPress={() => openDetail(item)}
                 onLongPress={() => handleDelete(item.id, item.title)}
               >
                 {/* 타이틀 행 */}
@@ -276,6 +319,141 @@ export default function ProjectScreen() {
       <TouchableOpacity style={s.fab} onPress={() => setShowAdd(true)}>
         <Text style={s.fabText}>+</Text>
       </TouchableOpacity>
+
+      {/* ── 프로젝트 상세 모달 ── */}
+      <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => setShowDetail(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
+            <View style={s.modalHandle} />
+            {detailProject && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* 헤더 */}
+                <View style={s.detailHeader}>
+                  <View style={{ flex: 1 }}>
+                    {!editMode ? (
+                      <Text style={s.detailTitle}>{detailProject.title}</Text>
+                    ) : (
+                      <>
+                        <Text style={s.inputLabel}>제목</Text>
+                        <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholderTextColor={C.textDim} />
+                      </>
+                    )}
+                  </View>
+                  <TouchableOpacity onPress={() => { setShowDetail(false); setEditMode(false); }}>
+                    <Text style={s.closeBtn}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* 상태 · 우선순위 */}
+                {!editMode ? (
+                  <View style={s.detailBadgeRow}>
+                    <View style={[s.statusBadge, { borderColor: statusColor(detailProject.status) + '66', backgroundColor: statusColor(detailProject.status) + '18' }]}>
+                      <Text style={[s.statusText, { color: statusColor(detailProject.status) }]}>{detailProject.status}</Text>
+                    </View>
+                    <View style={[s.priorityBadge, { borderColor: priorityColor(detailProject.priority) + '55' }]}>
+                      <Text style={[s.priorityText, { color: priorityColor(detailProject.priority) }]}>{detailProject.priority}</Text>
+                    </View>
+                    {isAtRisk(detailProject) && (
+                      <Text style={{ color: C.gold, fontSize: 11 }}>⚠ 위험</Text>
+                    )}
+                  </View>
+                ) : (
+                  <>
+                    <Text style={s.inputLabel}>상태</Text>
+                    <View style={s.optionRow}>
+                      {STATUSES.map((st) => (
+                        <TouchableOpacity key={st} style={[s.optionBtn, editStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => setEditStatus(st)}>
+                          <Text style={[s.optionText, editStatus === st && { color: statusColor(st) }]}>{st}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={s.inputLabel}>우선순위</Text>
+                    <View style={s.optionRow}>
+                      {PRIORITIES.map((pr) => (
+                        <TouchableOpacity key={pr} style={[s.optionBtn, editPriority === pr && { borderColor: priorityColor(pr) + '88', backgroundColor: priorityColor(pr) + '18' }]} onPress={() => setEditPriority(pr)}>
+                          <Text style={[s.optionText, editPriority === pr && { color: priorityColor(pr) }]}>{pr}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {/* 진행률 */}
+                <View style={s.detailSection}>
+                  <Text style={s.detailSectionLabel}>진행률</Text>
+                  {!editMode ? (
+                    <>
+                      <View style={[s.progressTrack, { marginTop: 8, height: 6 }]}>
+                        <View style={[s.progressFill, { width: `${detailProject.progress}%`, backgroundColor: statusColor(detailProject.status) }]} />
+                      </View>
+                      <Text style={[s.detailValue, { marginTop: 6 }]}>{detailProject.progress}%</Text>
+                    </>
+                  ) : (
+                    <TextInput style={s.input} value={editProgress} onChangeText={setEditProgress} keyboardType="numeric" placeholderTextColor={C.textDim} />
+                  )}
+                </View>
+
+                {/* 마감일 */}
+                <View style={s.detailSection}>
+                  <Text style={s.detailSectionLabel}>마감일</Text>
+                  {!editMode ? (
+                    (() => {
+                      const days = daysUntil(detailProject.deadline);
+                      return (
+                        <Text style={[s.detailValue, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                          {detailProject.deadline}  ·  {daysLabel(days)}
+                        </Text>
+                      );
+                    })()
+                  ) : (
+                    <TextInput style={s.input} value={editDeadline} onChangeText={setEditDeadline} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} />
+                  )}
+                </View>
+
+                {/* 메모 */}
+                <View style={s.detailSection}>
+                  <Text style={s.detailSectionLabel}>메모</Text>
+                  {!editMode ? (
+                    <Text style={[s.detailValue, !detailProject.notes && { color: C.textDim, fontStyle: 'italic' }]}>
+                      {detailProject.notes || '메모 없음'}
+                    </Text>
+                  ) : (
+                    <TextInput style={[s.input, { height: 80 }]} value={editNotes} onChangeText={setEditNotes} multiline placeholder="메모" placeholderTextColor={C.textDim} />
+                  )}
+                </View>
+
+                {/* 버튼 */}
+                <View style={s.modalBtns}>
+                  {!editMode ? (
+                    <>
+                      <TouchableOpacity style={s.modalCancel} onPress={() => {
+                        Alert.alert('삭제', `"${detailProject.title}" 프로젝트를 삭제할까요?`, [
+                          { text: '취소', style: 'cancel' },
+                          { text: '삭제', style: 'destructive', onPress: async () => { setProjects(await deleteProject(detailProject.id)); setShowDetail(false); } },
+                        ]);
+                      }}>
+                        <Text style={[s.modalCancelText, { color: C.red }]}>삭제</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.modalConfirm} onPress={() => startEdit(detailProject)}>
+                        <Text style={s.modalConfirmText}>수정</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
+                        <Text style={s.modalCancelText}>취소</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
+                        <Text style={s.modalConfirmText}>저장</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* ── 프로젝트 추가 모달 ── */}
       <Modal visible={showAdd} animationType="slide" transparent>
@@ -456,6 +634,13 @@ const s = StyleSheet.create({
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
   modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.gold, alignItems: 'center' },
   modalConfirmText: { color: '#09090E', fontSize: 14, fontWeight: '600' },
+
+  detailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
+  detailTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '500', flex: 1, marginRight: 12 },
+  detailBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  detailSection: { marginTop: 18 },
+  detailSectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 6 },
+  detailValue: { color: C.textSecondary, fontSize: 14, lineHeight: 20 },
 
   chatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   chatHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },

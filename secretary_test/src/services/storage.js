@@ -5,6 +5,7 @@ const KEYS = {
   clients: 'clients_v1',
   histories: 'histories_v1',
   projects: 'projects_v1',
+  messages: 'messages_v1',
   apiKey: 'claude_api_key',
   grokApiKey: 'grok_api_key',
   aiProvider: 'ai_provider',
@@ -146,6 +147,40 @@ export async function deleteProject(id) {
   return updated;
 }
 
+// ── Messages ──────────────────────────────────────────────
+export async function getMessages() {
+  const raw = await AsyncStorage.getItem(KEYS.messages);
+  if (raw) return JSON.parse(raw);
+  const sample = getSampleMessages();
+  await AsyncStorage.setItem(KEYS.messages, JSON.stringify(sample));
+  return sample;
+}
+
+export async function saveMessages(messages) {
+  await AsyncStorage.setItem(KEYS.messages, JSON.stringify(messages));
+}
+
+export async function addMessage(message) {
+  const list = await getMessages();
+  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...message }, ...list];
+  await saveMessages(updated);
+  return updated;
+}
+
+export async function updateMessage(id, changes) {
+  const list = await getMessages();
+  const updated = list.map((m) => (m.id === id ? { ...m, ...changes, updatedAt: Date.now() } : m));
+  await saveMessages(updated);
+  return updated;
+}
+
+export async function deleteMessage(id) {
+  const list = await getMessages();
+  const updated = list.filter((m) => m.id !== id);
+  await saveMessages(updated);
+  return updated;
+}
+
 // ── Sample Data ───────────────────────────────────────────
 function todayStr(offsetDays = 0) {
   const d = new Date();
@@ -181,6 +216,17 @@ function getSampleProjects() {
     { id: 'p4', title: 'SNS 마케팅 캠페인 기획', deadline: todayStr(21), status: '진행중', progress: 20, priority: '보통', notes: '디자인팀 일정 조율 필요', createdAt: Date.now() - 86400000 * 5 },
     { id: 'p5', title: '2024 연간 계약 재검토', deadline: todayStr(-5), status: '지연', progress: 80, priority: '높음', notes: '법무팀 검토 대기 중', createdAt: Date.now() - 86400000 * 45 },
     { id: 'p6', title: '내부 보안 감사', deadline: todayStr(-10), status: '완료', progress: 100, priority: '높음', notes: '일정 내 완료', createdAt: Date.now() - 86400000 * 60 },
+  ];
+}
+
+function getSampleMessages() {
+  const base = Date.now();
+  return [
+    { id: 'm1', sender: '김민준', company: '삼성물산', subject: 'Q3 납품 일정 조율 요청', content: '안녕하세요. Q3 납품 일정을 이번 주 내로 확정해 주실 수 있을까요? 내부 생산 계획 수립에 필요합니다.', priority: '긴급', status: '미확인', createdAt: base - 3600000 * 2 },
+    { id: 'm2', sender: '이서연', company: '현대건설', subject: '제안서 검토 완료', content: '보내주신 제안서 검토가 완료되었습니다. 몇 가지 수정 사항이 있어 회신 드립니다. 다음 주 미팅 일정도 조율 부탁드립니다.', priority: '일반', status: '확인', createdAt: base - 3600000 * 5 },
+    { id: 'm3', sender: '박지훈', company: 'LG전자', subject: '계약서 보증 기간 관련 문의', content: '계약서 상의 보증 기간을 2년에서 3년으로 연장 가능한지 검토 부탁드립니다. 법무팀과 협의 후 회신 주세요.', priority: '일반', status: '처리중', createdAt: base - 86400000 * 1 },
+    { id: 'm4', sender: '최수아', company: 'SK텔레콤', subject: 'PoC 일정 확인', content: 'PoC 진행 일정을 다음 달 초로 확정하고 싶습니다. 담당자 배정 및 환경 준비 현황 공유 부탁드립니다.', priority: '긴급', status: '미확인', createdAt: base - 86400000 * 2 },
+    { id: 'm5', sender: '정우성', company: '내부', subject: '주간 보고서 제출 안내', content: '이번 주 금요일까지 주간 업무 보고서를 팀 공유 폴더에 업로드해 주세요.', priority: '낮음', status: '완료', createdAt: base - 86400000 * 3 },
   ];
 }
 
