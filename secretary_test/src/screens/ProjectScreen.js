@@ -2,6 +2,7 @@ import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { useState, useEffect, useRef } from 'react';
 import { C } from '../theme';
 import { getProjects, addProject, updateProject, deleteProject } from '../services/storage';
@@ -59,11 +60,11 @@ export default function ProjectScreen() {
 
   const [showDetail, setShowDetail] = useState(false);
   const [detailProject, setDetailProject] = useState(null);
-  const [editMode, setEditMode] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
   const [editStatus, setEditStatus] = useState('진행중');
-  const [editProgress, setEditProgress] = useState('0');
+  const [editProgress, setEditProgress] = useState(0);
+  const [quickSlider, setQuickSlider] = useState(null);
   const [editPriority, setEditPriority] = useState('보통');
   const [editNotes, setEditNotes] = useState('');
 
@@ -113,18 +114,13 @@ export default function ProjectScreen() {
 
   function openDetail(project) {
     setDetailProject(project);
-    setEditMode(false);
-    setShowDetail(true);
-  }
-
-  function startEdit(project) {
     setEditTitle(project.title);
     setEditDeadline(project.deadline);
     setEditStatus(project.status);
-    setEditProgress(String(project.progress));
+    setEditProgress(project.progress ?? 0);
     setEditPriority(project.priority);
     setEditNotes(project.notes || '');
-    setEditMode(true);
+    setShowDetail(true);
   }
 
   async function handleEditSave() {
@@ -133,14 +129,14 @@ export default function ProjectScreen() {
       title: editTitle.trim(),
       deadline: editDeadline.trim(),
       status: editStatus,
-      progress: parseInt(editProgress) || 0,
+      progress: editProgress,
       priority: editPriority,
       notes: editNotes.trim(),
     });
     setProjects(updated);
     const refreshed = updated.find((p) => p.id === detailProject.id);
     setDetailProject(refreshed);
-    setEditMode(false);
+    setShowDetail(false);
   }
 
   async function handleProgressUpdate(id, newProg) {
@@ -288,12 +284,7 @@ export default function ProjectScreen() {
                 </View>
                 <View style={s.progressRow}>
                   <Text style={s.progressLabel}>{item.progress}% 완료</Text>
-                  <TouchableOpacity onPress={() => {
-                    Alert.prompt ? Alert.prompt('진행률 업데이트', '0~100 입력', (val) => {
-                      const num = parseInt(val);
-                      if (!isNaN(num) && num >= 0 && num <= 100) handleProgressUpdate(item.id, num);
-                    }) : Alert.alert('진행률 업데이트', '앱에서 직접 탭하여 수정하세요');
-                  }}>
+                  <TouchableOpacity onPress={() => setQuickSlider({ id: item.id, value: item.progress })}>
                     <Text style={s.editProgress}>수정</Text>
                   </TouchableOpacity>
                 </View>
@@ -327,127 +318,88 @@ export default function ProjectScreen() {
             <View style={s.modalHandle} />
             {detailProject && (
               <ScrollView showsVerticalScrollIndicator={false}>
-                {/* 헤더 */}
+                {/* 헤더: 제목 + 닫기 */}
                 <View style={s.detailHeader}>
                   <View style={{ flex: 1 }}>
-                    {!editMode ? (
-                      <Text style={s.detailTitle}>{detailProject.title}</Text>
-                    ) : (
-                      <>
-                        <Text style={s.inputLabel}>제목</Text>
-                        <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholderTextColor={C.textDim} />
-                      </>
-                    )}
+                    <Text style={s.inputLabel}>제목</Text>
+                    <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholderTextColor={C.textDim} />
                   </View>
-                  <TouchableOpacity onPress={() => { setShowDetail(false); setEditMode(false); }}>
+                  <TouchableOpacity onPress={() => setShowDetail(false)} style={{ marginLeft: 12, marginTop: 20 }}>
                     <Text style={s.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
 
-                {/* 상태 · 우선순위 */}
-                {!editMode ? (
-                  <View style={s.detailBadgeRow}>
-                    <View style={[s.statusBadge, { borderColor: statusColor(detailProject.status) + '66', backgroundColor: statusColor(detailProject.status) + '18' }]}>
-                      <Text style={[s.statusText, { color: statusColor(detailProject.status) }]}>{detailProject.status}</Text>
-                    </View>
-                    <View style={[s.priorityBadge, { borderColor: priorityColor(detailProject.priority) + '55' }]}>
-                      <Text style={[s.priorityText, { color: priorityColor(detailProject.priority) }]}>{detailProject.priority}</Text>
-                    </View>
-                    {isAtRisk(detailProject) && (
-                      <Text style={{ color: C.gold, fontSize: 11 }}>⚠ 위험</Text>
-                    )}
-                  </View>
-                ) : (
-                  <>
-                    <Text style={s.inputLabel}>상태</Text>
-                    <View style={s.optionRow}>
-                      {STATUSES.map((st) => (
-                        <TouchableOpacity key={st} style={[s.optionBtn, editStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => setEditStatus(st)}>
-                          <Text style={[s.optionText, editStatus === st && { color: statusColor(st) }]}>{st}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <Text style={s.inputLabel}>우선순위</Text>
-                    <View style={s.optionRow}>
-                      {PRIORITIES.map((pr) => (
-                        <TouchableOpacity key={pr} style={[s.optionBtn, editPriority === pr && { borderColor: priorityColor(pr) + '88', backgroundColor: priorityColor(pr) + '18' }]} onPress={() => setEditPriority(pr)}>
-                          <Text style={[s.optionText, editPriority === pr && { color: priorityColor(pr) }]}>{pr}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </>
-                )}
+                {/* 상태 */}
+                <Text style={s.inputLabel}>상태</Text>
+                <View style={s.optionRow}>
+                  {STATUSES.map((st) => (
+                    <TouchableOpacity key={st} style={[s.optionBtn, editStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => setEditStatus(st)}>
+                      <Text style={[s.optionText, editStatus === st && { color: statusColor(st) }]}>{st}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* 우선순위 */}
+                <Text style={s.inputLabel}>우선순위</Text>
+                <View style={s.optionRow}>
+                  {PRIORITIES.map((pr) => (
+                    <TouchableOpacity key={pr} style={[s.optionBtn, editPriority === pr && { borderColor: priorityColor(pr) + '88', backgroundColor: priorityColor(pr) + '18' }]} onPress={() => setEditPriority(pr)}>
+                      <Text style={[s.optionText, editPriority === pr && { color: priorityColor(pr) }]}>{pr}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
                 {/* 진행률 */}
-                <View style={s.detailSection}>
-                  <Text style={s.detailSectionLabel}>진행률</Text>
-                  {!editMode ? (
-                    <>
-                      <View style={[s.progressTrack, { marginTop: 8, height: 6 }]}>
-                        <View style={[s.progressFill, { width: `${detailProject.progress}%`, backgroundColor: statusColor(detailProject.status) }]} />
-                      </View>
-                      <Text style={[s.detailValue, { marginTop: 6 }]}>{detailProject.progress}%</Text>
-                    </>
-                  ) : (
-                    <TextInput style={s.input} value={editProgress} onChangeText={setEditProgress} keyboardType="numeric" placeholderTextColor={C.textDim} />
-                  )}
+                <Text style={s.inputLabel}>진행률 (%)</Text>
+                <View style={s.sliderWrap}>
+                  <Text style={s.sliderVal}>{editProgress}%</Text>
+                  <Slider
+                    style={s.slider}
+                    minimumValue={0}
+                    maximumValue={100}
+                    step={1}
+                    value={editProgress}
+                    onValueChange={(v) => setEditProgress(Math.round(v))}
+                    minimumTrackTintColor={statusColor(editStatus)}
+                    maximumTrackTintColor={C.border}
+                    thumbTintColor={statusColor(editStatus)}
+                  />
                 </View>
 
                 {/* 마감일 */}
-                <View style={s.detailSection}>
-                  <Text style={s.detailSectionLabel}>마감일</Text>
-                  {!editMode ? (
-                    (() => {
-                      const days = daysUntil(detailProject.deadline);
-                      return (
-                        <Text style={[s.detailValue, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
-                          {detailProject.deadline}  ·  {daysLabel(days)}
-                        </Text>
-                      );
-                    })()
-                  ) : (
-                    <TextInput style={s.input} value={editDeadline} onChangeText={setEditDeadline} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} />
-                  )}
-                </View>
+                <Text style={s.inputLabel}>마감일 (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={s.input}
+                  value={editDeadline}
+                  onChangeText={setEditDeadline}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={C.textDim}
+                />
 
                 {/* 메모 */}
-                <View style={s.detailSection}>
-                  <Text style={s.detailSectionLabel}>메모</Text>
-                  {!editMode ? (
-                    <Text style={[s.detailValue, !detailProject.notes && { color: C.textDim, fontStyle: 'italic' }]}>
-                      {detailProject.notes || '메모 없음'}
-                    </Text>
-                  ) : (
-                    <TextInput style={[s.input, { height: 80 }]} value={editNotes} onChangeText={setEditNotes} multiline placeholder="메모" placeholderTextColor={C.textDim} />
-                  )}
-                </View>
+                <Text style={s.inputLabel}>메모 (선택)</Text>
+                <TextInput
+                  style={[s.input, { height: 80 }]}
+                  value={editNotes}
+                  onChangeText={setEditNotes}
+                  multiline
+                  placeholder="메모를 입력하세요"
+                  placeholderTextColor={C.textDim}
+                />
 
                 {/* 버튼 */}
                 <View style={s.modalBtns}>
-                  {!editMode ? (
-                    <>
-                      <TouchableOpacity style={s.modalCancel} onPress={() => {
-                        Alert.alert('삭제', `"${detailProject.title}" 프로젝트를 삭제할까요?`, [
-                          { text: '취소', style: 'cancel' },
-                          { text: '삭제', style: 'destructive', onPress: async () => { setProjects(await deleteProject(detailProject.id)); setShowDetail(false); } },
-                        ]);
-                      }}>
-                        <Text style={[s.modalCancelText, { color: C.red }]}>삭제</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={s.modalConfirm} onPress={() => startEdit(detailProject)}>
-                        <Text style={s.modalConfirmText}>수정</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <>
-                      <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
-                        <Text style={s.modalCancelText}>취소</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
-                        <Text style={s.modalConfirmText}>저장</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
+                  <TouchableOpacity style={s.modalCancel} onPress={() => {
+                    Alert.alert('삭제', `"${detailProject.title}" 프로젝트를 삭제할까요?`, [
+                      { text: '취소', style: 'cancel' },
+                      { text: '삭제', style: 'destructive', onPress: async () => { setProjects(await deleteProject(detailProject.id)); setShowDetail(false); } },
+                    ]);
+                  }}>
+                    <Text style={[s.modalCancelText, { color: C.red }]}>삭제</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
+                    <Text style={s.modalConfirmText}>저장</Text>
+                  </TouchableOpacity>
                 </View>
               </ScrollView>
             )}
@@ -568,6 +520,39 @@ export default function ProjectScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      {/* ── 진행률 슬라이더 모달 ── */}
+      {quickSlider && (
+        <Modal visible animationType="fade" transparent onRequestClose={() => setQuickSlider(null)}>
+          <TouchableOpacity style={s.qsOverlay} activeOpacity={1} onPress={() => setQuickSlider(null)}>
+            <TouchableOpacity activeOpacity={1} style={s.qsSheet} onPress={() => {}}>
+              <Text style={s.inputLabel}>진행률</Text>
+              <Text style={s.qsValue}>{quickSlider.value}%</Text>
+              <Slider
+                style={s.qsSlider}
+                minimumValue={0}
+                maximumValue={100}
+                step={1}
+                value={quickSlider.value}
+                onValueChange={(v) => setQuickSlider((q) => ({ ...q, value: Math.round(v) }))}
+                minimumTrackTintColor={C.gold}
+                maximumTrackTintColor={C.border}
+                thumbTintColor={C.gold}
+              />
+              <View style={s.modalBtns}>
+                <TouchableOpacity style={s.modalCancel} onPress={() => setQuickSlider(null)}>
+                  <Text style={s.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.modalConfirm} onPress={async () => {
+                  await handleProgressUpdate(quickSlider.id, quickSlider.value);
+                  setQuickSlider(null);
+                }}>
+                  <Text style={s.modalConfirmText}>저장</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -663,4 +648,13 @@ const s = StyleSheet.create({
   chatInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 24, color: C.textPrimary, fontSize: 14, paddingHorizontal: 18, paddingVertical: 12 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
   sendBtnText: { color: '#09090E', fontSize: 18, fontWeight: '600' },
+
+  sliderWrap: { marginBottom: 4, alignItems: 'center' },
+  slider: { width: '100%', height: 40 },
+  sliderVal: { color: C.textPrimary, fontSize: 20, fontWeight: '200', textAlign: 'center', marginBottom: 2 },
+
+  qsOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  qsSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 24, alignItems: 'center' },
+  qsValue: { color: C.textPrimary, fontSize: 48, fontWeight: '200', letterSpacing: -2, marginBottom: 4 },
+  qsSlider: { width: '100%', height: 44, marginBottom: 12 },
 });
