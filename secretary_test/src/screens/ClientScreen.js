@@ -102,7 +102,10 @@ export default function ClientScreen() {
   }
 
   async function handleAddClient() {
-    if (!newName.trim() || !newCompany.trim() || !newContact.trim()) return;
+    if (!newName.trim() || !newCompany.trim() || !newContact.trim()) {
+      Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.\n모두 입력 후 추가해주세요.');
+      return;
+    }
     const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), notes: newNotes.trim() });
     setClients(updated);
     setShowAddClient(false);
