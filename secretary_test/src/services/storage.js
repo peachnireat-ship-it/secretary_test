@@ -1,0 +1,152 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const KEYS = {
+  schedules: 'schedules_v1',
+  clients: 'clients_v1',
+  histories: 'histories_v1',
+  apiKey: 'claude_api_key',
+  grokApiKey: 'grok_api_key',
+  aiProvider: 'ai_provider',
+};
+
+// ── Groq API Key ──────────────────────────────────────────
+export async function getApiKey() {
+  const stored = await AsyncStorage.getItem(KEYS.apiKey);
+  return stored || process.env.EXPO_PUBLIC_GROQ_API_KEY || null;
+}
+
+export async function setApiKey(key) {
+  return AsyncStorage.setItem(KEYS.apiKey, key);
+}
+
+// ── Grok API Key ──────────────────────────────────────────
+export async function getGrokApiKey() {
+  const stored = await AsyncStorage.getItem(KEYS.grokApiKey);
+  return stored || process.env.EXPO_PUBLIC_GROK_API_KEY || null;
+}
+
+export async function setGrokApiKey(key) {
+  return AsyncStorage.setItem(KEYS.grokApiKey, key);
+}
+
+// ── AI Provider ───────────────────────────────────────────
+export async function getAiProvider() {
+  const stored = await AsyncStorage.getItem(KEYS.aiProvider);
+  return stored || 'groq';
+}
+
+export async function setAiProvider(provider) {
+  return AsyncStorage.setItem(KEYS.aiProvider, provider);
+}
+
+// ── Schedules ────────────────────────────────────────────
+export async function getSchedules() {
+  const raw = await AsyncStorage.getItem(KEYS.schedules);
+  if (raw) return JSON.parse(raw);
+  const sample = getSampleSchedules();
+  await AsyncStorage.setItem(KEYS.schedules, JSON.stringify(sample));
+  return sample;
+}
+
+export async function saveSchedules(schedules) {
+  await AsyncStorage.setItem(KEYS.schedules, JSON.stringify(schedules));
+}
+
+export async function addSchedule(schedule) {
+  const list = await getSchedules();
+  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...schedule }, ...list];
+  await saveSchedules(updated);
+  return updated;
+}
+
+export async function deleteSchedule(id) {
+  const list = await getSchedules();
+  const updated = list.filter((s) => s.id !== id);
+  await saveSchedules(updated);
+  return updated;
+}
+
+// ── Clients ───────────────────────────────────────────────
+export async function getClients() {
+  const raw = await AsyncStorage.getItem(KEYS.clients);
+  if (raw) return JSON.parse(raw);
+  const sample = getSampleClients();
+  await AsyncStorage.setItem(KEYS.clients, JSON.stringify(sample));
+  return sample;
+}
+
+export async function saveClients(clients) {
+  await AsyncStorage.setItem(KEYS.clients, JSON.stringify(clients));
+}
+
+export async function addClient(client) {
+  const list = await getClients();
+  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...client }, ...list];
+  await saveClients(updated);
+  return updated;
+}
+
+// ── Histories ─────────────────────────────────────────────
+export async function getHistories() {
+  const raw = await AsyncStorage.getItem(KEYS.histories);
+  if (raw) return JSON.parse(raw);
+  const sample = getSampleHistories();
+  await AsyncStorage.setItem(KEYS.histories, JSON.stringify(sample));
+  return sample;
+}
+
+export async function saveHistories(histories) {
+  await AsyncStorage.setItem(KEYS.histories, JSON.stringify(histories));
+}
+
+export async function addHistory(history) {
+  const list = await getHistories();
+  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...history }, ...list];
+  await saveHistories(updated);
+  return updated;
+}
+
+export async function getHistoriesByClient(clientId) {
+  const all = await getHistories();
+  return all.filter((h) => h.clientId === clientId).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+// ── Sample Data ───────────────────────────────────────────
+function todayStr(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().split('T')[0];
+}
+
+function getSampleSchedules() {
+  return [
+    { id: '1', date: todayStr(0), time: '10:00', title: '팀 스탠드업', tag: '회의', notes: '주간 진행 상황 공유', createdAt: Date.now() },
+    { id: '2', date: todayStr(0), time: '14:00', title: '클라이언트 리뷰', tag: '회의', notes: '삼성물산 Q2 결과 검토', createdAt: Date.now() },
+    { id: '3', date: todayStr(0), time: '16:30', title: '주간 보고서 제출', tag: '업무', notes: '', createdAt: Date.now() },
+    { id: '4', date: todayStr(1), time: '09:30', title: '신규 거래처 미팅', tag: '영업', notes: '현대건설 담당자 첫 만남', createdAt: Date.now() },
+    { id: '5', date: todayStr(1), time: '15:00', title: '계약서 검토', tag: '업무', notes: '', createdAt: Date.now() },
+    { id: '6', date: todayStr(2), time: '11:00', title: '내부 전략 회의', tag: '회의', notes: '하반기 목표 수립', createdAt: Date.now() },
+  ];
+}
+
+function getSampleClients() {
+  return [
+    { id: 'c1', name: '김민준', company: '삼성물산', role: '구매팀장', contact: '010-1234-5678', notes: '신뢰 높은 장기 거래처', createdAt: Date.now() - 86400000 * 30 },
+    { id: 'c2', name: '이서연', company: '현대건설', role: '기획팀 과장', contact: '010-9876-5432', notes: '신규 파트너 검토 중', createdAt: Date.now() - 86400000 * 7 },
+    { id: 'c3', name: '박지훈', company: 'LG전자', role: '영업이사', contact: '010-5555-7777', notes: '연간 계약 진행 중', createdAt: Date.now() - 86400000 * 60 },
+    { id: 'c4', name: '최수아', company: 'SK텔레콤', role: '마케팅 팀장', contact: '010-3333-9999', notes: '디지털 전환 프로젝트 논의', createdAt: Date.now() - 86400000 * 14 },
+  ];
+}
+
+function getSampleHistories() {
+  const base = Date.now();
+  return [
+    { id: 'h1', clientId: 'c1', date: todayStr(-3), type: '미팅', title: 'Q2 결과 검토 미팅', content: '2분기 납품 실적 검토 및 3분기 계획 논의. 전반적으로 만족스러운 결과.', result: '3분기 물량 10% 증가 합의', createdAt: base - 86400000 * 3 },
+    { id: 'h2', clientId: 'c1', date: todayStr(-15), type: '통화', title: '납품 일정 조율', content: '긴급 납품 일정 변경 요청. 1주일 앞당겨 처리 가능 여부 확인.', result: '납품일 조정 완료', createdAt: base - 86400000 * 15 },
+    { id: 'h3', clientId: 'c1', date: todayStr(-30), type: '계약', title: '연간 계약 갱신', content: '2024년 연간 계약 갱신 미팅. 단가 5% 인상 협의.', result: '계약 갱신 완료 (3% 인상)', createdAt: base - 86400000 * 30 },
+    { id: 'h4', clientId: 'c2', date: todayStr(-7), type: '미팅', title: '첫 미팅 및 니즈 파악', content: '현대건설 신규 프로젝트 관련 공급 가능 여부 논의. 담당자 이서연 과장과 첫 만남.', result: '2주 내 제안서 제출 요청', createdAt: base - 86400000 * 7 },
+    { id: 'h5', clientId: 'c3', date: todayStr(-5), type: '이메일', title: '계약 조건 수정 요청', content: 'LG전자 측에서 계약 조건 중 보증 기간 연장 요청 이메일 수신.', result: '내부 검토 후 회신 예정', createdAt: base - 86400000 * 5 },
+    { id: 'h6', clientId: 'c3', date: todayStr(-20), type: '미팅', title: '연간 계약 협상', content: '박지훈 이사와 연간 계약 조건 협상. 납품량 및 단가 논의.', result: '추가 검토 필요, 재미팅 예정', createdAt: base - 86400000 * 20 },
+    { id: 'h7', clientId: 'c4', date: todayStr(-14), type: '미팅', title: '디지털 전환 프로젝트 킥오프', content: 'SK텔레콤 디지털 전환 관련 솔루션 제안. 최수아 팀장과 요구사항 논의.', result: 'PoC 진행 합의', createdAt: base - 86400000 * 14 },
+  ];
+}
