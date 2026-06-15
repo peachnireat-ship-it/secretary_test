@@ -1,6 +1,8 @@
 import { Text, View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
+import { getSchedules, getClients, getProjects } from '../services/storage';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
@@ -21,23 +23,48 @@ function greeting(h) {
   return '좋은 저녁입니다';
 }
 
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
 export default function HomeScreen({ navigation }) {
   const now = useNow();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const dateLabel = `${now.getFullYear()}년 ${MONTHS[now.getMonth()]} ${now.getDate()}일 ${DAYS[now.getDay()]}요일`;
 
-  const STATS = [
-    { label: '일정', value: '2', unit: '건', color: C.accentBlue, tab: '일정' },
-    { label: '할 일', value: '5', unit: '건', color: C.gold, tab: null },
-    { label: '거래처', value: '4', unit: '곳', color: C.accentTeal, tab: '거래처' },
-    { label: '메모', value: '1', unit: '건', color: C.textSecondary, tab: null },
-  ];
+  const [todaySchedules, setTodaySchedules] = useState([]);
+  const [clientCount, setClientCount] = useState(0);
+  const [activeProjectCount, setActiveProjectCount] = useState(0);
+  const [delayedProjectCount, setDelayedProjectCount] = useState(0);
 
-  const AGENDA = [
-    { time: '10:00', title: '팀 스탠드업', tag: '회의' },
-    { time: '14:00', title: '클라이언트 리뷰', tag: '회의' },
-    { time: '16:30', title: '주간 보고서 제출', tag: '업무' },
+  useFocusEffect(
+    useCallback(() => {
+      async function load() {
+        const [schedules, clients, projects] = await Promise.all([
+          getSchedules(),
+          getClients(),
+          getProjects(),
+        ]);
+        const today = todayStr();
+        const todays = schedules
+          .filter((s) => s.date === today)
+          .sort((a, b) => a.time.localeCompare(b.time));
+        setTodaySchedules(todays);
+        setClientCount(clients.length);
+        const active = projects.filter((p) => p.status !== '완료' && p.status !== '취소');
+        setActiveProjectCount(active.length);
+        setDelayedProjectCount(projects.filter((p) => p.status === '지연' || p.status === '위험').length);
+      }
+      load();
+    }, [])
+  );
+
+  const STATS = [
+    { label: '오늘 일정', value: String(todaySchedules.length), unit: '건', color: C.accentBlue, tab: '일정' },
+    { label: '프로젝트', value: String(activeProjectCount), unit: '건', color: C.accentPurple, tab: '프로젝트' },
+    { label: '거래처', value: String(clientCount), unit: '곳', color: C.accentTeal, tab: '거래처' },
+    { label: '지연·위험', value: String(delayedProjectCount), unit: '건', color: delayedProjectCount > 0 ? C.red : C.textSecondary, tab: '프로젝트' },
   ];
 
   return (
@@ -82,18 +109,29 @@ export default function HomeScreen({ navigation }) {
       <View style={s.section}>
         <Text style={s.sectionLabel}>TODAY'S AGENDA</Text>
         <View style={s.card}>
-          {AGENDA.map((item, i) => (
-            <View key={i} style={[s.agendaRow, i < AGENDA.length - 1 && s.agendaRowBorder]}>
-              <Text style={s.agendaTime}>{item.time}</Text>
-              <View style={s.agendaMiddle}>
-                <View style={s.agendaLine} />
-              </View>
-              <View style={s.agendaRight}>
-                <Text style={s.agendaTitle}>{item.title}</Text>
-                <Text style={s.agendaTag}>{item.tag}</Text>
-              </View>
+          {todaySchedules.length === 0 ? (
+            <View style={s.agendaEmpty}>
+              <Text style={s.agendaEmptyText}>오늘 일정이 없습니다</Text>
             </View>
-          ))}
+          ) : (
+            todaySchedules.slice(0, 4).map((item, i) => (
+              <View key={item.id} style={[s.agendaRow, i < Math.min(todaySchedules.length, 4) - 1 && s.agendaRowBorder]}>
+                <Text style={s.agendaTime}>{item.time}</Text>
+                <View style={s.agendaMiddle}>
+                  <View style={s.agendaLine} />
+                </View>
+                <View style={s.agendaRight}>
+                  <Text style={s.agendaTitle} numberOfLines={1}>{item.title}</Text>
+                  <Text style={s.agendaTag}>{item.tag}</Text>
+                </View>
+              </View>
+            ))
+          )}
+          {todaySchedules.length > 4 && (
+            <TouchableOpacity style={s.agendaMore} onPress={() => navigation.navigate('일정')}>
+              <Text style={s.agendaMoreText}>+{todaySchedules.length - 4}건 더 보기</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -104,7 +142,7 @@ export default function HomeScreen({ navigation }) {
           {[
             { label: '일정 관리', color: C.accentBlue, tab: '일정' },
             { label: '거래처 관리', color: C.accentTeal, tab: '거래처' },
-            { label: '설정', color: C.gold, tab: '설정' },
+            { label: '프로젝트', color: C.red, tab: '프로젝트' },
           ].map((a) => (
             <TouchableOpacity
               key={a.label}
@@ -135,6 +173,13 @@ export default function HomeScreen({ navigation }) {
             <View style={{ flex: 1 }}>
               <Text style={s.aiTitle}>AI 거래처 히스토리</Text>
               <Text style={s.aiDesc}>관계 요약 · 히스토리 분석 · 후속 조치 제안</Text>
+            </View>
+          </View>
+          <View style={[s.aiRow, { borderTopWidth: 1, borderTopColor: C.border }]}>
+            <View style={[s.aiDot, { backgroundColor: C.red }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.aiTitle}>AI 프로젝트 지연 분석</Text>
+              <Text style={s.aiDesc}>지연 원인 패턴 분석 · 위험 프로젝트 식별 · 개선 액션 플랜</Text>
             </View>
           </View>
         </View>
@@ -170,6 +215,10 @@ const s = StyleSheet.create({
   agendaRight: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   agendaTitle: { color: C.textPrimary, fontSize: 13, flex: 1 },
   agendaTag: { color: C.textDim, fontSize: 10, letterSpacing: 0.5 },
+  agendaEmpty: { paddingHorizontal: 16, paddingVertical: 20, alignItems: 'center' },
+  agendaEmptyText: { color: C.textDim, fontSize: 13 },
+  agendaMore: { paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center' },
+  agendaMoreText: { color: C.accentBlue, fontSize: 12 },
   actionsRow: { flexDirection: 'row', gap: 10 },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, backgroundColor: C.surface, borderWidth: 1, borderRadius: 10 },
   actionDot: { width: 5, height: 5, borderRadius: 2.5 },
