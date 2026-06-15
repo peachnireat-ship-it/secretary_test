@@ -95,6 +95,49 @@ ${list || '(등록된 일정 없음)'}
 [언어 규칙] 반드시 한국어(한글)로만 작성하세요. 영어 문장도 사용하지 마세요. 한자(漢字), 중국어 간체·번체, 일본어 히라가나·가타카나는 절대 사용하지 마세요.`;
 }
 
+export function buildProjectDelaySystem(projects, schedules) {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  const projectLines = projects.map((p) => {
+    const deadline = new Date(p.deadline);
+    const diffDays = Math.round((deadline - today) / 86400000);
+    const daysLabel = diffDays > 0 ? `마감 ${diffDays}일 후` : diffDays === 0 ? '오늘 마감' : `마감 ${Math.abs(diffDays)}일 초과`;
+    const isAtRisk = p.status !== '완료' && p.status !== '취소' && (diffDays <= 7 && p.progress < 80);
+    const riskFlag = isAtRisk ? ' ⚠️ 위험' : '';
+    return `- [${p.status}${riskFlag}] ${p.title} | 우선순위: ${p.priority} | 진행률: ${p.progress}% | 마감: ${p.deadline} (${daysLabel}) | 메모: ${p.notes || '없음'}`;
+  }).join('\n');
+
+  const delayedCount = projects.filter((p) => p.status === '지연' || p.status === '위험').length;
+  const overdueCount = projects.filter((p) => {
+    const diffDays = Math.round((new Date(p.deadline) - today) / 86400000);
+    return p.status !== '완료' && p.status !== '취소' && diffDays < 0;
+  }).length;
+
+  return `[언어 규칙 - 최우선] 반드시 한국어(한글)로만 응답하세요. 영어 문장도 사용하지 마세요. 한자(漢字), 중국어 간체·번체, 일본어 히라가나·가타카나는 절대 사용 금지입니다.
+
+당신은 프로젝트 지연 분석 전문 AI 비서입니다. 사용자의 프로젝트 현황을 분석하여 지연 원인을 파악하고 구체적인 개선 방안을 제시합니다.
+
+오늘 날짜: ${todayStr}
+
+프로젝트 현황 (총 ${projects.length}건 / 지연·위험 ${delayedCount}건 / 마감 초과 ${overdueCount}건):
+${projectLines || '(등록된 프로젝트 없음)'}
+
+다음을 수행할 수 있습니다:
+1. 전체 지연 원인 패턴 분석 (메모·상태·진행률 기반)
+2. 우선 조치가 필요한 프로젝트 식별 및 순서 제안
+3. 마감 위험 프로젝트의 회복 계획 수립
+4. 반복 지연 패턴 및 근본 원인 진단
+5. 프로젝트 상태 업데이트 — JSON: {"action":"update_project","id":"...","changes":{"status":"...","progress":...}}
+
+분석 요청 시 반드시 다음 항목을 포함하세요:
+- 지연 원인 분류 (자원 부족 / 의사결정 지연 / 외부 의존 / 범위 변경 / 커뮤니케이션 문제 등)
+- 긴급도 순위
+- 단기(이번 주) · 중기(이번 달) 개선 액션 플랜
+
+모든 응답은 자연스러운 한국어로만 작성하세요.`;
+}
+
 export function buildClientSystem(clients, histories) {
   const clientList = clients
     .map((c) => {

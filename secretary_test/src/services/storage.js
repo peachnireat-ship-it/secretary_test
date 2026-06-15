@@ -4,6 +4,7 @@ const KEYS = {
   schedules: 'schedules_v1',
   clients: 'clients_v1',
   histories: 'histories_v1',
+  projects: 'projects_v1',
   apiKey: 'claude_api_key',
   grokApiKey: 'grok_api_key',
   aiProvider: 'ai_provider',
@@ -111,6 +112,40 @@ export async function getHistoriesByClient(clientId) {
   return all.filter((h) => h.clientId === clientId).sort((a, b) => b.createdAt - a.createdAt);
 }
 
+// ── Projects ──────────────────────────────────────────────
+export async function getProjects() {
+  const raw = await AsyncStorage.getItem(KEYS.projects);
+  if (raw) return JSON.parse(raw);
+  const sample = getSampleProjects();
+  await AsyncStorage.setItem(KEYS.projects, JSON.stringify(sample));
+  return sample;
+}
+
+export async function saveProjects(projects) {
+  await AsyncStorage.setItem(KEYS.projects, JSON.stringify(projects));
+}
+
+export async function addProject(project) {
+  const list = await getProjects();
+  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...project }, ...list];
+  await saveProjects(updated);
+  return updated;
+}
+
+export async function updateProject(id, changes) {
+  const list = await getProjects();
+  const updated = list.map((p) => (p.id === id ? { ...p, ...changes, updatedAt: Date.now() } : p));
+  await saveProjects(updated);
+  return updated;
+}
+
+export async function deleteProject(id) {
+  const list = await getProjects();
+  const updated = list.filter((p) => p.id !== id);
+  await saveProjects(updated);
+  return updated;
+}
+
 // ── Sample Data ───────────────────────────────────────────
 function todayStr(offsetDays = 0) {
   const d = new Date();
@@ -135,6 +170,17 @@ function getSampleClients() {
     { id: 'c2', name: '이서연', company: '현대건설', role: '기획팀 과장', contact: '010-9876-5432', notes: '신규 파트너 검토 중', createdAt: Date.now() - 86400000 * 7 },
     { id: 'c3', name: '박지훈', company: 'LG전자', role: '영업이사', contact: '010-5555-7777', notes: '연간 계약 진행 중', createdAt: Date.now() - 86400000 * 60 },
     { id: 'c4', name: '최수아', company: 'SK텔레콤', role: '마케팅 팀장', contact: '010-3333-9999', notes: '디지털 전환 프로젝트 논의', createdAt: Date.now() - 86400000 * 14 },
+  ];
+}
+
+function getSampleProjects() {
+  return [
+    { id: 'p1', title: '신규 ERP 시스템 도입', deadline: todayStr(5), status: '위험', progress: 35, priority: '높음', notes: '예산 승인 지연으로 착수 늦어짐', createdAt: Date.now() - 86400000 * 40 },
+    { id: 'p2', title: '삼성물산 Q3 제안서 작성', deadline: todayStr(3), status: '지연', progress: 60, priority: '높음', notes: '자료 수집 병목 발생', createdAt: Date.now() - 86400000 * 14 },
+    { id: 'p3', title: '팀 온보딩 프로세스 개선', deadline: todayStr(14), status: '진행중', progress: 55, priority: '보통', notes: '', createdAt: Date.now() - 86400000 * 20 },
+    { id: 'p4', title: 'SNS 마케팅 캠페인 기획', deadline: todayStr(21), status: '진행중', progress: 20, priority: '보통', notes: '디자인팀 일정 조율 필요', createdAt: Date.now() - 86400000 * 5 },
+    { id: 'p5', title: '2024 연간 계약 재검토', deadline: todayStr(-5), status: '지연', progress: 80, priority: '높음', notes: '법무팀 검토 대기 중', createdAt: Date.now() - 86400000 * 45 },
+    { id: 'p6', title: '내부 보안 감사', deadline: todayStr(-10), status: '완료', progress: 100, priority: '높음', notes: '일정 내 완료', createdAt: Date.now() - 86400000 * 60 },
   ];
 }
 
