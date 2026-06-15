@@ -3,6 +3,7 @@ import {
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
+import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { getClients, addClient, saveClients, getHistories, addHistory } from '../services/storage';
 import { askClaude, buildClientSystem } from '../services/claude';
@@ -28,6 +29,12 @@ export default function ClientScreen() {
   const [hContent, setHContent] = useState('');
   const [hResult, setHResult] = useState('');
 
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const [showContactPicker, setShowContactPicker] = useState(false);
+  const [contactList, setContactList] = useState([]);
+  const [contactSearch, setContactSearch] = useState('');
+  const [contactLoading, setContactLoading] = useState(false);
+
   const [showAI, setShowAI] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { role: 'assistant', text: '거래처 관련 무엇이든 물어보세요.\n\n예) "삼성물산이랑 마지막 만난 게 언제야?", "LG전자 다음 미팅 전에 뭘 준비해야 해?", "현재 가장 관리가 필요한 거래처는?"' },
@@ -50,12 +57,52 @@ export default function ClientScreen() {
     !search || c.name.includes(search) || c.company.includes(search)
   );
 
+  const filteredContactList = contactList.filter((c) =>
+    !contactSearch || c.name?.includes(contactSearch)
+  );
+
   const clientHistories = selectedClient
     ? histories.filter((h) => h.clientId === selectedClient.id).sort((a, b) => b.createdAt - a.createdAt)
     : [];
 
+  async function handlePickFromContacts() {
+    setShowSourcePicker(false);
+    setContactLoading(true);
+    setShowContactPicker(true);
+
+    const { status } = await Contacts.requestPermissionsAsync();
+    if (status !== 'granted') {
+      setShowContactPicker(false);
+      setContactLoading(false);
+      Alert.alert('권한 필요', '연락처 접근 권한이 필요합니다. 기기 설정에서 권한을 허용해주세요.');
+      return;
+    }
+
+    const { data } = await Contacts.getContactsAsync({
+      fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name, Contacts.Fields.Company, Contacts.Fields.JobTitle],
+    });
+
+    const withPhone = data
+      .filter((c) => c.name && c.phoneNumbers?.length > 0)
+      .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    setContactList(withPhone);
+    setContactLoading(false);
+  }
+
+  function selectContact(contact) {
+    const rawNumber = contact.phoneNumbers?.[0]?.number || '';
+    const phone = rawNumber.replace(/[^\d-]/g, '');
+    setNewName(contact.name || '');
+    setNewContact(phone);
+    setNewCompany(contact.company || '');
+    setNewRole(contact.jobTitle || '');
+    setShowContactPicker(false);
+    setContactSearch('');
+    setShowAddClient(true);
+  }
+
   async function handleAddClient() {
-    if (!newName.trim() || !newCompany.trim()) return;
+    if (!newName.trim() || !newCompany.trim() || !newContact.trim()) return;
     const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), notes: newNotes.trim() });
     setClients(updated);
     setShowAddClient(false);
@@ -69,6 +116,7 @@ export default function ClientScreen() {
     setHistories(updated);
     setShowAddHistory(false);
     setHTitle(''); setHContent(''); setHResult(''); setHType('미팅');
+    fetchClientSummary(selectedClient, updated);
   }
 
   async function handleAIChat() {
@@ -103,11 +151,11 @@ export default function ClientScreen() {
   const [clientSummary, setClientSummary] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
 
-  async function fetchClientSummary(client) {
+  async function fetchClientSummary(client, histList) {
     setClientSummary('');
     setSummaryLoading(true);
     try {
-      const clientHistList = histories.filter((h) => h.clientId === client.id);
+      const clientHistList = (histList || histories).filter((h) => h.clientId === client.id);
       const systemPrompt = buildClientSystem([client], clientHistList);
       const reply = await askClaude([{ role: 'user', content: `${client.company} ${client.name}과의 관계를 3-4문장으로 간결하게 요약해줘. 마지막 연락 날짜, 현재 상황, 다음 필요한 액션을 포함해줘. 반드시 한국어(한글)로만 작성하세요. 영어 문장, 한자, 일본어는 절대 사용하지 마세요.` }], systemPrompt);
       setClientSummary(reply);
@@ -167,9 +215,69 @@ export default function ClientScreen() {
       </ScrollView>
 
       {/* ── 추가 버튼 ── */}
-      <TouchableOpacity style={s.fab} onPress={() => setShowAddClient(true)}>
+      <TouchableOpacity style={s.fab} onPress={() => setShowSourcePicker(true)}>
         <Text style={s.fabText}>+</Text>
       </TouchableOpacity>
+
+      {/* ── 입력 방식 선택 ── */}
+      <Modal visible={showSourcePicker} animationType="fade" transparent>
+        <View style={s.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowSourcePicker(false)} />
+          <View style={s.sourceSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>거래처 추가</Text>
+            <TouchableOpacity style={s.sourceOption} onPress={() => { setShowSourcePicker(false); setShowAddClient(true); }}>
+              <Text style={s.sourceIcon}>✏️</Text>
+              <Text style={s.sourceOptionText}>직접 입력</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.sourceOption, { borderBottomWidth: 0 }]} onPress={handlePickFromContacts}>
+              <Text style={s.sourceIcon}>📱</Text>
+              <Text style={s.sourceOptionText}>연락처에서 가져오기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── 연락처 선택 모달 ── */}
+      <Modal visible={showContactPicker} animationType="slide" transparent>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { height: '80%' }]}>
+            <View style={s.modalHandle} />
+            <View style={s.chatHeader}>
+              <Text style={s.modalTitle}>연락처 선택</Text>
+              <TouchableOpacity onPress={() => { setShowContactPicker(false); setContactSearch(''); }}>
+                <Text style={s.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[s.searchInput, { marginBottom: 12 }]}
+              value={contactSearch}
+              onChangeText={setContactSearch}
+              placeholder="이름 검색"
+              placeholderTextColor={C.textDim}
+            />
+            {contactLoading ? (
+              <ActivityIndicator size="large" color={C.accentTeal} style={{ marginTop: 24 }} />
+            ) : filteredContactList.length === 0 ? (
+              <Text style={[s.emptyText, { marginTop: 24 }]}>연락처가 없습니다</Text>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {filteredContactList.map((contact) => (
+                  <TouchableOpacity key={contact.id} style={s.contactItem} onPress={() => selectContact(contact)}>
+                    <View style={s.clientAvatar}>
+                      <Text style={s.clientAvatarText}>{contact.name?.[0] || '?'}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.clientName}>{contact.name}</Text>
+                      <Text style={s.clientRole}>{contact.phoneNumbers?.[0]?.number || ''}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* ── 클라이언트 상세 모달 ── */}
       <Modal visible={!!selectedClient} animationType="slide" transparent>
@@ -287,13 +395,22 @@ export default function ClientScreen() {
           <View style={s.modalSheet}>
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>거래처 추가</Text>
-            <Text style={s.inputLabel}>담당자 이름</Text>
+            <View style={s.inputLabelRow}>
+              <Text style={s.inputLabel}>담당자 이름</Text>
+              <Text style={s.requiredMark}>*</Text>
+            </View>
             <TextInput style={s.input} value={newName} onChangeText={setNewName} placeholder="홍길동" placeholderTextColor={C.textDim} />
-            <Text style={s.inputLabel}>회사명</Text>
+            <View style={s.inputLabelRow}>
+              <Text style={s.inputLabel}>회사명</Text>
+              <Text style={s.requiredMark}>*</Text>
+            </View>
             <TextInput style={s.input} value={newCompany} onChangeText={setNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
             <Text style={s.inputLabel}>직책</Text>
             <TextInput style={s.input} value={newRole} onChangeText={setNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
-            <Text style={s.inputLabel}>연락처</Text>
+            <View style={s.inputLabelRow}>
+              <Text style={s.inputLabel}>연락처</Text>
+              <Text style={s.requiredMark}>*</Text>
+            </View>
             <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
             <Text style={s.inputLabel}>메모</Text>
             <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
@@ -378,6 +495,11 @@ const s = StyleSheet.create({
   chevron: { color: C.textDim, fontSize: 18 },
   fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal, alignItems: 'center', justifyContent: 'center' },
   fabText: { color: '#fff', fontSize: 26, lineHeight: 30 },
+  sourceSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
+  sourceOption: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+  sourceIcon: { fontSize: 20, width: 28, textAlign: 'center' },
+  sourceOptionText: { color: C.textPrimary, fontSize: 16 },
+  contactItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
 
   // Detail Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
@@ -417,7 +539,9 @@ const s = StyleSheet.create({
   // Add modals
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
   modalSubTitle: { color: C.textDim, fontSize: 12, marginBottom: 16 },
-  inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 8, marginTop: 16 },
+  inputLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 16, marginBottom: 8 },
+  inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5 },
+  requiredMark: { color: C.accentTeal, fontSize: 12, lineHeight: 14 },
   input: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tagOption: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
