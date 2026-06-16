@@ -9,6 +9,7 @@ const KEYS = {
   apiKey: 'claude_api_key',
   grokApiKey: 'grok_api_key',
   aiProvider: 'ai_provider',
+  meetingRecords: 'meeting_records_v1',
 };
 
 // ── Groq API Key ──────────────────────────────────────────
@@ -178,6 +179,37 @@ export async function deleteMessage(id) {
   const list = await getMessages();
   const updated = list.filter((m) => m.id !== id);
   await saveMessages(updated);
+  return updated;
+}
+
+// ── Meeting Records ───────────────────────────────────────
+export async function getMeetingRecords() {
+  const raw = await AsyncStorage.getItem(KEYS.meetingRecords);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export async function saveMeetingRecords(records) {
+  await AsyncStorage.setItem(KEYS.meetingRecords, JSON.stringify(records));
+}
+
+export async function addMeetingRecord(record) {
+  const list = await getMeetingRecords();
+  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...record }, ...list];
+  await saveMeetingRecords(updated);
+  return updated;
+}
+
+export async function updateMeetingRecord(id, changes) {
+  const list = await getMeetingRecords();
+  const updated = list.map((r) => (r.id === id ? { ...r, ...changes } : r));
+  await saveMeetingRecords(updated);
+  return updated;
+}
+
+export async function deleteMeetingRecord(id) {
+  const list = await getMeetingRecords();
+  const updated = list.filter((r) => r.id !== id);
+  await saveMeetingRecords(updated);
   return updated;
 }
 
