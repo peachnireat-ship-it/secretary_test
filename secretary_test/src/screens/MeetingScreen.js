@@ -65,7 +65,17 @@ export default function MeetingScreen({ navigation }) {
       setErrorMsg('녹음 파일을 찾을 수 없습니다.');
       return;
     }
-    await runTranscribe(uri, 'audio/m4a', '직접 녹음');
+
+    let saved = false;
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status === 'granted') {
+        await MediaLibrary.createAssetAsync(uri);
+        saved = true;
+      }
+    } catch (_) {}
+
+    await runTranscribe(uri, 'audio/m4a', saved ? '직접 녹음 · 기기에 저장됨' : '직접 녹음');
   }
 
   async function openFilePicker() {
@@ -176,7 +186,7 @@ export default function MeetingScreen({ navigation }) {
                     <View style={s.recordDot} />
                   </TouchableOpacity>
                   <Text style={s.recordHint}>버튼을 눌러 녹음을 시작하세요</Text>
-                  <Text style={s.recordInfo}>녹음 파일은 저장되지 않으며{'\n'}중지 후 바로 텍스트로 변환됩니다</Text>
+                  <Text style={s.recordInfo}>중지 후 기기에 저장되며{'\n'}자동으로 텍스트로 변환됩니다</Text>
                 </>
               )}
             </View>
