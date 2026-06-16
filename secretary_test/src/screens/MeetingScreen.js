@@ -1,10 +1,11 @@
 import {
   Text, View, ScrollView, TouchableOpacity,
   StyleSheet, ActivityIndicator, Clipboard, Alert,
+  Modal, FlatList,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
-import * as DocumentPicker from 'expo-document-picker';
+import * as MediaLibrary from 'expo-media-library';
 import { C } from '../theme';
 import { transcribeAudio } from '../services/groqStt';
 
@@ -14,6 +15,11 @@ function formatTime(sec) {
   return `${m}:${s}`;
 }
 
+function formatDate(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function MeetingScreen({ navigation }) {
   const [elapsed, setElapsed] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -21,6 +27,9 @@ export default function MeetingScreen({ navigation }) {
   const [transcriptSource, setTranscriptSource] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [pickedFile, setPickedFile] = useState(null);
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [audioFiles, setAudioFiles] = useState([]);
+  const [fileLoading, setFileLoading] = useState(false);
 
   const timerRef = useRef(null);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -59,20 +68,35 @@ export default function MeetingScreen({ navigation }) {
     await runTranscribe(uri, 'audio/m4a', '직접 녹음');
   }
 
-  const AUDIO_EXTS = ['mp3', 'mp4', 'm4a', 'wav', 'aac', 'ogg', 'flac', 'wma', 'opus', 'webm', 'amr', '3gp'];
-
-  async function pickFile() {
+  async function openFilePicker() {
     setErrorMsg('');
-    const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    const mime = asset.mimeType ?? '';
-    const ext = (asset.name ?? '').split('.').pop().toLowerCase();
-    if (!mime.startsWith('audio/') && !AUDIO_EXTS.includes(ext)) {
-      setErrorMsg('오디오 파일을 선택해 주세요.');
+    setAudioFiles([]);
+    setFileLoading(true);
+    setShowFilePicker(true);
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      setShowFilePicker(false);
+      setFileLoading(false);
+      Alert.alert('권한 필요', '미디어 라이브러리 접근 권한이 필요합니다.');
       return;
     }
-    setPickedFile(asset);
+    const result = await MediaLibrary.getAssetsAsync({
+      mediaType: MediaLibrary.MediaType.audio,
+      sortBy: [[MediaLibrary.SortBy.modificationTime, false]],
+      first: 300,
+    });
+    setAudioFiles(result.assets);
+    setFileLoading(false);
+  }
+
+  function selectAudioFile(asset) {
+    const ext = asset.filename.split('.').pop().toLowerCase();
+    setPickedFile({
+      uri: asset.uri,
+      name: asset.filename,
+      mimeType: `audio/${ext}`,
+    });
+    setShowFilePicker(false);
   }
 
   async function transcribeFile() {
@@ -114,103 +138,147 @@ export default function MeetingScreen({ navigation }) {
   const isRecording = audioRecorder.isRecording;
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-      <View style={s.header}>
-        <View style={s.badge}>
-          <View style={s.badgeDot} />
-          <Text style={s.badgeText}>MEETING</Text>
+    <>
+      <ScrollView style={s.root} contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <View style={s.header}>
+          <View style={s.badge}>
+            <View style={s.badgeDot} />
+            <Text style={s.badgeText}>MEETING</Text>
+          </View>
+          <Text style={s.title}>회의 녹음</Text>
+          <Text style={s.subtitle}>음성을 텍스트로 변환합니다</Text>
         </View>
-        <Text style={s.title}>회의 녹음</Text>
-        <Text style={s.subtitle}>음성을 텍스트로 변환합니다</Text>
-      </View>
 
-      <View style={s.rule} />
+        <View style={s.rule} />
 
-      {/* 직접 녹음 */}
-      <View style={s.section}>
-        <Text style={s.sectionLabel}>RECORDING</Text>
-        <View style={s.card}>
-          <View style={s.recordCenter}>
-            <Text style={s.timerText}>{formatTime(elapsed)}</Text>
-            {!isRecording ? (
-              <TouchableOpacity style={s.recordBtn} onPress={startRecording} activeOpacity={0.8}>
-                <View style={s.recordDot} />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={[s.recordBtn, s.recordBtnActive]} onPress={stopAndTranscribe} activeOpacity={0.8}>
-                <View style={s.stopSquare} />
-              </TouchableOpacity>
-            )}
-            <Text style={s.recordHint}>
-              {isRecording ? '중지하면 자동으로 변환됩니다' : '버튼을 눌러 녹음을 시작하세요'}
-            </Text>
+        {/* 직접 녹음 */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>RECORDING</Text>
+          <View style={s.card}>
+            <View style={s.recordCenter}>
+              <Text style={s.timerText}>{formatTime(elapsed)}</Text>
+              {!isRecording ? (
+                <TouchableOpacity style={s.recordBtn} onPress={startRecording} activeOpacity={0.8}>
+                  <View style={s.recordDot} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={[s.recordBtn, s.recordBtnActive]} onPress={stopAndTranscribe} activeOpacity={0.8}>
+                  <View style={s.stopSquare} />
+                </TouchableOpacity>
+              )}
+              <Text style={s.recordHint}>
+                {isRecording ? '중지하면 자동으로 변환됩니다' : '버튼을 눌러 녹음을 시작하세요'}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      {/* 파일 업로드 */}
-      <View style={s.section}>
-        <Text style={s.sectionLabel}>FILE UPLOAD</Text>
-        <View style={s.card}>
-          <TouchableOpacity style={s.filePickBtn} onPress={pickFile} activeOpacity={0.7} disabled={loading}>
-            <Text style={s.filePickIcon}>◈</Text>
-            <Text style={s.filePickText}>
-              {pickedFile ? '파일 다시 선택' : '오디오 파일 선택'}
-            </Text>
-          </TouchableOpacity>
-          {pickedFile && (
-            <View style={s.fileInfo}>
-              <View style={s.fileDivider} />
-              <Text style={s.fileInfoLabel}>선택된 파일</Text>
-              <Text style={s.fileInfoName} numberOfLines={2}>{pickedFile.name}</Text>
-              <TouchableOpacity
-                style={[s.transcribeBtn, loading && s.transcribeBtnDisabled]}
-                onPress={transcribeFile}
-                activeOpacity={0.8}
-                disabled={loading}
-              >
-                <Text style={s.transcribeBtnText}>변환하기</Text>
+        {/* 파일 업로드 */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>FILE UPLOAD</Text>
+          <View style={s.card}>
+            <TouchableOpacity style={s.filePickBtn} onPress={openFilePicker} activeOpacity={0.7} disabled={loading}>
+              <Text style={s.filePickIcon}>◈</Text>
+              <Text style={s.filePickText}>
+                {pickedFile ? '파일 다시 선택' : '오디오 파일 선택'}
+              </Text>
+            </TouchableOpacity>
+            {pickedFile && (
+              <View style={s.fileInfo}>
+                <View style={s.fileDivider} />
+                <Text style={s.fileInfoLabel}>선택된 파일</Text>
+                <Text style={s.fileInfoName} numberOfLines={2}>{pickedFile.name}</Text>
+                <TouchableOpacity
+                  style={[s.transcribeBtn, loading && s.transcribeBtnDisabled]}
+                  onPress={transcribeFile}
+                  activeOpacity={0.8}
+                  disabled={loading}
+                >
+                  <Text style={s.transcribeBtnText}>변환하기</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* 로딩 */}
+        {loading && (
+          <View style={s.loadingBox}>
+            <ActivityIndicator color={C.accentBlue} size="small" />
+            <Text style={s.loadingText}>변환 중…</Text>
+          </View>
+        )}
+
+        {/* 에러 */}
+        {!!errorMsg && (
+          <View style={s.errorBox}>
+            <Text style={s.errorText}>{errorMsg}</Text>
+          </View>
+        )}
+
+        {/* 변환 결과 */}
+        {!!transcript && (
+          <View style={[s.section, { marginBottom: 48 }]}>
+            <View style={s.transcriptHeader}>
+              <View>
+                <Text style={s.sectionLabel}>TRANSCRIPT</Text>
+                {!!transcriptSource && (
+                  <Text style={s.transcriptSource}>{transcriptSource}</Text>
+                )}
+              </View>
+              <TouchableOpacity onPress={copyToClipboard} activeOpacity={0.7}>
+                <Text style={s.copyBtn}>복사</Text>
               </TouchableOpacity>
             </View>
-          )}
-        </View>
-      </View>
-
-      {/* 로딩 */}
-      {loading && (
-        <View style={s.loadingBox}>
-          <ActivityIndicator color={C.accentBlue} size="small" />
-          <Text style={s.loadingText}>변환 중…</Text>
-        </View>
-      )}
-
-      {/* 에러 */}
-      {!!errorMsg && (
-        <View style={s.errorBox}>
-          <Text style={s.errorText}>{errorMsg}</Text>
-        </View>
-      )}
-
-      {/* 변환 결과 */}
-      {!!transcript && (
-        <View style={[s.section, { marginBottom: 48 }]}>
-          <View style={s.transcriptHeader}>
-            <View>
-              <Text style={s.sectionLabel}>TRANSCRIPT</Text>
-              {!!transcriptSource && (
-                <Text style={s.transcriptSource}>{transcriptSource}</Text>
-              )}
+            <View style={s.card}>
+              <Text style={s.transcriptText}>{transcript}</Text>
             </View>
-            <TouchableOpacity onPress={copyToClipboard} activeOpacity={0.7}>
-              <Text style={s.copyBtn}>복사</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* 커스텀 오디오 파일 피커 */}
+      <Modal visible={showFilePicker} animationType="slide" onRequestClose={() => setShowFilePicker(false)}>
+        <View style={s.pickerRoot}>
+          <View style={s.pickerHeader}>
+            <Text style={s.pickerTitle}>오디오 파일 선택</Text>
+            <TouchableOpacity onPress={() => setShowFilePicker(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Text style={s.pickerClose}>✕</Text>
             </TouchableOpacity>
           </View>
-          <View style={s.card}>
-            <Text style={s.transcriptText}>{transcript}</Text>
-          </View>
+          <View style={s.pickerRule} />
+
+          {fileLoading ? (
+            <View style={s.pickerCenter}>
+              <ActivityIndicator color={C.accentBlue} size="large" />
+              <Text style={s.pickerLoadingText}>파일 목록 불러오는 중…</Text>
+            </View>
+          ) : audioFiles.length === 0 ? (
+            <View style={s.pickerCenter}>
+              <Text style={s.pickerEmptyText}>오디오 파일이 없습니다</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={audioFiles}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={s.pickerList}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={s.fileItem} onPress={() => selectAudioFile(item)} activeOpacity={0.7}>
+                  <Text style={s.fileItemIcon}>◈</Text>
+                  <View style={s.fileItemInfo}>
+                    <Text style={s.fileItemName} numberOfLines={1}>{item.filename}</Text>
+                    <Text style={s.fileItemMeta}>
+                      {item.duration ? formatTime(Math.floor(item.duration)) : '—'} · {formatDate(item.modificationTime)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              ItemSeparatorComponent={() => <View style={s.fileSep} />}
+            />
+          )}
         </View>
-      )}
-    </ScrollView>
+      </Modal>
+    </>
   );
 }
 
@@ -263,4 +331,27 @@ const s = StyleSheet.create({
   transcriptSource: { color: C.textDim, fontSize: 11, marginTop: 2 },
   copyBtn: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
   transcriptText: { color: C.textPrimary, fontSize: 14, lineHeight: 24, padding: 18 },
+
+  // 커스텀 피커
+  pickerRoot: { flex: 1, backgroundColor: C.bg },
+  pickerHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20,
+  },
+  pickerTitle: { color: C.textPrimary, fontSize: 20, fontWeight: '300', letterSpacing: -0.5 },
+  pickerClose: { color: C.textSecondary, fontSize: 16 },
+  pickerRule: { height: 1, backgroundColor: C.border },
+  pickerList: { paddingVertical: 8 },
+  pickerCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  pickerLoadingText: { color: C.textDim, fontSize: 13 },
+  pickerEmptyText: { color: C.textDim, fontSize: 13 },
+  fileItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingHorizontal: 24, paddingVertical: 14,
+  },
+  fileItemIcon: { color: C.accentBlue, fontSize: 16 },
+  fileItemInfo: { flex: 1 },
+  fileItemName: { color: C.textPrimary, fontSize: 14, marginBottom: 3 },
+  fileItemMeta: { color: C.textDim, fontSize: 11, letterSpacing: 0.3 },
+  fileSep: { height: 1, backgroundColor: C.border, marginLeft: 54 },
 });
