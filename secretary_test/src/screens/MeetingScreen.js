@@ -65,7 +65,6 @@ export default function MeetingScreen({ navigation }) {
 
   const [rawTranscript, setRawTranscript] = useState('');
   const [speakerNames, setSpeakerNames] = useState({});
-  const [showSpeakerModal, setShowSpeakerModal] = useState(false);
 
   const timerRef = useRef(null);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -196,8 +195,9 @@ export default function MeetingScreen({ navigation }) {
     setTranscript('');
     setSummary('');
     setSaved(false);
+    setRawTranscript('');
+    setSpeakerNames({});
     setTranscriptSource(source);
-    let pendingDiarized = null;
     try {
       setLoadingMsg('음성 변환 중…');
       const { text, segments } = await transcribeAudio(uri, mimeType);
@@ -212,31 +212,15 @@ export default function MeetingScreen({ navigation }) {
       if (speakers.length > 0) {
         setRawTranscript(diarized);
         setSpeakerNames(Object.fromEntries(speakers.map((s) => [s, ''])));
-        pendingDiarized = diarized;
-      } else {
-        setTranscript(diarized);
-        await runSummarize(diarized);
       }
+      setTranscript(diarized);
+      runSummarize(diarized);
     } catch (e) {
       handleApiError(e);
     } finally {
       setLoading(false);
       setLoadingMsg('');
-      if (pendingDiarized !== null) setShowSpeakerModal(true);
     }
-  }
-
-  function confirmSpeakerNames() {
-    setShowSpeakerModal(false);
-    const namedTranscript = applyNames(rawTranscript, speakerNames);
-    setTranscript(namedTranscript);
-    runSummarize(namedTranscript);
-  }
-
-  function skipSpeakerNames() {
-    setShowSpeakerModal(false);
-    setTranscript(rawTranscript);
-    runSummarize(rawTranscript);
   }
 
   function openSaveModal() {
@@ -259,7 +243,15 @@ export default function MeetingScreen({ navigation }) {
       setMeetingRecords(updated);
       setEditingRecordId(null);
     } else {
-      await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary, transcript });
+      let finalTranscript = transcript;
+      let finalSummary = summary;
+      if (rawTranscript) {
+        finalTranscript = applyNames(rawTranscript, speakerNames);
+        finalSummary = applyNames(summary, speakerNames);
+        setTranscript(finalTranscript);
+        setSummary(finalSummary);
+      }
+      await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary: finalSummary, transcript: finalTranscript });
       setSaved(true);
     }
   }
@@ -289,57 +281,48 @@ export default function MeetingScreen({ navigation }) {
 
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
-      <Modal visible={showSpeakerModal} transparent animationType="fade" onRequestClose={skipSpeakerNames}>
-        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={s.modalBox}>
-            <Text style={s.modalTitle}>화자 이름 지정</Text>
-            <Text style={s.speakerModalSubtitle}>분석된 화자에 이름을 지정하세요 (선택)</Text>
-            {Object.keys(speakerNames).map((speaker) => (
-              <View key={speaker} style={s.speakerRow}>
-                <Text style={s.speakerOrigLabel}>{speaker}</Text>
-                <Text style={s.speakerArrow}>→</Text>
-                <TextInput
-                  style={s.speakerInput}
-                  value={speakerNames[speaker]}
-                  onChangeText={(v) => setSpeakerNames((prev) => ({ ...prev, [speaker]: v }))}
-                  placeholder={speaker}
-                  placeholderTextColor={C.textDim}
-                />
+      <Modal visible={showSaveModal} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowSaveModal(false)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior="padding">
+          <ScrollView contentContainerStyle={s.modalScrollContent} keyboardShouldPersistTaps="handled">
+            <View style={s.modalBox}>
+              <Text style={s.modalTitle}>{editingRecordId ? '제목 변경' : '회의록 저장'}</Text>
+              {!editingRecordId && !!rawTranscript && (
+                <>
+                  <Text style={s.speakerModalSubtitle}>화자 이름 지정 (선택)</Text>
+                  {Object.keys(speakerNames).map((speaker) => (
+                    <View key={speaker} style={s.speakerRow}>
+                      <Text style={s.speakerOrigLabel}>{speaker}</Text>
+                      <Text style={s.speakerArrow}>→</Text>
+                      <TextInput
+                        style={s.speakerInput}
+                        value={speakerNames[speaker]}
+                        onChangeText={(v) => setSpeakerNames((prev) => ({ ...prev, [speaker]: v }))}
+                        placeholder={speaker}
+                        placeholderTextColor={C.textDim}
+                      />
+                    </View>
+                  ))}
+                </>
+              )}
+              <TextInput
+                style={s.modalInput}
+                value={titleInput}
+                onChangeText={setTitleInput}
+                placeholder="제목을 입력하세요"
+                placeholderTextColor={C.textDim}
+                autoFocus={!rawTranscript}
+                selectTextOnFocus
+              />
+              <View style={s.modalBtns}>
+                <TouchableOpacity style={s.modalCancelBtn} onPress={() => setShowSaveModal(false)} activeOpacity={0.7}>
+                  <Text style={s.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.modalSaveBtn} onPress={confirmSave} activeOpacity={0.8}>
+                  <Text style={s.modalSaveText}>저장</Text>
+                </TouchableOpacity>
               </View>
-            ))}
-            <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancelBtn} onPress={skipSpeakerNames} activeOpacity={0.7}>
-                <Text style={s.modalCancelText}>건너뛰기</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalSaveBtn} onPress={confirmSpeakerNames} activeOpacity={0.8}>
-                <Text style={s.modalSaveText}>완료</Text>
-              </TouchableOpacity>
             </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-      <Modal visible={showSaveModal} transparent animationType="fade" onRequestClose={() => setShowSaveModal(false)}>
-        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={s.modalBox}>
-            <Text style={s.modalTitle}>{editingRecordId ? '제목 변경' : '회의록 제목'}</Text>
-            <TextInput
-              style={s.modalInput}
-              value={titleInput}
-              onChangeText={setTitleInput}
-              placeholder="제목을 입력하세요"
-              placeholderTextColor={C.textDim}
-              autoFocus
-              selectTextOnFocus
-            />
-            <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancelBtn} onPress={() => setShowSaveModal(false)} activeOpacity={0.7}>
-                <Text style={s.modalCancelText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalSaveBtn} onPress={confirmSave} activeOpacity={0.8}>
-                <Text style={s.modalSaveText}>저장</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
       {/* 상단 탭 */}
@@ -658,7 +641,8 @@ const s = StyleSheet.create({
   copyBtn: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
   transcriptText: { color: C.textPrimary, fontSize: 14, lineHeight: 24, padding: 18 },
   // 제목 입력 모달
-  modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'center', paddingHorizontal: 32 },
+  modalOverlay: { flex: 1, backgroundColor: '#000000AA' },
+  modalScrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 40 },
   modalBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16 },
   modalTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '500', letterSpacing: 0.3 },
   modalInput: {
