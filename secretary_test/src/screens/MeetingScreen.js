@@ -156,19 +156,29 @@ export default function MeetingScreen({ navigation }) {
           <Text style={s.sectionLabel}>RECORDING</Text>
           <View style={s.card}>
             <View style={s.recordCenter}>
-              <Text style={s.timerText}>{formatTime(elapsed)}</Text>
-              {!isRecording ? (
-                <TouchableOpacity style={s.recordBtn} onPress={startRecording} activeOpacity={0.8}>
-                  <View style={s.recordDot} />
-                </TouchableOpacity>
+              {isRecording ? (
+                <>
+                  <View style={s.recBadge}>
+                    <View style={s.recBadgeDot} />
+                    <Text style={s.recBadgeText}>녹음 중</Text>
+                  </View>
+                  <Text style={[s.timerText, s.timerActive]}>{formatTime(elapsed)}</Text>
+                  <TouchableOpacity style={s.stopBtn} onPress={stopAndTranscribe} activeOpacity={0.8}>
+                    <View style={s.stopSquare} />
+                    <Text style={s.stopBtnText}>녹음 중지</Text>
+                  </TouchableOpacity>
+                  <Text style={s.recordHint}>중지하면 텍스트 변환이 자동으로 시작됩니다</Text>
+                </>
               ) : (
-                <TouchableOpacity style={[s.recordBtn, s.recordBtnActive]} onPress={stopAndTranscribe} activeOpacity={0.8}>
-                  <View style={s.stopSquare} />
-                </TouchableOpacity>
+                <>
+                  <Text style={s.timerText}>{formatTime(elapsed)}</Text>
+                  <TouchableOpacity style={s.recordBtn} onPress={startRecording} activeOpacity={0.8}>
+                    <View style={s.recordDot} />
+                  </TouchableOpacity>
+                  <Text style={s.recordHint}>버튼을 눌러 녹음을 시작하세요</Text>
+                  <Text style={s.recordInfo}>녹음 파일은 저장되지 않으며{'\n'}중지 후 바로 텍스트로 변환됩니다</Text>
+                </>
               )}
-              <Text style={s.recordHint}>
-                {isRecording ? '중지하면 자동으로 변환됩니다' : '버튼을 눌러 녹음을 시작하세요'}
-              </Text>
             </View>
           </View>
         </View>
@@ -295,17 +305,31 @@ const s = StyleSheet.create({
   section: { marginBottom: 28 },
   sectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2.5, fontWeight: '600', marginBottom: 14 },
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, overflow: 'hidden' },
-  recordCenter: { alignItems: 'center', paddingVertical: 40, gap: 20 },
+  recordCenter: { alignItems: 'center', paddingVertical: 40, gap: 16 },
   timerText: { color: C.textPrimary, fontSize: 48, fontWeight: '200', letterSpacing: -1 },
+  timerActive: { color: C.red },
+  recBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: C.red + '22', borderWidth: 1, borderColor: C.red + '55',
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20,
+  },
+  recBadgeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.red },
+  recBadgeText: { color: C.red, fontSize: 11, fontWeight: '600', letterSpacing: 1.5 },
   recordBtn: {
     width: 72, height: 72, borderRadius: 36,
     backgroundColor: C.surface, borderWidth: 2, borderColor: C.red,
     alignItems: 'center', justifyContent: 'center',
   },
-  recordBtnActive: { borderColor: C.textSecondary },
   recordDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: C.red },
-  stopSquare: { width: 22, height: 22, borderRadius: 4, backgroundColor: C.textSecondary },
+  stopBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 2, borderColor: C.textSecondary, borderRadius: 28,
+    paddingVertical: 13, paddingHorizontal: 24,
+  },
+  stopSquare: { width: 14, height: 14, borderRadius: 3, backgroundColor: C.textSecondary },
+  stopBtnText: { color: C.textSecondary, fontSize: 15, fontWeight: '500', letterSpacing: 0.3 },
   recordHint: { color: C.textDim, fontSize: 12, letterSpacing: 0.3 },
+  recordInfo: { color: C.textDim, fontSize: 11, letterSpacing: 0.2, textAlign: 'center', lineHeight: 17 },
   filePickBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     padding: 20, justifyContent: 'center',
