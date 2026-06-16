@@ -10,6 +10,7 @@ const KEYS = {
   grokApiKey: 'grok_api_key',
   aiProvider: 'ai_provider',
   meetingRecords: 'meeting_records_v1',
+  workTopics: 'work_topics_v1',
 };
 
 // ── Groq API Key ──────────────────────────────────────────
@@ -211,6 +212,14 @@ export async function deleteMeetingRecord(id) {
   const updated = list.filter((r) => r.id !== id);
   await saveMeetingRecords(updated);
   return updated;
+}
+
+export async function getWorkTopics() {
+  return (await AsyncStorage.getItem(KEYS.workTopics)) || '';
+}
+
+export async function saveWorkTopics(text) {
+  await AsyncStorage.setItem(KEYS.workTopics, text);
 }
 
 // ── Sample Data ───────────────────────────────────────────

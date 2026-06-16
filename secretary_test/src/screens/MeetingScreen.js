@@ -10,7 +10,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
 import { transcribeAudio, diarizeSegments } from '../services/groqStt';
 import { askClaude } from '../services/claude';
-import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord } from '../services/storage';
+import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics } from '../services/storage';
 
 function formatTime(sec) {
   const m = String(Math.floor(sec / 60)).padStart(2, '0');
@@ -86,6 +86,10 @@ export default function MeetingScreen({ navigation }) {
   useEffect(() => {
     if (activeTab === 'history') loadRecords();
   }, [activeTab, loadRecords]);
+
+  useEffect(() => {
+    getWorkTopics().then((v) => { if (v) setWorkTopics(v); });
+  }, []);
 
   async function startRecording() {
     setErrorMsg('');
@@ -307,6 +311,7 @@ export default function MeetingScreen({ navigation }) {
 (전체 회의를 통해 파악할 수 있는 업무 패턴이나 특이사항, 1~2문장)`
       );
       setWorkTopics(result);
+      await saveWorkTopics(result);
     } catch (e) {
       handleApiError(e);
     } finally {
