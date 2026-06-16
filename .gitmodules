@@ -1,0 +1,3 @@
+[submodule "secretary_beta"]
+	path = secretary_beta
+	url = https://github.com/peachnireat-ship-it/secretary_beta.git
