@@ -24,6 +24,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "거래처 연락처를 가져오기 위해 연락처 접근 권한이 필요합니다."
+        }
+      ],
+      "expo-audio"
+    ]
   }
 }

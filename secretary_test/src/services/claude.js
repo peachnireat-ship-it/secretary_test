@@ -49,6 +49,16 @@ async function callGrok(messages, systemPrompt, apiKey) {
   return data.choices[0].message.content;
 }
 
+// 한국어 조사 선택: 앞 글자 받침 유무에 따라 과/와 반환
+export function josa과와(word) {
+  const last = word[word.length - 1];
+  const code = last?.charCodeAt(0);
+  if (code >= 0xAC00 && code <= 0xD7A3) {
+    return (code - 0xAC00) % 28 !== 0 ? '과' : '와';
+  }
+  return '와';
+}
+
 // 한자(CJK 통합한자·확장·호환), 히라가나, 가타카나 제거
 function stripNonKorean(text) {
   return text.replace(

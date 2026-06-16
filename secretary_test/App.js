@@ -9,6 +9,7 @@ import ScheduleScreen from './src/screens/ScheduleScreen';
 import ClientScreen from './src/screens/ClientScreen';
 import ProjectScreen from './src/screens/ProjectScreen';
 import MessageScreen from './src/screens/MessageScreen';
+import MeetingScreen from './src/screens/MeetingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
@@ -19,6 +20,7 @@ const ICONS = {
   거래처: { active: '◉', inactive: '◉' },
   프로젝트: { active: '◧', inactive: '◧' },
   메세지: { active: '◫', inactive: '◫' },
+  회의록: { active: '◍', inactive: '◍' },
   설정: { active: '◎', inactive: '◎' },
 };
 
@@ -50,6 +52,7 @@ function TabNavigator() {
       <Tab.Screen name="거래처" component={ClientScreen} />
       <Tab.Screen name="프로젝트" component={ProjectScreen} />
       <Tab.Screen name="메세지" component={MessageScreen} />
+      <Tab.Screen name="회의록" component={MeetingScreen} />
       <Tab.Screen name="설정" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -67,6 +70,6 @@ export default function App() {
 }
 
 function tabColor(name) {
-  const map = { 홈: C.gold, 일정: C.accentBlue, 거래처: C.accentTeal, 프로젝트: C.red, 메세지: C.accentPurple, 설정: C.textSecondary };
+  const map = { 홈: C.gold, 일정: C.accentBlue, 거래처: C.accentTeal, 프로젝트: C.red, 메세지: C.accentPurple, 회의록: C.accentTeal, 설정: C.textSecondary };
   return map[name] || C.textPrimary;
 }

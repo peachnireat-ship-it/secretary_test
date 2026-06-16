@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { getClients, addClient, saveClients, getHistories, addHistory } from '../services/storage';
-import { askClaude, buildClientSystem } from '../services/claude';
+import { askClaude, buildClientSystem, josa과와 } from '../services/claude';
 
 const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
 
@@ -160,7 +160,10 @@ export default function ClientScreen() {
     try {
       const clientHistList = (histList || histories).filter((h) => h.clientId === client.id);
       const systemPrompt = buildClientSystem([client], clientHistList);
-      const reply = await askClaude([{ role: 'user', content: `${client.company} ${client.name}과의 관계를 3-4문장으로 간결하게 요약해줘. 마지막 연락 날짜, 현재 상황, 다음 필요한 액션을 포함해줘. 반드시 한국어(한글)로만 작성하세요. 영어 문장, 한자, 일본어는 절대 사용하지 마세요.` }], systemPrompt);
+      const lastWord = client.role?.trim() || client.name;
+      const particle = josa과와(lastWord);
+      const nameWithRole = client.role?.trim() ? `${client.name} ${client.role}` : client.name;
+      const reply = await askClaude([{ role: 'user', content: `${client.company} ${nameWithRole}${particle}의 관계를 3~4문장으로 자연스럽게 요약해줘. 마지막 연락 날짜, 현재 상황, 다음 필요한 액션을 포함해줘. 반드시 한국어로만 작성해줘.` }], systemPrompt);
       setClientSummary(reply);
     } catch (e) {
       setClientSummary(e.message === 'API_KEY_MISSING' ? '설정 탭에서 API 키를 입력하면 AI 요약을 볼 수 있습니다.' : `오류: ${e.message}`);
