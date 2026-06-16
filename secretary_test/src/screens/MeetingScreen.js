@@ -66,6 +66,9 @@ export default function MeetingScreen({ navigation }) {
   const [rawTranscript, setRawTranscript] = useState('');
   const [speakerNames, setSpeakerNames] = useState({});
 
+  const [workTopics, setWorkTopics] = useState('');
+  const [workTopicsLoading, setWorkTopicsLoading] = useState(false);
+
   const timerRef = useRef(null);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
@@ -277,6 +280,38 @@ export default function MeetingScreen({ navigation }) {
 
   function toggleExpand(id) {
     setExpandedId((prev) => (prev === id ? null : id));
+  }
+
+  async function analyzeWorkTopics() {
+    const withSummary = meetingRecords.filter((r) => r.summary).slice(0, 20);
+    if (withSummary.length === 0) return;
+    setWorkTopicsLoading(true);
+    setWorkTopics('');
+    try {
+      const summaries = withSummary
+        .map((r, i) => `[회의 ${i + 1}] ${r.title || '제목 없음'}\n${r.summary}`)
+        .join('\n\n---\n\n');
+      const result = await askClaude(
+        [{ role: 'user', content: summaries }],
+        `[언어 규칙] 반드시 한국어로만 응답하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.
+
+다음은 여러 회의의 요약입니다. 이 회의들에서 반복·공통으로 등장하는 업무 주제와 키워드를 추출해주세요.
+
+## 주요 업무 주제
+(반복 논의된 업무 영역을 bullet로 나열)
+
+## 핵심 키워드
+(자주 언급된 주제어, 프로젝트명, 이슈 등)
+
+## 인사이트
+(전체 회의를 통해 파악할 수 있는 업무 패턴이나 특이사항, 1~2문장)`
+      );
+      setWorkTopics(result);
+    } catch (e) {
+      handleApiError(e);
+    } finally {
+      setWorkTopicsLoading(false);
+    }
   }
 
   return (
@@ -492,6 +527,33 @@ export default function MeetingScreen({ navigation }) {
           data={meetingRecords}
           keyExtractor={(item) => item.id}
           contentContainerStyle={s.historyContent}
+          ListHeaderComponent={meetingRecords.length > 0 ? (
+            <View style={s.topicSection}>
+              <TouchableOpacity
+                style={[s.topicBtn, workTopicsLoading && s.topicBtnDisabled]}
+                onPress={analyzeWorkTopics}
+                activeOpacity={0.8}
+                disabled={workTopicsLoading}
+              >
+                {workTopicsLoading ? (
+                  <ActivityIndicator color={C.gold} size="small" />
+                ) : (
+                  <Text style={s.topicBtnText}>업무 주제 분석</Text>
+                )}
+              </TouchableOpacity>
+              {!!workTopics && (
+                <View style={s.topicResultBox}>
+                  <View style={s.topicResultHeader}>
+                    <Text style={s.topicResultLabel}>WORK TOPICS</Text>
+                    <TouchableOpacity onPress={() => copyToClipboard(workTopics)} activeOpacity={0.7}>
+                      <Text style={s.copyBtn}>복사</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={s.topicResultText}>{workTopics}</Text>
+                </View>
+              )}
+            </View>
+          ) : null}
           ListEmptyComponent={
             <View style={s.emptyBox}>
               <Text style={s.emptyText}>저장된 회의록이 없습니다</Text>
@@ -666,6 +728,22 @@ const s = StyleSheet.create({
   },
   // 기록 탭
   historyContent: { padding: 16, paddingBottom: 40 },
+  topicSection: { marginBottom: 16, gap: 12 },
+  topicBtn: {
+    backgroundColor: C.gold + '22', borderWidth: 1,
+    borderColor: C.gold + '55', borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center', justifyContent: 'center',
+    minHeight: 44,
+  },
+  topicBtnDisabled: { opacity: 0.5 },
+  topicBtnText: { color: C.gold, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
+  topicResultBox: {
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.gold + '33',
+    borderRadius: 12, padding: 16, gap: 12,
+  },
+  topicResultHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  topicResultLabel: { color: C.goldDim, fontSize: 10, letterSpacing: 2.5, fontWeight: '600' },
+  topicResultText: { color: C.textPrimary, fontSize: 13, lineHeight: 22 },
   emptyBox: { marginTop: 80, alignItems: 'center', gap: 10 },
   emptyText: { color: C.textSecondary, fontSize: 15, fontWeight: '300' },
   emptyHint: { color: C.textDim, fontSize: 12, letterSpacing: 0.3 },
