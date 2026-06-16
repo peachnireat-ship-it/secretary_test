@@ -3,6 +3,7 @@ import {
   TextInput, Modal, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { useState, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getMessages, addMessage, updateMessage, deleteMessage } from '../services/storage';
 
@@ -29,6 +30,7 @@ function timeAgo(ts) {
 }
 
 export default function MessageScreen() {
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState([]);
   const [filter, setFilter] = useState('전체');
 
@@ -130,7 +132,7 @@ export default function MessageScreen() {
   return (
     <View style={s.root}>
       {/* 헤더 */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <View>
           <Text style={s.headerTitle}>메세지</Text>
           {unreadCount > 0 && <Text style={s.headerSub}>{unreadCount}건 미확인</Text>}

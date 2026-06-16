@@ -3,6 +3,7 @@ import {
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { getClients, addClient, saveClients, getHistories, addHistory } from '../services/storage';
@@ -11,6 +12,7 @@ import { askClaude, buildClientSystem, josa과와 } from '../services/claude';
 const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
 
 export default function ClientScreen() {
+  const insets = useSafeAreaInsets();
   const [clients, setClients] = useState([]);
   const [histories, setHistories] = useState([]);
   const [search, setSearch] = useState('');
@@ -181,7 +183,7 @@ export default function ClientScreen() {
   return (
     <View style={s.root}>
       {/* ── 헤더 ── */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <Text style={s.headerTitle}>거래처 관리</Text>
         <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
           <Text style={s.aiBtnText}>✦ AI</Text>

@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useState, useEffect, useRef } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getProjects, addProject, updateProject, deleteProject } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
@@ -47,6 +48,7 @@ function isAtRisk(project) {
 }
 
 export default function ProjectScreen() {
+  const insets = useSafeAreaInsets();
   const [projects, setProjects] = useState([]);
   const [filter, setFilter] = useState('전체');
 
@@ -218,7 +220,7 @@ export default function ProjectScreen() {
   return (
     <View style={s.root}>
       {/* ── 헤더 ── */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <View>
           <Text style={s.headerTitle}>프로젝트</Text>
           {delayedCount > 0 && (

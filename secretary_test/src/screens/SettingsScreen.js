@@ -1,9 +1,11 @@
 import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { useState, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider } from '../services/storage';
 
 export default function SettingsScreen() {
+  const insets = useSafeAreaInsets();
   const [provider, setProviderState] = useState('groq');
   const [apiKey, setApiKeyState] = useState('');
   const [saved, setSaved] = useState(false);
@@ -62,7 +64,7 @@ export default function SettingsScreen() {
     : grokApiKey;
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+    <ScrollView style={s.root} contentContainerStyle={[s.scroll, { paddingTop: insets.top + 16 }]} showsVerticalScrollIndicator={false}>
       <View style={s.header}>
         <Text style={s.headerTitle}>설정</Text>
       </View>

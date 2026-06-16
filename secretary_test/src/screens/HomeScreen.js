@@ -1,6 +1,7 @@
 import { Text, View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getSchedules, getClients, getProjects } from '../services/storage';
 
@@ -28,6 +29,7 @@ function todayStr() {
 }
 
 export default function HomeScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const now = useNow();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
@@ -70,7 +72,7 @@ export default function HomeScreen({ navigation }) {
   return (
     <ScrollView
       style={s.root}
-      contentContainerStyle={s.scroll}
+      contentContainerStyle={[s.scroll, { paddingTop: insets.top + 16 }]}
       showsVerticalScrollIndicator={false}
     >
       {/* ── 헤더 ── */}

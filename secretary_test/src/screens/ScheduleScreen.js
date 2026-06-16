@@ -3,6 +3,7 @@ import {
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getSchedules, addSchedule, deleteSchedule } from '../services/storage';
 import { askClaude, buildScheduleSystem } from '../services/claude';
@@ -29,6 +30,7 @@ function buildDateStrip() {
 }
 
 export default function ScheduleScreen() {
+  const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(dateStr(new Date()));
   const [schedules, setSchedules] = useState([]);
   const [strip] = useState(buildDateStrip());
@@ -122,7 +124,7 @@ export default function ScheduleScreen() {
   return (
     <View style={s.root}>
       {/* ── 헤더 ── */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <Text style={s.headerTitle}>일정 관리</Text>
         <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
           <Text style={s.aiBtnText}>✦ AI</Text>
