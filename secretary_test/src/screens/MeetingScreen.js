@@ -74,6 +74,10 @@ export default function MeetingScreen({ navigation }) {
   const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
   const [speakerEditNames, setSpeakerEditNames] = useState({});
 
+  const [contentEditRecordId, setContentEditRecordId] = useState(null);
+  const [contentEditSummary, setContentEditSummary] = useState('');
+  const [contentEditTranscript, setContentEditTranscript] = useState('');
+
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
   const [clientPickerSpeaker, setClientPickerSpeaker] = useState(null);
@@ -361,6 +365,21 @@ export default function MeetingScreen({ navigation }) {
     setShowSaveModal(true);
   }
 
+  function openContentEditModal(item) {
+    setContentEditRecordId(item.id);
+    setContentEditSummary(item.summary || '');
+    setContentEditTranscript(item.transcript || '');
+  }
+
+  async function confirmContentEdit() {
+    const updated = await updateMeetingRecord(contentEditRecordId, {
+      summary: contentEditSummary,
+      transcript: contentEditTranscript,
+    });
+    setMeetingRecords(updated);
+    setContentEditRecordId(null);
+  }
+
   function openSpeakerEditModal(item) {
     const speakers = extractSpeakers(item.transcript || '');
     if (speakers.length === 0) {
@@ -557,6 +576,44 @@ export default function MeetingScreen({ navigation }) {
                 </TouchableOpacity>
                 <TouchableOpacity style={s.modalSaveBtn} onPress={confirmSpeakerEdit} activeOpacity={0.8}>
                   <Text style={s.modalSaveText}>변경</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={!!contentEditRecordId} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setContentEditRecordId(null)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior="padding">
+          <ScrollView contentContainerStyle={s.modalScrollContent} keyboardShouldPersistTaps="handled">
+            <View style={s.modalBox}>
+              <Text style={s.modalTitle}>내용 편집</Text>
+              <Text style={s.speakerModalSubtitle}>요약 (SUMMARY)</Text>
+              <TextInput
+                style={s.contentEditInput}
+                value={contentEditSummary}
+                onChangeText={setContentEditSummary}
+                placeholder="요약 내용을 입력하세요"
+                placeholderTextColor={C.textDim}
+                multiline
+                textAlignVertical="top"
+              />
+              <Text style={s.speakerModalSubtitle}>원문 (TRANSCRIPT)</Text>
+              <TextInput
+                style={s.contentEditInput}
+                value={contentEditTranscript}
+                onChangeText={setContentEditTranscript}
+                placeholder="원문을 입력하세요"
+                placeholderTextColor={C.textDim}
+                multiline
+                textAlignVertical="top"
+              />
+              <View style={s.modalBtns}>
+                <TouchableOpacity style={s.modalCancelBtn} onPress={() => setContentEditRecordId(null)} activeOpacity={0.7}>
+                  <Text style={s.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.modalSaveBtn} onPress={confirmContentEdit} activeOpacity={0.8}>
+                  <Text style={s.modalSaveText}>저장</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -926,6 +983,9 @@ export default function MeetingScreen({ navigation }) {
                     <TouchableOpacity style={s.editTitleBtn} onPress={() => openEditModal(item)} activeOpacity={0.7}>
                       <Text style={s.editTitleBtnText}>제목 변경</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity style={s.contentEditBtn} onPress={() => openContentEditModal(item)} activeOpacity={0.7}>
+                      <Text style={s.contentEditBtnText}>내용 편집</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity style={s.speakerEditBtn} onPress={() => openSpeakerEditModal(item)} activeOpacity={0.7}>
                       <Text style={s.speakerEditBtnText}>화자 변경</Text>
                     </TouchableOpacity>
@@ -1258,6 +1318,17 @@ const s = StyleSheet.create({
     paddingVertical: 7, paddingHorizontal: 16,
   },
   editTitleBtnText: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
+  contentEditBtn: {
+    borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 8,
+    paddingVertical: 7, paddingHorizontal: 16,
+  },
+  contentEditBtnText: { color: C.accentTeal, fontSize: 12, fontWeight: '500' },
+  contentEditInput: {
+    backgroundColor: C.bg, borderWidth: 1, borderColor: C.borderHigh,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
+    color: C.textPrimary, fontSize: 13, lineHeight: 20,
+    minHeight: 120, maxHeight: 260,
+  },
   speakerEditBtn: {
     borderWidth: 1, borderColor: C.accentPurple + '55', borderRadius: 8,
     paddingVertical: 7, paddingHorizontal: 16,
