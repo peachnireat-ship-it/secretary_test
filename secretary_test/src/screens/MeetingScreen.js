@@ -30,9 +30,9 @@ function formatDateTime(ms) {
 
 function extractSpeakers(text) {
   const found = new Set();
-  const regex = /\[화자 \d+\]/g;
+  const regex = /(?:^|\n)\[([^\]\n]+)\]/g;
   let m;
-  while ((m = regex.exec(text)) !== null) found.add(m[0].slice(1, -1));
+  while ((m = regex.exec(text)) !== null) found.add(m[1]);
   return [...found];
 }
 
@@ -69,6 +69,9 @@ export default function MeetingScreen({ navigation }) {
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [selectedTaskIndices, setSelectedTaskIndices] = useState(new Set());
+
+  const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
+  const [speakerEditNames, setSpeakerEditNames] = useState({});
 
   const [workTopics, setWorkTopics] = useState('');
   const [workTopicsLoading, setWorkTopicsLoading] = useState(false);
@@ -292,6 +295,30 @@ export default function MeetingScreen({ navigation }) {
     setShowSaveModal(true);
   }
 
+  function openSpeakerEditModal(item) {
+    const speakers = extractSpeakers(item.transcript || '');
+    if (speakers.length === 0) {
+      Alert.alert('화자 없음', '이 회의록에는 구분된 화자가 없습니다.');
+      return;
+    }
+    setSpeakerEditRecordId(item.id);
+    setSpeakerEditNames(Object.fromEntries(speakers.map((s) => [s, ''])));
+  }
+
+  async function confirmSpeakerEdit() {
+    const record = meetingRecords.find((r) => r.id === speakerEditRecordId);
+    if (!record) return;
+    setSpeakerEditRecordId(null);
+    const updatedTranscript = applyNames(record.transcript || '', speakerEditNames);
+    const updatedSummary = applyNames(record.summary || '', speakerEditNames);
+    const updated = await updateMeetingRecord(speakerEditRecordId, {
+      transcript: updatedTranscript,
+      summary: updatedSummary,
+    });
+    setMeetingRecords(updated);
+    setSpeakerEditNames({});
+  }
+
   async function confirmSave() {
     const title = titleInput.trim();
     setShowSaveModal(false);
@@ -415,6 +442,38 @@ export default function MeetingScreen({ navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+      <Modal visible={!!speakerEditRecordId} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setSpeakerEditRecordId(null)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior="padding">
+          <ScrollView contentContainerStyle={s.modalScrollContent} keyboardShouldPersistTaps="handled">
+            <View style={s.modalBox}>
+              <Text style={s.modalTitle}>화자 이름 변경</Text>
+              <Text style={s.speakerModalSubtitle}>변경할 이름을 입력하세요 (빈칸이면 원래 이름 유지)</Text>
+              {Object.keys(speakerEditNames).map((speaker) => (
+                <View key={speaker} style={s.speakerRow}>
+                  <Text style={s.speakerOrigLabel}>{speaker}</Text>
+                  <Text style={s.speakerArrow}>→</Text>
+                  <TextInput
+                    style={s.speakerInput}
+                    value={speakerEditNames[speaker]}
+                    onChangeText={(v) => setSpeakerEditNames((prev) => ({ ...prev, [speaker]: v }))}
+                    placeholder={speaker}
+                    placeholderTextColor={C.textDim}
+                  />
+                </View>
+              ))}
+              <View style={s.modalBtns}>
+                <TouchableOpacity style={s.modalCancelBtn} onPress={() => setSpeakerEditRecordId(null)} activeOpacity={0.7}>
+                  <Text style={s.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.modalSaveBtn} onPress={confirmSpeakerEdit} activeOpacity={0.8}>
+                  <Text style={s.modalSaveText}>변경</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* 상단 탭 */}
       <View style={s.topTab}>
         <TouchableOpacity
@@ -593,19 +652,10 @@ export default function MeetingScreen({ navigation }) {
             </View>
           )}
 
-          {/* 태스크 추출 */}
-          {!!transcript && !loading && (
+          {/* 태스크 목록 */}
+          {!!transcript && !loading && (tasks.length > 0 || tasksLoading) && (
             <View style={[s.section, { marginBottom: 16 }]}>
               <Text style={s.sectionLabel}>TASKS</Text>
-              {tasks.length === 0 && !tasksLoading && (
-                <TouchableOpacity
-                  style={s.extractTasksBtn}
-                  onPress={() => runExtractTasks(transcript)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={s.extractTasksBtnText}>태스크 추출</Text>
-                </TouchableOpacity>
-              )}
               {tasksLoading && (
                 <View style={s.loadingBox}>
                   <ActivityIndicator color={C.accentPurple} size="small" />
@@ -659,20 +709,10 @@ export default function MeetingScreen({ navigation }) {
                   </Text>
                 </TouchableOpacity>
               )}
-              {tasks.length > 0 && (
-                <TouchableOpacity
-                  style={[s.extractTasksBtn, { marginTop: 8, opacity: 0.7 }]}
-                  onPress={() => runExtractTasks(transcript)}
-                  activeOpacity={0.8}
-                  disabled={tasksLoading}
-                >
-                  <Text style={s.extractTasksBtnText}>다시 추출</Text>
-                </TouchableOpacity>
-              )}
             </View>
           )}
 
-          {/* 저장 버튼 */}
+          {/* 태스크 추출 + 저장 버튼 */}
           {(!!summary || !!transcript) && !loading && (
             <View style={[s.saveRow, { marginBottom: 48 }]}>
               {saved ? (
@@ -680,9 +720,22 @@ export default function MeetingScreen({ navigation }) {
                   <Text style={s.savedText}>✓ 기록에 저장됨</Text>
                 </View>
               ) : (
-                <TouchableOpacity style={s.saveBtn} onPress={openSaveModal} activeOpacity={0.8}>
-                  <Text style={s.saveBtnText}>기록 저장</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={[s.actionBtn, s.taskExtractBtn, tasksLoading && s.actionBtnDisabled]}
+                    onPress={() => runExtractTasks(transcript)}
+                    activeOpacity={0.8}
+                    disabled={tasksLoading}
+                  >
+                    {tasksLoading
+                      ? <ActivityIndicator color={C.accentPurple} size="small" />
+                      : <Text style={s.taskExtractBtnText}>{tasks.length > 0 ? '다시 추출' : '태스크 추출'}</Text>
+                    }
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.actionBtn, s.saveBtnNew]} onPress={openSaveModal} activeOpacity={0.8}>
+                    <Text style={s.saveBtnText}>기록 저장</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           )}
@@ -739,6 +792,9 @@ export default function MeetingScreen({ navigation }) {
                     <Text style={s.historyDate} numberOfLines={1}>{item.title || formatDateTime(item.createdAt)}</Text>
                     <TouchableOpacity style={s.editTitleBtn} onPress={() => openEditModal(item)} activeOpacity={0.7}>
                       <Text style={s.editTitleBtnText}>제목 변경</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.speakerEditBtn} onPress={() => openSpeakerEditModal(item)} activeOpacity={0.7}>
+                      <Text style={s.speakerEditBtnText}>화자 변경</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={s.deleteBtn} onPress={() => handleDelete(item.id)} activeOpacity={0.7}>
                       <Text style={s.deleteBtnText}>삭제</Text>
@@ -911,7 +967,15 @@ const s = StyleSheet.create({
   loadingText: { color: C.textSecondary, fontSize: 13 },
   errorBox: { backgroundColor: C.red + '18', borderWidth: 1, borderColor: C.red + '44', borderRadius: 10, padding: 14, marginBottom: 20 },
   errorText: { color: C.red, fontSize: 13 },
-  saveRow: { alignItems: 'center', marginBottom: 20 },
+  saveRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  actionBtn: {
+    flex: 1, paddingVertical: 13, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderRadius: 10,
+  },
+  actionBtnDisabled: { opacity: 0.5 },
+  taskExtractBtn: { backgroundColor: C.accentPurple + '22', borderColor: C.accentPurple + '55' },
+  taskExtractBtnText: { color: C.accentPurple, fontSize: 14, fontWeight: '500' },
+  saveBtnNew: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '55' },
   saveBtn: {
     backgroundColor: C.accentTeal + '22', borderWidth: 1,
     borderColor: C.accentTeal + '55', borderRadius: 20,
@@ -993,6 +1057,11 @@ const s = StyleSheet.create({
     paddingVertical: 7, paddingHorizontal: 16,
   },
   editTitleBtnText: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
+  speakerEditBtn: {
+    borderWidth: 1, borderColor: C.accentPurple + '55', borderRadius: 8,
+    paddingVertical: 7, paddingHorizontal: 16,
+  },
+  speakerEditBtnText: { color: C.accentPurple, fontSize: 12, fontWeight: '500' },
   deleteBtn: {
     borderWidth: 1, borderColor: C.red + '55', borderRadius: 8,
     paddingVertical: 7, paddingHorizontal: 16,
