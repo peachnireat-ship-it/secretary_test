@@ -113,6 +113,9 @@ export default function ProjectScreen({ navigation, route }) {
   const [editStatus, setEditStatus] = useState('진행중');
   const [editProgress, setEditProgress] = useState(0);
   const [quickSlider, setQuickSlider] = useState(null);
+
+  const [showMeetingDetail, setShowMeetingDetail] = useState(false);
+  const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [editPriority, setEditPriority] = useState('보통');
   const [editNotes, setEditNotes] = useState('');
 
@@ -379,9 +382,14 @@ export default function ProjectScreen({ navigation, route }) {
                   return (
                     <View style={s.meetingChipRow}>
                       {linked.map((r) => (
-                        <View key={r.id} style={s.meetingChip}>
+                        <TouchableOpacity
+                          key={r.id}
+                          style={s.meetingChip}
+                          activeOpacity={0.7}
+                          onPress={() => { setSelectedMeeting(r); setShowMeetingDetail(true); }}
+                        >
                           <Text style={s.meetingChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
-                        </View>
+                        </TouchableOpacity>
                       ))}
                     </View>
                   );
@@ -610,6 +618,47 @@ export default function ProjectScreen({ navigation, route }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      {/* ── 회의록 상세 모달 ── */}
+      <Modal visible={showMeetingDetail} animationType="slide" transparent onRequestClose={() => setShowMeetingDetail(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
+            <View style={s.modalHandle} />
+            {selectedMeeting && (
+              <>
+                <View style={s.meetingDetailHeader}>
+                  <Text style={[s.modalTitle, { flex: 1, marginBottom: 0 }]} numberOfLines={2}>{selectedMeeting.title || '회의록'}</Text>
+                  <TouchableOpacity onPress={() => setShowMeetingDetail(false)} style={{ marginLeft: 12 }}>
+                    <Text style={s.closeBtn}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
+                  {selectedMeeting.summary ? (
+                    <>
+                      <Text style={s.inputLabel}>요약</Text>
+                      <View style={s.meetingDetailSection}>
+                        <Text style={s.meetingDetailText}>{selectedMeeting.summary}</Text>
+                      </View>
+                    </>
+                  ) : null}
+                  {selectedMeeting.transcript ? (
+                    <>
+                      <Text style={s.inputLabel}>전문</Text>
+                      <View style={s.meetingDetailSection}>
+                        <Text style={s.meetingDetailText}>{selectedMeeting.transcript}</Text>
+                      </View>
+                    </>
+                  ) : null}
+                  {!selectedMeeting.summary && !selectedMeeting.transcript && (
+                    <Text style={[s.emptyText, { marginTop: 20 }]}>저장된 내용이 없습니다.</Text>
+                  )}
+                  <View style={{ height: 20 }} />
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* ── 진행률 슬라이더 모달 ── */}
       {quickSlider && (
         <Modal visible animationType="fade" transparent onRequestClose={() => setQuickSlider(null)}>
@@ -694,6 +743,9 @@ const s = StyleSheet.create({
   meetingChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   meetingChip: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   meetingChipText: { color: C.accentPurple, fontSize: 11, fontWeight: '500' },
+  meetingDetailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
+  meetingDetailSection: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 14, marginBottom: 4 },
+  meetingDetailText: { color: C.textSecondary, fontSize: 13, lineHeight: 20 },
 
   fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
   fabText: { color: '#09090E', fontSize: 26, lineHeight: 30, fontWeight: '300' },

@@ -83,8 +83,11 @@ export default function MeetingScreen({ navigation }) {
   const [workTopics, setWorkTopics] = useState('');
   const [workTopicsLoading, setWorkTopicsLoading] = useState(false);
 
+  const [pickedAfterTranscript, setPickedAfterTranscript] = useState(false);
+
   const timerRef = useRef(null);
   const scrollRef = useRef(null);
+  const scrollToTopOnPickRef = useRef(false);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   useEffect(() => {
@@ -122,7 +125,12 @@ export default function MeetingScreen({ navigation }) {
 
   useEffect(() => {
     if (pickedFile) {
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      if (scrollToTopOnPickRef.current) {
+        scrollToTopOnPickRef.current = false;
+        setTimeout(() => scrollRef.current?.scrollTo({ x: 0, y: 0, animated: true }), 100);
+      } else {
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      }
     }
   }, [pickedFile]);
 
@@ -175,6 +183,17 @@ export default function MeetingScreen({ navigation }) {
     if (!mime.startsWith('audio/') && !AUDIO_EXTS.includes(ext)) {
       setErrorMsg('오디오 파일을 선택해 주세요.');
       return;
+    }
+    if (transcript) {
+      setTranscript('');
+      setSummary('');
+      setTasks([]);
+      setSelectedTaskIndices(new Set());
+      setSaved(false);
+      setRawTranscript('');
+      setSpeakerNames({});
+      setPickedAfterTranscript(true);
+      scrollToTopOnPickRef.current = true;
     }
     setPickedFile(asset);
   }
@@ -279,6 +298,7 @@ export default function MeetingScreen({ navigation }) {
     setSpeakerNames({});
     setTasks([]);
     setSelectedTaskIndices(new Set());
+    setPickedAfterTranscript(false);
     setTranscriptSource(source);
     try {
       setLoadingMsg('음성 변환 중…');
@@ -614,7 +634,7 @@ export default function MeetingScreen({ navigation }) {
         <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
 
           {/* 변환 완료 후: 파일 업로드 최상단 */}
-          {!!transcript && !!pickedFile && (
+          {!!pickedFile && (!!transcript || pickedAfterTranscript) && (
             <View style={s.section}>
               <Text style={s.sectionLabel}>FILE UPLOAD</Text>
               <View style={s.card}>
