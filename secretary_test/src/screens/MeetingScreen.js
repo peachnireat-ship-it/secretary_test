@@ -10,7 +10,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
 import { transcribeAudio, diarizeSegments, diarizeWithPyannote } from '../services/groqStt';
 import { askClaude, buildTaskExtractionSystem } from '../services/claude';
-import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient } from '../services/storage';
+import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects } from '../services/storage';
 
 function formatTime(sec) {
   const m = String(Math.floor(sec / 60)).padStart(2, '0');
@@ -74,6 +74,7 @@ export default function MeetingScreen({ navigation }) {
   const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
   const [speakerEditNames, setSpeakerEditNames] = useState({});
 
+  const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
   const [clientPickerSpeaker, setClientPickerSpeaker] = useState(null);
   const [clientPickerContext, setClientPickerContext] = useState(null);
@@ -107,6 +108,10 @@ export default function MeetingScreen({ navigation }) {
 
   useEffect(() => {
     getClients().then(setClients);
+  }, []);
+
+  useEffect(() => {
+    getProjects().then(setProjects);
   }, []);
 
   useEffect(() => {
@@ -938,6 +943,22 @@ export default function MeetingScreen({ navigation }) {
                         <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>
                       </View>
                     )}
+					{(() => {
+                      const linked = projects.filter((p) => p.meetingRecordIds?.includes(item.id));
+                      if (!linked.length) return null;
+                      return (
+                        <View style={s.historySection}>
+                          <Text style={s.historySectionLabel}>관련 프로젝트</Text>
+                          {linked.map((p) => (
+                            <View key={p.id} style={s.linkedProjectRow}>
+                              <View style={[s.linkedProjectDot, { backgroundColor: statusColor(p.status) }]} />
+                              <Text style={s.linkedProjectTitle} numberOfLines={1}>{p.title}</Text>
+                              <Text style={[s.linkedProjectStatus, { color: statusColor(p.status) }]}>{p.status}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      );
+                    })()}
 					{!!item.tasks?.length && (() => {
                       const selected = historySelectedTasks[item.id] || new Set();
                       return (
@@ -974,7 +995,7 @@ export default function MeetingScreen({ navigation }) {
                             style={[s.bundleBtn, selected.size === 0 && s.bundleBtnDisabled]}
                             onPress={() => {
                               const selectedTasks = [...selected].map((i) => item.tasks[i]);
-                              navigation.navigate('프로젝트', { addTask: bundleTasksToProject(selectedTasks) });
+                              navigation.navigate('프로젝트', { addTask: bundleTasksToProject(selectedTasks), meetingRecordId: item.id });
                               setHistorySelectedTasks((prev) => ({ ...prev, [item.id]: new Set() }));
                             }}
                             activeOpacity={0.8}
@@ -1023,6 +1044,11 @@ function taskToProject(task) {
     priority: task.priority,
     notes: task.assignee && task.assignee !== '미지정' ? `담당자: ${task.assignee}` : '',
   };
+}
+
+function statusColor(status) {
+  const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
+  return map[status] || C.textDim;
 }
 
 function priorityColor(priority) {
@@ -1162,6 +1188,10 @@ const s = StyleSheet.create({
   clientPickerName: { color: C.textPrimary, fontSize: 14, fontWeight: '500' },
   clientPickerCompany: { color: C.textDim, fontSize: 12, marginTop: 2 },
   clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },
+  linkedProjectRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  linkedProjectDot: { width: 7, height: 7, borderRadius: 4 },
+  linkedProjectTitle: { flex: 1, color: C.textPrimary, fontSize: 13 },
+  linkedProjectStatus: { fontSize: 11, fontWeight: '500' },
   clientAddBtn: {
     backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55',
     borderRadius: 8, paddingVertical: 11, alignItems: 'center',

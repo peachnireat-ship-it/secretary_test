@@ -6,7 +6,7 @@ import Slider from '@react-native-community/slider';
 import { useState, useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { getProjects, addProject, updateProject, deleteProject } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
 
 const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
@@ -94,6 +94,8 @@ function isAtRisk(project) {
 export default function ProjectScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const [projects, setProjects] = useState([]);
+  const [meetingRecords, setMeetingRecords] = useState([]);
+  const [pendingMeetingRecordId, setPendingMeetingRecordId] = useState(null);
   const [filter, setFilter] = useState('전체');
 
   const [showAdd, setShowAdd] = useState(false);
@@ -135,13 +137,15 @@ export default function ProjectScreen({ navigation, route }) {
     setNewNotes(addTask.notes || '');
     setNewStatus('진행중');
     setNewProgress('0');
+    setPendingMeetingRecordId(route?.params?.meetingRecordId || null);
     setShowAdd(true);
-    navigation.setParams({ addTask: undefined });
+    navigation.setParams({ addTask: undefined, meetingRecordId: undefined });
   }, [route?.params?.addTask]);
 
   async function load() {
-    const all = await getProjects();
+    const [all, records] = await Promise.all([getProjects(), getMeetingRecords()]);
     setProjects(all);
+    setMeetingRecords(records);
   }
 
   const filtered = projects.filter((p) => filter === '전체' || p.status === filter);
@@ -161,11 +165,13 @@ export default function ProjectScreen({ navigation, route }) {
       progress: parseInt(newProgress) || 0,
       priority: newPriority,
       notes: newNotes.trim(),
+      meetingRecordIds: pendingMeetingRecordId ? [pendingMeetingRecordId] : [],
     });
     setProjects(updated);
     setShowAdd(false);
     setNewTitle(''); setNewDeadline(''); setNewStatus('진행중');
     setNewProgress('0'); setNewPriority('보통'); setNewNotes('');
+    setPendingMeetingRecordId(null);
   }
 
   async function handleDelete(id, title) {
@@ -367,6 +373,19 @@ export default function ProjectScreen({ navigation, route }) {
                 </View>
 
                 {item.notes ? <Text style={s.cardNotes} numberOfLines={1}>{item.notes}</Text> : null}
+                {item.meetingRecordIds?.length > 0 && (() => {
+                  const linked = meetingRecords.filter((r) => item.meetingRecordIds.includes(r.id));
+                  if (!linked.length) return null;
+                  return (
+                    <View style={s.meetingChipRow}>
+                      {linked.map((r) => (
+                        <View key={r.id} style={s.meetingChip}>
+                          <Text style={s.meetingChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })()}
               </TouchableOpacity>
             );
           })
@@ -672,6 +691,9 @@ const s = StyleSheet.create({
   priorityText: { fontSize: 10, fontWeight: '500' },
   deadlineText: { color: C.textDim, fontSize: 11 },
   cardNotes: { color: C.textDim, fontSize: 11, fontStyle: 'italic' },
+  meetingChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  meetingChip: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
+  meetingChipText: { color: C.accentPurple, fontSize: 11, fontWeight: '500' },
 
   fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
   fabText: { color: '#09090E', fontSize: 26, lineHeight: 30, fontWeight: '300' },
