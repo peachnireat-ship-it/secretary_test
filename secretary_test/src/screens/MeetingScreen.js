@@ -440,60 +440,16 @@ export default function MeetingScreen({ navigation }) {
 
       {activeTab === 'record' ? (
         <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={s.header}>
-            <View style={s.headerBadge}>
-              <View style={s.headerBadgeDot} />
-              <Text style={s.headerBadgeText}>MEETING</Text>
-            </View>
-            <Text style={s.title}>회의 녹음</Text>
-            <Text style={s.subtitle}>음성을 텍스트로 변환합니다</Text>
-          </View>
 
-          <View style={s.rule} />
-
-          {/* 직접 녹음 */}
-          <View style={s.section}>
-            <Text style={s.sectionLabel}>RECORDING</Text>
-            <View style={s.card}>
-              <View style={s.recordCenter}>
-                {recording ? (
-                  <>
-                    <View style={s.recBadge}>
-                      <View style={s.recBadgeDot} />
-                      <Text style={s.recBadgeText}>녹음 중</Text>
-                    </View>
-                    <Text style={[s.timerText, s.timerActive]}>{formatTime(elapsed)}</Text>
-                    <TouchableOpacity style={s.stopBtn} onPress={stopAndTranscribe} activeOpacity={0.8}>
-                      <View style={s.stopSquare} />
-                      <Text style={s.stopBtnText}>녹음 중지</Text>
-                    </TouchableOpacity>
-                    <Text style={s.recordHint}>중지하면 텍스트 변환이 자동으로 시작됩니다</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={s.timerText}>{formatTime(elapsed)}</Text>
-                    <TouchableOpacity style={s.recordBtn} onPress={startRecording} activeOpacity={0.8}>
-                      <View style={s.recordDot} />
-                    </TouchableOpacity>
-                    <Text style={s.recordHint}>버튼을 눌러 녹음을 시작하세요</Text>
-                    <Text style={s.recordInfo}>녹음 파일은 저장되지 않으며{'\n'}중지 후 바로 텍스트로 변환됩니다</Text>
-                  </>
-                )}
-              </View>
-            </View>
-          </View>
-
-          {/* 파일 업로드 */}
-          <View style={s.section}>
-            <Text style={s.sectionLabel}>FILE UPLOAD</Text>
-            <View style={s.card}>
-              <TouchableOpacity style={s.filePickBtn} onPress={pickFile} activeOpacity={0.7} disabled={loading}>
-                <Text style={s.filePickIcon}>◈</Text>
-                <Text style={s.filePickText}>
-                  {pickedFile ? '파일 다시 선택' : '오디오 파일 선택'}
-                </Text>
-              </TouchableOpacity>
-              {pickedFile && (
+          {/* 변환 완료 후: 파일 업로드 최상단 */}
+          {!!transcript && !!pickedFile && (
+            <View style={s.section}>
+              <Text style={s.sectionLabel}>FILE UPLOAD</Text>
+              <View style={s.card}>
+                <TouchableOpacity style={s.filePickBtn} onPress={pickFile} activeOpacity={0.7} disabled={loading}>
+                  <Text style={s.filePickIcon}>◈</Text>
+                  <Text style={s.filePickText}>파일 다시 선택</Text>
+                </TouchableOpacity>
                 <View style={s.fileInfo}>
                   <View style={s.fileDivider} />
                   <Text style={s.fileInfoLabel}>선택된 파일</Text>
@@ -507,9 +463,85 @@ export default function MeetingScreen({ navigation }) {
                     <Text style={s.transcribeBtnText}>변환하기</Text>
                   </TouchableOpacity>
                 </View>
-              )}
+              </View>
             </View>
-          </View>
+          )}
+
+          {/* 변환 전: 헤더, 녹음, 파일 업로드 */}
+          {!transcript && (
+            <>
+              <View style={s.header}>
+                <View style={s.headerBadge}>
+                  <View style={s.headerBadgeDot} />
+                  <Text style={s.headerBadgeText}>MEETING</Text>
+                </View>
+                <Text style={s.title}>회의 녹음</Text>
+                <Text style={s.subtitle}>음성을 텍스트로 변환합니다</Text>
+              </View>
+
+              <View style={s.rule} />
+
+              {/* 직접 녹음 */}
+              <View style={s.section}>
+                <Text style={s.sectionLabel}>RECORDING</Text>
+                <View style={s.card}>
+                  <View style={s.recordCenter}>
+                    {recording ? (
+                      <>
+                        <View style={s.recBadge}>
+                          <View style={s.recBadgeDot} />
+                          <Text style={s.recBadgeText}>녹음 중</Text>
+                        </View>
+                        <Text style={[s.timerText, s.timerActive]}>{formatTime(elapsed)}</Text>
+                        <TouchableOpacity style={s.stopBtn} onPress={stopAndTranscribe} activeOpacity={0.8}>
+                          <View style={s.stopSquare} />
+                          <Text style={s.stopBtnText}>녹음 중지</Text>
+                        </TouchableOpacity>
+                        <Text style={s.recordHint}>중지하면 텍스트 변환이 자동으로 시작됩니다</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={s.timerText}>{formatTime(elapsed)}</Text>
+                        <TouchableOpacity style={s.recordBtn} onPress={startRecording} activeOpacity={0.8}>
+                          <View style={s.recordDot} />
+                        </TouchableOpacity>
+                        <Text style={s.recordHint}>버튼을 눌러 녹음을 시작하세요</Text>
+                        <Text style={s.recordInfo}>녹음 파일은 저장되지 않으며{'\n'}중지 후 바로 텍스트로 변환됩니다</Text>
+                      </>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              {/* 파일 업로드 */}
+              <View style={s.section}>
+                <Text style={s.sectionLabel}>FILE UPLOAD</Text>
+                <View style={s.card}>
+                  <TouchableOpacity style={s.filePickBtn} onPress={pickFile} activeOpacity={0.7} disabled={loading}>
+                    <Text style={s.filePickIcon}>◈</Text>
+                    <Text style={s.filePickText}>
+                      {pickedFile ? '파일 다시 선택' : '오디오 파일 선택'}
+                    </Text>
+                  </TouchableOpacity>
+                  {pickedFile && (
+                    <View style={s.fileInfo}>
+                      <View style={s.fileDivider} />
+                      <Text style={s.fileInfoLabel}>선택된 파일</Text>
+                      <Text style={s.fileInfoName} numberOfLines={2}>{pickedFile.name}</Text>
+                      <TouchableOpacity
+                        style={[s.transcribeBtn, loading && s.transcribeBtnDisabled]}
+                        onPress={transcribeFile}
+                        activeOpacity={0.8}
+                        disabled={loading}
+                      >
+                        <Text style={s.transcribeBtnText}>변환하기</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </>
+          )}
 
           {/* 로딩 */}
           {loading && (
@@ -523,21 +555,6 @@ export default function MeetingScreen({ navigation }) {
           {!!errorMsg && (
             <View style={s.errorBox}>
               <Text style={s.errorText}>{errorMsg}</Text>
-            </View>
-          )}
-
-          {/* 저장 버튼 */}
-          {(!!summary || !!transcript) && !loading && (
-            <View style={s.saveRow}>
-              {saved ? (
-                <View style={s.savedBadge}>
-                  <Text style={s.savedText}>✓ 기록에 저장됨</Text>
-                </View>
-              ) : (
-                <TouchableOpacity style={s.saveBtn} onPress={openSaveModal} activeOpacity={0.8}>
-                  <Text style={s.saveBtnText}>기록 저장</Text>
-                </TouchableOpacity>
-              )}
             </View>
           )}
 
@@ -557,6 +574,21 @@ export default function MeetingScreen({ navigation }) {
               </View>
               <View style={s.card}>
                 <Text style={s.transcriptText}>{summary}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* 원본 텍스트 */}
+          {!!transcript && (
+            <View style={[s.section, { marginBottom: 16 }]}>
+              <View style={s.transcriptHeader}>
+                <Text style={s.sectionLabel}>TRANSCRIPT</Text>
+                <TouchableOpacity onPress={() => copyToClipboard(transcript)} activeOpacity={0.7}>
+                  <Text style={s.copyBtn}>복사</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={s.card}>
+                <Text style={[s.transcriptText, { color: C.textSecondary }]}>{transcript}</Text>
               </View>
             </View>
           )}
@@ -640,18 +672,18 @@ export default function MeetingScreen({ navigation }) {
             </View>
           )}
 
-          {/* 원본 텍스트 */}
-          {!!transcript && (
-            <View style={[s.section, { marginBottom: 48 }]}>
-              <View style={s.transcriptHeader}>
-                <Text style={s.sectionLabel}>TRANSCRIPT</Text>
-                <TouchableOpacity onPress={() => copyToClipboard(transcript)} activeOpacity={0.7}>
-                  <Text style={s.copyBtn}>복사</Text>
+          {/* 저장 버튼 */}
+          {(!!summary || !!transcript) && !loading && (
+            <View style={[s.saveRow, { marginBottom: 48 }]}>
+              {saved ? (
+                <View style={s.savedBadge}>
+                  <Text style={s.savedText}>✓ 기록에 저장됨</Text>
+                </View>
+              ) : (
+                <TouchableOpacity style={s.saveBtn} onPress={openSaveModal} activeOpacity={0.8}>
+                  <Text style={s.saveBtnText}>기록 저장</Text>
                 </TouchableOpacity>
-              </View>
-              <View style={s.card}>
-                <Text style={[s.transcriptText, { color: C.textSecondary }]}>{transcript}</Text>
-              </View>
+              )}
             </View>
           )}
         </ScrollView>
