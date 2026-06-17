@@ -69,6 +69,7 @@ export default function MeetingScreen({ navigation }) {
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [selectedTaskIndices, setSelectedTaskIndices] = useState(new Set());
+  const [historySelectedTasks, setHistorySelectedTasks] = useState({});
 
   const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
   const [speakerEditNames, setSpeakerEditNames] = useState({});
@@ -223,6 +224,14 @@ export default function MeetingScreen({ navigation }) {
       setLoading(false);
       setLoadingMsg('');
     }
+  }
+
+  function toggleHistoryTask(recordId, index) {
+    setHistorySelectedTasks((prev) => {
+      const set = new Set(prev[recordId] || []);
+      set.has(index) ? set.delete(index) : set.add(index);
+      return { ...prev, [recordId]: set };
+    });
   }
 
   function toggleTaskSelect(i) {
@@ -929,35 +938,57 @@ export default function MeetingScreen({ navigation }) {
                         <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>
                       </View>
                     )}
-					{!!item.tasks?.length && (
-                      <View style={s.historySection}>
-                        <Text style={s.historySectionLabel}>TASKS</Text>
-                        <View style={s.card}>
-                          {item.tasks.map((task, i) => (
-                            <View key={i} style={[s.taskRow, i < item.tasks.length - 1 && s.taskRowBorder]}>
-                              <View style={[s.taskPriorityDot, { backgroundColor: priorityColor(task.priority) }]} />
-                              <View style={{ flex: 1 }}>
-                                <Text style={s.taskContent}>{task.content}</Text>
-                                <View style={s.taskMeta}>
-                                  <Text style={s.taskMetaText}>{task.assignee}</Text>
-                                  {task.deadline !== '미정' && (
-                                    <Text style={s.taskMetaText}>· {task.deadline}</Text>
-                                  )}
-                                  <Text style={[s.taskPriorityLabel, { color: priorityColor(task.priority) }]}>{task.priority}</Text>
-                                </View>
-                              </View>
-                              <TouchableOpacity
-                                style={s.taskAddBtn}
-                                onPress={() => navigation.navigate('프로젝트', { addTask: taskToProject(task) })}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={s.taskAddBtnText}>+ 프로젝트</Text>
-                              </TouchableOpacity>
-                            </View>
-                          ))}
+					{!!item.tasks?.length && (() => {
+                      const selected = historySelectedTasks[item.id] || new Set();
+                      return (
+                        <View style={s.historySection}>
+                          <Text style={s.historySectionLabel}>TASKS</Text>
+                          <View style={s.card}>
+                            {item.tasks.map((task, i) => {
+                              const isSelected = selected.has(i);
+                              return (
+                                <TouchableOpacity
+                                  key={i}
+                                  style={[s.taskRow, i < item.tasks.length - 1 && s.taskRowBorder]}
+                                  activeOpacity={0.7}
+                                  onPress={() => toggleHistoryTask(item.id, i)}
+                                >
+                                  <View style={[s.taskCheckbox, isSelected && s.taskCheckboxSelected]}>
+                                    {isSelected && <Text style={s.taskCheckmark}>✓</Text>}
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={s.taskContent}>{task.content}</Text>
+                                    <View style={s.taskMeta}>
+                                      <Text style={s.taskMetaText}>{task.assignee}</Text>
+                                      {task.deadline !== '미정' && (
+                                        <Text style={s.taskMetaText}>· {task.deadline}</Text>
+                                      )}
+                                      <Text style={[s.taskPriorityLabel, { color: priorityColor(task.priority) }]}>{task.priority}</Text>
+                                    </View>
+                                  </View>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                          <TouchableOpacity
+                            style={[s.bundleBtn, selected.size === 0 && s.bundleBtnDisabled]}
+                            onPress={() => {
+                              const selectedTasks = [...selected].map((i) => item.tasks[i]);
+                              navigation.navigate('프로젝트', { addTask: bundleTasksToProject(selectedTasks) });
+                              setHistorySelectedTasks((prev) => ({ ...prev, [item.id]: new Set() }));
+                            }}
+                            activeOpacity={0.8}
+                            disabled={selected.size === 0}
+                          >
+                            <Text style={s.bundleBtnText}>
+                              {selected.size > 0
+                                ? `${selected.size}개 선택 · 프로젝트로 묶기`
+                                : '태스크를 선택하세요'}
+                            </Text>
+                          </TouchableOpacity>
                         </View>
-                      </View>
-                    )}
+                      );
+                    })()}
                   </View>
                 )}
               </TouchableOpacity>
