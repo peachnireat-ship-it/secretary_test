@@ -102,6 +102,12 @@ export default function MeetingScreen({ navigation }) {
     }
   }, [loading]);
 
+  useEffect(() => {
+    if (pickedFile) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [pickedFile]);
+
   async function startRecording() {
     setErrorMsg('');
     setTranscript('');
