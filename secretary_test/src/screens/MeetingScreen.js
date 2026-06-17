@@ -10,7 +10,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
 import { transcribeAudio, diarizeSegments, diarizeWithPyannote } from '../services/groqStt';
 import { askClaude, buildTaskExtractionSystem } from '../services/claude';
-import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics } from '../services/storage';
+import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients } from '../services/storage';
 
 function formatTime(sec) {
   const m = String(Math.floor(sec / 60)).padStart(2, '0');
@@ -73,6 +73,11 @@ export default function MeetingScreen({ navigation }) {
   const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
   const [speakerEditNames, setSpeakerEditNames] = useState({});
 
+  const [clients, setClients] = useState([]);
+  const [clientPickerSpeaker, setClientPickerSpeaker] = useState(null);
+  const [clientPickerContext, setClientPickerContext] = useState(null);
+  const [clientPickerSearch, setClientPickerSearch] = useState('');
+
   const [workTopics, setWorkTopics] = useState('');
   const [workTopicsLoading, setWorkTopicsLoading] = useState(false);
 
@@ -97,6 +102,10 @@ export default function MeetingScreen({ navigation }) {
 
   useEffect(() => {
     getWorkTopics().then((v) => { if (v) setWorkTopics(v); });
+  }, []);
+
+  useEffect(() => {
+    getClients().then(setClients);
   }, []);
 
   useEffect(() => {
@@ -283,6 +292,21 @@ export default function MeetingScreen({ navigation }) {
     }
   }
 
+  function openClientPicker(speaker, context) {
+    setClientPickerSpeaker(speaker);
+    setClientPickerContext(context);
+    setClientPickerSearch('');
+  }
+
+  function selectClient(client) {
+    if (clientPickerContext === 'save') {
+      setSpeakerNames((prev) => ({ ...prev, [clientPickerSpeaker]: client.name }));
+    } else {
+      setSpeakerEditNames((prev) => ({ ...prev, [clientPickerSpeaker]: client.name }));
+    }
+    setClientPickerSpeaker(null);
+  }
+
   function openSaveModal() {
     setEditingRecordId(null);
     setTitleInput(`${formatDate(Date.now())} · ${transcriptSource}`);
@@ -406,19 +430,31 @@ export default function MeetingScreen({ navigation }) {
               {!editingRecordId && !!rawTranscript && (
                 <>
                   <Text style={s.speakerModalSubtitle}>화자 이름 지정 (선택)</Text>
-                  {Object.keys(speakerNames).map((speaker) => (
-                    <View key={speaker} style={s.speakerRow}>
-                      <Text style={s.speakerOrigLabel}>{speaker}</Text>
-                      <Text style={s.speakerArrow}>→</Text>
-                      <TextInput
-                        style={s.speakerInput}
-                        value={speakerNames[speaker]}
-                        onChangeText={(v) => setSpeakerNames((prev) => ({ ...prev, [speaker]: v }))}
-                        placeholder={speaker}
-                        placeholderTextColor={C.textDim}
-                      />
-                    </View>
-                  ))}
+                  {Object.keys(speakerNames).map((speaker) => {
+                    const linked = clients.find((c) => c.name === speakerNames[speaker]);
+                    return (
+                      <View key={speaker} style={s.speakerRow}>
+                        <Text style={s.speakerOrigLabel}>{speaker}</Text>
+                        <Text style={s.speakerArrow}>→</Text>
+                        <TextInput
+                          style={s.speakerInput}
+                          value={speakerNames[speaker]}
+                          onChangeText={(v) => setSpeakerNames((prev) => ({ ...prev, [speaker]: v }))}
+                          placeholder={speaker}
+                          placeholderTextColor={C.textDim}
+                        />
+                        <TouchableOpacity
+                          style={[s.clientRegBtn, !!linked && s.clientRegBtnActive]}
+                          onPress={() => openClientPicker(speaker, 'save')}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[s.clientRegBtnText, !!linked && s.clientRegBtnTextActive]}>
+                            {linked ? linked.name : '거래처'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
                 </>
               )}
               <TextInput
@@ -448,19 +484,31 @@ export default function MeetingScreen({ navigation }) {
             <View style={s.modalBox}>
               <Text style={s.modalTitle}>화자 이름 변경</Text>
               <Text style={s.speakerModalSubtitle}>변경할 이름을 입력하세요 (빈칸이면 원래 이름 유지)</Text>
-              {Object.keys(speakerEditNames).map((speaker) => (
-                <View key={speaker} style={s.speakerRow}>
-                  <Text style={s.speakerOrigLabel}>{speaker}</Text>
-                  <Text style={s.speakerArrow}>→</Text>
-                  <TextInput
-                    style={s.speakerInput}
-                    value={speakerEditNames[speaker]}
-                    onChangeText={(v) => setSpeakerEditNames((prev) => ({ ...prev, [speaker]: v }))}
-                    placeholder={speaker}
-                    placeholderTextColor={C.textDim}
-                  />
-                </View>
-              ))}
+              {Object.keys(speakerEditNames).map((speaker) => {
+                const linked = clients.find((c) => c.name === speakerEditNames[speaker]);
+                return (
+                  <View key={speaker} style={s.speakerRow}>
+                    <Text style={s.speakerOrigLabel}>{speaker}</Text>
+                    <Text style={s.speakerArrow}>→</Text>
+                    <TextInput
+                      style={s.speakerInput}
+                      value={speakerEditNames[speaker]}
+                      onChangeText={(v) => setSpeakerEditNames((prev) => ({ ...prev, [speaker]: v }))}
+                      placeholder={speaker}
+                      placeholderTextColor={C.textDim}
+                    />
+                    <TouchableOpacity
+                      style={[s.clientRegBtn, !!linked && s.clientRegBtnActive]}
+                      onPress={() => openClientPicker(speaker, 'edit')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[s.clientRegBtnText, !!linked && s.clientRegBtnTextActive]}>
+                        {linked ? linked.name : '거래처'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
               <View style={s.modalBtns}>
                 <TouchableOpacity style={s.modalCancelBtn} onPress={() => setSpeakerEditRecordId(null)} activeOpacity={0.7}>
                   <Text style={s.modalCancelText}>취소</Text>
@@ -472,6 +520,44 @@ export default function MeetingScreen({ navigation }) {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={!!clientPickerSpeaker} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setClientPickerSpeaker(null)}>
+        <View style={[s.modalOverlay, { justifyContent: 'center', paddingHorizontal: 32 }]}>
+          <View style={[s.modalBox, s.clientPickerBox]}>
+            <Text style={s.modalTitle}>거래처 선택</Text>
+            <TextInput
+              style={[s.modalInput, { marginBottom: 4 }]}
+              value={clientPickerSearch}
+              onChangeText={setClientPickerSearch}
+              placeholder="이름 또는 회사 검색"
+              placeholderTextColor={C.textDim}
+              autoFocus
+            />
+            <ScrollView style={s.clientPickerList} keyboardShouldPersistTaps="handled">
+              {clients
+                .filter((c) => !clientPickerSearch || c.name.includes(clientPickerSearch) || (c.company || '').includes(clientPickerSearch))
+                .map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={s.clientPickerItem}
+                    onPress={() => selectClient(c)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.clientPickerName}>{c.name}</Text>
+                    {!!c.company && <Text style={s.clientPickerCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text>}
+                  </TouchableOpacity>
+                ))
+              }
+              {clients.filter((c) => !clientPickerSearch || c.name.includes(clientPickerSearch) || (c.company || '').includes(clientPickerSearch)).length === 0 && (
+                <Text style={s.clientPickerEmpty}>검색 결과가 없습니다</Text>
+              )}
+            </ScrollView>
+            <TouchableOpacity style={s.modalCancelBtn} onPress={() => setClientPickerSpeaker(null)} activeOpacity={0.7}>
+              <Text style={s.modalCancelText}>취소</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* 상단 탭 */}
@@ -819,7 +905,18 @@ export default function MeetingScreen({ navigation }) {
                         <Text style={s.historyBody}>{item.summary}</Text>
                       </View>
                     )}
-                    {!!item.tasks?.length && (
+                    {!!item.transcript && (
+                      <View style={s.historySection}>
+                        <View style={s.historySectionHeader}>
+                          <Text style={s.historySectionLabel}>TRANSCRIPT</Text>
+                          <TouchableOpacity onPress={() => copyToClipboard(item.transcript)} activeOpacity={0.7}>
+                            <Text style={s.copyBtn}>복사</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>
+                      </View>
+                    )}
+					{!!item.tasks?.length && (
                       <View style={s.historySection}>
                         <Text style={s.historySectionLabel}>TASKS</Text>
                         <View style={s.card}>
@@ -846,17 +943,6 @@ export default function MeetingScreen({ navigation }) {
                             </View>
                           ))}
                         </View>
-                      </View>
-                    )}
-                    {!!item.transcript && (
-                      <View style={s.historySection}>
-                        <View style={s.historySectionHeader}>
-                          <Text style={s.historySectionLabel}>TRANSCRIPT</Text>
-                          <TouchableOpacity onPress={() => copyToClipboard(item.transcript)} activeOpacity={0.7}>
-                            <Text style={s.copyBtn}>복사</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>
                       </View>
                     )}
                   </View>
@@ -1016,6 +1102,22 @@ const s = StyleSheet.create({
     borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
     color: C.textPrimary, fontSize: 13,
   },
+  clientRegBtn: {
+    borderWidth: 1, borderColor: C.borderHigh, borderRadius: 6,
+    paddingVertical: 6, paddingHorizontal: 8, maxWidth: 72,
+  },
+  clientRegBtnActive: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '66' },
+  clientRegBtnText: { color: C.textDim, fontSize: 11, fontWeight: '500' },
+  clientRegBtnTextActive: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
+  clientPickerBox: { maxHeight: '70%', gap: 12 },
+  clientPickerList: { maxHeight: 280 },
+  clientPickerItem: {
+    paddingVertical: 12, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  clientPickerName: { color: C.textPrimary, fontSize: 14, fontWeight: '500' },
+  clientPickerCompany: { color: C.textDim, fontSize: 12, marginTop: 2 },
+  clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },
   // 기록 탭
   historyContent: { padding: 16, paddingBottom: 40 },
   topicSection: { marginBottom: 16, gap: 12 },
