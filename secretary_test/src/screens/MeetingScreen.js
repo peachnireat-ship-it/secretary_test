@@ -10,7 +10,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
 import { transcribeAudio, diarizeSegments, diarizeWithPyannote } from '../services/groqStt';
 import { askClaude, buildTaskExtractionSystem } from '../services/claude';
-import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients } from '../services/storage';
+import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient } from '../services/storage';
 
 function formatTime(sec) {
   const m = String(Math.floor(sec / 60)).padStart(2, '0');
@@ -298,6 +298,14 @@ export default function MeetingScreen({ navigation }) {
     setClientPickerSearch('');
   }
 
+  async function addAndSelectClient() {
+    const name = clientPickerSearch.trim();
+    if (!name) return;
+    const updated = await addClient({ name });
+    setClients(updated);
+    selectClient({ name });
+  }
+
   function selectClient(client) {
     if (clientPickerContext === 'save') {
       setSpeakerNames((prev) => ({ ...prev, [clientPickerSpeaker]: client.name }));
@@ -553,6 +561,11 @@ export default function MeetingScreen({ navigation }) {
                 <Text style={s.clientPickerEmpty}>검색 결과가 없습니다</Text>
               )}
             </ScrollView>
+            {!!clientPickerSearch.trim() && (
+              <TouchableOpacity style={s.clientAddBtn} onPress={addAndSelectClient} activeOpacity={0.8}>
+                <Text style={s.clientAddBtnText}>'{clientPickerSearch.trim()}' 새로 추가</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={s.modalCancelBtn} onPress={() => setClientPickerSpeaker(null)} activeOpacity={0.7}>
               <Text style={s.modalCancelText}>취소</Text>
             </TouchableOpacity>
@@ -1118,6 +1131,11 @@ const s = StyleSheet.create({
   clientPickerName: { color: C.textPrimary, fontSize: 14, fontWeight: '500' },
   clientPickerCompany: { color: C.textDim, fontSize: 12, marginTop: 2 },
   clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },
+  clientAddBtn: {
+    backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55',
+    borderRadius: 8, paddingVertical: 11, alignItems: 'center',
+  },
+  clientAddBtnText: { color: C.accentBlue, fontSize: 13, fontWeight: '500' },
   // 기록 탭
   historyContent: { padding: 16, paddingBottom: 40 },
   topicSection: { marginBottom: 16, gap: 12 },
