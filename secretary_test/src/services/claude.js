@@ -151,6 +151,20 @@ ${projectLines || '(등록된 프로젝트 없음)'}
 모든 응답은 자연스러운 한국어로만 작성하세요.`;
 }
 
+export function buildTaskExtractionSystem() {
+  return `[언어 규칙] 반드시 한국어로만 응답하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.
+
+회의 스크립트에서 실행 가능한 태스크(할 일)를 추출하세요.
+
+결과는 반드시 아래 JSON 배열 형식으로만 출력하세요. 다른 텍스트는 절대 포함하지 마세요.
+
+[
+  {"assignee": "담당자 이름 (없으면 '미지정')", "content": "태스크 내용", "deadline": "YYYY-MM-DD 또는 '미정'", "priority": "높음|보통|낮음"}
+]
+
+태스크가 없으면 빈 배열 []을 출력하세요.`;
+}
+
 export function buildClientSystem(clients, histories) {
   const clientList = clients
     .map((c) => {

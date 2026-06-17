@@ -8,8 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
-import { transcribeAudio, diarizeSegments } from '../services/groqStt';
-import { askClaude } from '../services/claude';
+import { transcribeAudio, diarizeSegments, diarizeWithPyannote } from '../services/groqStt';
+import { askClaude, buildTaskExtractionSystem } from '../services/claude';
 import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics } from '../services/storage';
 
 function formatTime(sec) {
@@ -66,10 +66,15 @@ export default function MeetingScreen({ navigation }) {
   const [rawTranscript, setRawTranscript] = useState('');
   const [speakerNames, setSpeakerNames] = useState({});
 
+  const [tasks, setTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [selectedTaskIndices, setSelectedTaskIndices] = useState(new Set());
+
   const [workTopics, setWorkTopics] = useState('');
   const [workTopicsLoading, setWorkTopicsLoading] = useState(false);
 
   const timerRef = useRef(null);
+  const scrollRef = useRef(null);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   useEffect(() => {
@@ -90,6 +95,12 @@ export default function MeetingScreen({ navigation }) {
   useEffect(() => {
     getWorkTopics().then((v) => { if (v) setWorkTopics(v); });
   }, []);
+
+  useEffect(() => {
+    if (loading && activeTab === 'record') {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [loading]);
 
   async function startRecording() {
     setErrorMsg('');
@@ -196,6 +207,36 @@ export default function MeetingScreen({ navigation }) {
     }
   }
 
+  function toggleTaskSelect(i) {
+    setSelectedTaskIndices((prev) => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  }
+
+  async function runExtractTasks(text) {
+    setTasksLoading(true);
+    setTasks([]);
+    try {
+      const raw = await askClaude(
+        [{ role: 'user', content: text }],
+        buildTaskExtractionSystem()
+      );
+      const jsonStr = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(jsonStr);
+      setTasks(Array.isArray(parsed) ? parsed : []);
+    } catch (e) {
+      if (e.message === 'API_KEY_MISSING') {
+        handleApiError(e);
+      } else {
+        setTasks([]);
+      }
+    } finally {
+      setTasksLoading(false);
+    }
+  }
+
   async function runTranscribe(uri, mimeType, source) {
     setLoading(true);
     setErrorMsg('');
@@ -204,6 +245,8 @@ export default function MeetingScreen({ navigation }) {
     setSaved(false);
     setRawTranscript('');
     setSpeakerNames({});
+    setTasks([]);
+    setSelectedTaskIndices(new Set());
     setTranscriptSource(source);
     try {
       setLoadingMsg('음성 변환 중…');
@@ -212,7 +255,8 @@ export default function MeetingScreen({ navigation }) {
       let diarized = text;
       if (segments.length > 0) {
         setLoadingMsg('화자 구분 분석 중…');
-        diarized = await diarizeSegments(segments);
+        const pyResult = await diarizeWithPyannote(uri, mimeType, segments);
+        diarized = pyResult ?? await diarizeSegments(segments);
       }
 
       const speakers = extractSpeakers(diarized);
@@ -258,7 +302,7 @@ export default function MeetingScreen({ navigation }) {
         setTranscript(finalTranscript);
         setSummary(finalSummary);
       }
-      await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary: finalSummary, transcript: finalTranscript });
+      await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary: finalSummary, transcript: finalTranscript, tasks });
       setSaved(true);
     }
   }
@@ -389,7 +433,7 @@ export default function MeetingScreen({ navigation }) {
       </View>
 
       {activeTab === 'record' ? (
-        <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={s.header}>
             <View style={s.headerBadge}>
               <View style={s.headerBadgeDot} />
@@ -511,6 +555,85 @@ export default function MeetingScreen({ navigation }) {
             </View>
           )}
 
+          {/* 태스크 추출 */}
+          {!!transcript && !loading && (
+            <View style={[s.section, { marginBottom: 16 }]}>
+              <Text style={s.sectionLabel}>TASKS</Text>
+              {tasks.length === 0 && !tasksLoading && (
+                <TouchableOpacity
+                  style={s.extractTasksBtn}
+                  onPress={() => runExtractTasks(transcript)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.extractTasksBtnText}>태스크 추출</Text>
+                </TouchableOpacity>
+              )}
+              {tasksLoading && (
+                <View style={s.loadingBox}>
+                  <ActivityIndicator color={C.accentPurple} size="small" />
+                  <Text style={s.loadingText}>태스크 추출 중…</Text>
+                </View>
+              )}
+              {tasks.length > 0 && (
+                <View style={s.card}>
+                  {tasks.map((task, i) => {
+                    const selected = selectedTaskIndices.has(i);
+                    return (
+                      <TouchableOpacity
+                        key={i}
+                        style={[s.taskRow, i < tasks.length - 1 && s.taskRowBorder]}
+                        activeOpacity={0.7}
+                        onPress={() => toggleTaskSelect(i)}
+                      >
+                        <View style={[s.taskCheckbox, selected && s.taskCheckboxSelected]}>
+                          {selected && <Text style={s.taskCheckmark}>✓</Text>}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.taskContent}>{task.content}</Text>
+                          <View style={s.taskMeta}>
+                            <Text style={s.taskMetaText}>{task.assignee}</Text>
+                            {task.deadline !== '미정' && (
+                              <Text style={s.taskMetaText}>· {task.deadline}</Text>
+                            )}
+                            <Text style={[s.taskPriorityLabel, { color: priorityColor(task.priority) }]}>{task.priority}</Text>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+              {tasks.length > 0 && (
+                <TouchableOpacity
+                  style={[s.bundleBtn, selectedTaskIndices.size === 0 && s.bundleBtnDisabled]}
+                  onPress={() => {
+                    const selected = [...selectedTaskIndices].map((i) => tasks[i]);
+                    navigation.navigate('프로젝트', { addTask: bundleTasksToProject(selected) });
+                    setSelectedTaskIndices(new Set());
+                  }}
+                  activeOpacity={0.8}
+                  disabled={selectedTaskIndices.size === 0}
+                >
+                  <Text style={s.bundleBtnText}>
+                    {selectedTaskIndices.size > 0
+                      ? `${selectedTaskIndices.size}개 선택 · 프로젝트로 묶기`
+                      : '태스크를 선택하세요'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {tasks.length > 0 && (
+                <TouchableOpacity
+                  style={[s.extractTasksBtn, { marginTop: 8, opacity: 0.7 }]}
+                  onPress={() => runExtractTasks(transcript)}
+                  activeOpacity={0.8}
+                  disabled={tasksLoading}
+                >
+                  <Text style={s.extractTasksBtnText}>다시 추출</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           {/* 원본 텍스트 */}
           {!!transcript && (
             <View style={[s.section, { marginBottom: 48 }]}>
@@ -602,6 +725,35 @@ export default function MeetingScreen({ navigation }) {
                         <Text style={s.historyBody}>{item.summary}</Text>
                       </View>
                     )}
+                    {!!item.tasks?.length && (
+                      <View style={s.historySection}>
+                        <Text style={s.historySectionLabel}>TASKS</Text>
+                        <View style={s.card}>
+                          {item.tasks.map((task, i) => (
+                            <View key={i} style={[s.taskRow, i < item.tasks.length - 1 && s.taskRowBorder]}>
+                              <View style={[s.taskPriorityDot, { backgroundColor: priorityColor(task.priority) }]} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={s.taskContent}>{task.content}</Text>
+                                <View style={s.taskMeta}>
+                                  <Text style={s.taskMetaText}>{task.assignee}</Text>
+                                  {task.deadline !== '미정' && (
+                                    <Text style={s.taskMetaText}>· {task.deadline}</Text>
+                                  )}
+                                  <Text style={[s.taskPriorityLabel, { color: priorityColor(task.priority) }]}>{task.priority}</Text>
+                                </View>
+                              </View>
+                              <TouchableOpacity
+                                style={s.taskAddBtn}
+                                onPress={() => navigation.navigate('프로젝트', { addTask: taskToProject(task) })}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={s.taskAddBtnText}>+ 프로젝트</Text>
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
                     {!!item.transcript && (
                       <View style={s.historySection}>
                         <View style={s.historySectionHeader}>
@@ -622,6 +774,37 @@ export default function MeetingScreen({ navigation }) {
       )}
     </View>
   );
+}
+
+function bundleTasksToProject(selectedTasks) {
+  const RANK = { '높음': 0, '보통': 1, '낮음': 2 };
+  const topPriority = selectedTasks.reduce(
+    (best, t) => (RANK[t.priority] < RANK[best] ? t.priority : best),
+    '낮음'
+  );
+  const deadlines = selectedTasks
+    .map((t) => t.deadline)
+    .filter((d) => d && d !== '미정')
+    .sort();
+  const notes = selectedTasks
+    .map((t) => `• ${t.content}${t.assignee && t.assignee !== '미지정' ? ` (${t.assignee})` : ''}`)
+    .join('\n');
+  return { title: '', deadline: deadlines[0] || '', priority: topPriority, notes };
+}
+
+function taskToProject(task) {
+  return {
+    title: task.content,
+    deadline: task.deadline === '미정' ? '' : task.deadline,
+    priority: task.priority,
+    notes: task.assignee && task.assignee !== '미지정' ? `담당자: ${task.assignee}` : '',
+  };
+}
+
+function priorityColor(priority) {
+  if (priority === '높음') return C.red;
+  if (priority === '낮음') return C.textDim;
+  return C.accentBlue;
 }
 
 const s = StyleSheet.create({
@@ -777,4 +960,36 @@ const s = StyleSheet.create({
     paddingVertical: 7, paddingHorizontal: 16,
   },
   deleteBtnText: { color: C.red, fontSize: 12, fontWeight: '500' },
+  extractTasksBtn: {
+    backgroundColor: C.accentPurple + '22', borderWidth: 1,
+    borderColor: C.accentPurple + '55', borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center',
+  },
+  extractTasksBtnText: { color: C.accentPurple, fontSize: 14, fontWeight: '500' },
+  taskRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+  taskRowBorder: { borderBottomWidth: 1, borderBottomColor: C.border },
+  taskPriorityDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
+  taskContent: { color: C.textPrimary, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  taskMeta: { flexDirection: 'row', gap: 6, marginTop: 4, alignItems: 'center' },
+  taskMetaText: { color: C.textDim, fontSize: 11 },
+  taskPriorityLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.5 },
+  taskAddBtn: {
+    borderWidth: 1, borderColor: C.accentTeal + '66', borderRadius: 8,
+    paddingVertical: 5, paddingHorizontal: 10, marginLeft: 8,
+  },
+  taskAddBtnText: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
+  taskCheckbox: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 1.5, borderColor: C.borderHigh,
+    alignItems: 'center', justifyContent: 'center', marginTop: 2,
+  },
+  taskCheckboxSelected: { backgroundColor: C.accentTeal, borderColor: C.accentTeal },
+  taskCheckmark: { color: '#fff', fontSize: 11, fontWeight: '700', lineHeight: 14 },
+  bundleBtn: {
+    marginTop: 10, backgroundColor: C.accentTeal + '22', borderWidth: 1,
+    borderColor: C.accentTeal + '66', borderRadius: 10,
+    paddingVertical: 13, alignItems: 'center',
+  },
+  bundleBtnDisabled: { opacity: 0.4 },
+  bundleBtnText: { color: C.accentTeal, fontSize: 14, fontWeight: '600' },
 });

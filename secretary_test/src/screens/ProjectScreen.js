@@ -13,6 +13,50 @@ const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
 const PRIORITIES = ['높음', '보통', '낮음'];
 const FILTERS = ['전체', '진행중', '위험', '지연', '완료'];
 
+function getDaysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function formatDeadline(text) {
+  const digits = text.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 4) return digits;
+
+  const year = parseInt(digits.slice(0, 4), 10);
+
+  if (digits.length <= 6) {
+    if (digits.length === 6) {
+      const month = Math.min(12, Math.max(1, parseInt(digits.slice(4), 10)));
+      return `${digits.slice(0, 4)}-${String(month).padStart(2, '0')}`;
+    }
+    return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  }
+
+  const month = Math.min(12, Math.max(1, parseInt(digits.slice(4, 6), 10)));
+  if (digits.length === 8) {
+    const maxDay = getDaysInMonth(year, month);
+    const day = Math.min(maxDay, Math.max(1, parseInt(digits.slice(6), 10)));
+    return `${digits.slice(0, 4)}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  return `${digits.slice(0, 4)}-${String(month).padStart(2, '0')}-${digits.slice(6)}`;
+}
+
+function isValidDeadline(str) {
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const [, y, m, d] = match.map(Number);
+  if (m < 1 || m > 12) return false;
+  const maxDay = getDaysInMonth(y, m);
+  return d >= 1 && d <= maxDay;
+}
+
+function normalizeDeadline(str) {
+  if (!str || str === '미정') return str;
+  const match = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!match) return str;
+  const [, y, m, d] = match;
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+
 function daysUntil(deadlineStr) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -47,7 +91,7 @@ function isAtRisk(project) {
   return days <= 7 && project.progress < 80;
 }
 
-export default function ProjectScreen() {
+export default function ProjectScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const [projects, setProjects] = useState([]);
   const [filter, setFilter] = useState('전체');
@@ -82,6 +126,19 @@ export default function ProjectScreen() {
     load();
   }, []);
 
+  useEffect(() => {
+    const addTask = route?.params?.addTask;
+    if (!addTask) return;
+    setNewTitle(addTask.title || '');
+    setNewDeadline(addTask.deadline || '');
+    setNewPriority(addTask.priority || '보통');
+    setNewNotes(addTask.notes || '');
+    setNewStatus('진행중');
+    setNewProgress('0');
+    setShowAdd(true);
+    navigation.setParams({ addTask: undefined });
+  }, [route?.params?.addTask]);
+
   async function load() {
     const all = await getProjects();
     setProjects(all);
@@ -93,9 +150,13 @@ export default function ProjectScreen() {
 
   async function handleAdd() {
     if (!newTitle.trim() || !newDeadline.trim()) return;
+    if (!isValidDeadline(newDeadline.trim())) {
+      Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
+      return;
+    }
     const updated = await addProject({
       title: newTitle.trim(),
-      deadline: newDeadline.trim(),
+      deadline: normalizeDeadline(newDeadline.trim()),
       status: newStatus,
       progress: parseInt(newProgress) || 0,
       priority: newPriority,
@@ -127,9 +188,13 @@ export default function ProjectScreen() {
 
   async function handleEditSave() {
     if (!editTitle.trim() || !editDeadline.trim()) return;
+    if (!isValidDeadline(editDeadline.trim())) {
+      Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
+      return;
+    }
     const updated = await updateProject(detailProject.id, {
       title: editTitle.trim(),
-      deadline: editDeadline.trim(),
+      deadline: normalizeDeadline(editDeadline.trim()),
       status: editStatus,
       progress: editProgress,
       priority: editPriority,
@@ -373,9 +438,11 @@ export default function ProjectScreen() {
                 <TextInput
                   style={s.input}
                   value={editDeadline}
-                  onChangeText={setEditDeadline}
+                  onChangeText={(t) => setEditDeadline(formatDeadline(t))}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor={C.textDim}
+                  keyboardType="numeric"
+                  maxLength={10}
                 />
 
                 {/* 메모 */}
@@ -411,16 +478,17 @@ export default function ProjectScreen() {
 
       {/* ── 프로젝트 추가 모달 ── */}
       <Modal visible={showAdd} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={s.modalSheet}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '92%' }]}>
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>프로젝트 추가</Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
             <Text style={s.inputLabel}>제목</Text>
             <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="프로젝트 이름" placeholderTextColor={C.textDim} />
 
             <Text style={s.inputLabel}>마감일 (YYYY-MM-DD)</Text>
-            <TextInput style={s.input} value={newDeadline} onChangeText={setNewDeadline} placeholder="2024-12-31" placeholderTextColor={C.textDim} />
+            <TextInput style={s.input} value={newDeadline} onChangeText={(t) => setNewDeadline(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
 
             <Text style={s.inputLabel}>상태</Text>
             <View style={s.optionRow}>
@@ -446,7 +514,7 @@ export default function ProjectScreen() {
             <Text style={s.inputLabel}>메모 (선택)</Text>
             <TextInput style={[s.input, { height: 64 }]} value={newNotes} onChangeText={setNewNotes} placeholder="지연 원인, 진행 상황 등" placeholderTextColor={C.textDim} multiline />
 
-            <View style={s.modalBtns}>
+            <View style={[s.modalBtns, { marginBottom: 8 }]}>
               <TouchableOpacity style={s.modalCancel} onPress={() => setShowAdd(false)}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
@@ -454,6 +522,7 @@ export default function ProjectScreen() {
                 <Text style={s.modalConfirmText}>추가</Text>
               </TouchableOpacity>
             </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>

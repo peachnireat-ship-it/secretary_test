@@ -11,6 +11,7 @@ const KEYS = {
   aiProvider: 'ai_provider',
   meetingRecords: 'meeting_records_v1',
   workTopics: 'work_topics_v1',
+  pyannoteUrl: 'pyannote_url',
 };
 
 // ── Groq API Key ──────────────────────────────────────────
@@ -220,6 +221,15 @@ export async function getWorkTopics() {
 
 export async function saveWorkTopics(text) {
   await AsyncStorage.setItem(KEYS.workTopics, text);
+}
+
+// ── Pyannote Server URL ───────────────────────────────────
+export async function getPyannoteUrl() {
+  return AsyncStorage.getItem(KEYS.pyannoteUrl);
+}
+
+export async function setPyannoteUrl(url) {
+  return AsyncStorage.setItem(KEYS.pyannoteUrl, url);
 }
 
 // ── Sample Data ───────────────────────────────────────────

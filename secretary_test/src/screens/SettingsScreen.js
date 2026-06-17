@@ -2,7 +2,7 @@ import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Alert,
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider } from '../services/storage';
+import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl } from '../services/storage';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -14,10 +14,15 @@ export default function SettingsScreen() {
   const [grokSaved, setGrokSaved] = useState(false);
   const [grokMasked, setGrokMasked] = useState(true);
 
+  const [pyannoteUrl, setPyannoteUrlState] = useState('');
+  const [pyannoteStatus, setPyannoteStatus] = useState('');
+  const [pyannoteChecking, setPyannoteChecking] = useState(false);
+
   useEffect(() => {
     getApiKey().then((k) => { if (k) setApiKeyState(k); });
     getGrokApiKey().then((k) => { if (k) setGrokApiKeyState(k); });
     getAiProvider().then(setProviderState);
+    getPyannoteUrl().then((u) => { if (u) setPyannoteUrlState(u); });
   }, []);
 
   async function handleProviderChange(p) {
@@ -53,6 +58,33 @@ export default function SettingsScreen() {
       { text: '취소', style: 'cancel' },
       { text: '삭제', style: 'destructive', onPress: async () => { await setGrokApiKey(''); setGrokApiKeyState(''); } },
     ]);
+  }
+
+  async function handleSavePyannoteUrl() {
+    await setPyannoteUrl(pyannoteUrl.trim());
+    setPyannoteStatus('saved');
+    setTimeout(() => setPyannoteStatus(''), 2000);
+  }
+
+  async function handleClearPyannoteUrl() {
+    await setPyannoteUrl('');
+    setPyannoteUrlState('');
+    setPyannoteStatus('');
+  }
+
+  async function handleTestPyannote() {
+    const url = pyannoteUrl.trim();
+    if (!url) return;
+    setPyannoteChecking(true);
+    setPyannoteStatus('');
+    try {
+      const res = await fetch(`${url.replace(/\/$/, '')}/health`, { method: 'GET' });
+      setPyannoteStatus(res.ok ? 'ok' : 'fail');
+    } catch {
+      setPyannoteStatus('fail');
+    } finally {
+      setPyannoteChecking(false);
+    }
   }
 
   const displayKey = masked && apiKey.length > 8
@@ -172,6 +204,63 @@ export default function SettingsScreen() {
             </View>
           </View>
         )}
+      </View>
+
+      {/* ── 화자 구분 서버 ── */}
+      <View style={s.section}>
+        <Text style={s.sectionLabel}>화자 구분 서버 (pyannote)</Text>
+        <View style={s.card}>
+          <View style={s.cardHeader}>
+            <Text style={[s.aiGlyph, { color: C.accentTeal }]}>◈</Text>
+            <Text style={s.cardTitle}>pyannote 서버 URL</Text>
+          </View>
+          <Text style={s.cardDesc}>
+            음성 기반 화자 구분(Speaker Diarization)을 사용하려면 pyannote 백엔드 서버를 실행하고 URL을 입력하세요.{'\n'}
+            미설정 시 AI 텍스트 분석으로 대체됩니다.
+          </Text>
+          <View style={s.inputWrap}>
+            <TextInput
+              style={s.input}
+              value={pyannoteUrl}
+              onChangeText={setPyannoteUrlState}
+              placeholder="http://192.168.1.x:8000"
+              placeholderTextColor={C.textDim}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+          </View>
+          <View style={s.btnRow}>
+            <TouchableOpacity
+              style={[s.saveBtn, { backgroundColor: C.accentTeal }, pyannoteStatus === 'saved' && s.savedBtn]}
+              onPress={handleSavePyannoteUrl}
+            >
+              <Text style={s.saveBtnText}>{pyannoteStatus === 'saved' ? '저장됨 ✓' : '저장'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.clearBtn, { borderColor: C.accentTeal + '55', flex: 1, alignItems: 'center' }]}
+              onPress={handleTestPyannote}
+              disabled={pyannoteChecking || !pyannoteUrl}
+            >
+              <Text style={{ color: pyannoteStatus === 'ok' ? C.accentTeal : pyannoteStatus === 'fail' ? C.red : C.textSecondary, fontSize: 14 }}>
+                {pyannoteChecking ? '확인 중…' : pyannoteStatus === 'ok' ? '연결 성공 ✓' : pyannoteStatus === 'fail' ? '연결 실패 ✗' : '연결 테스트'}
+              </Text>
+            </TouchableOpacity>
+            {!!pyannoteUrl && (
+              <TouchableOpacity style={s.clearBtn} onPress={handleClearPyannoteUrl}>
+                <Text style={s.clearBtnText}>삭제</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={s.hint}>
+            <Text style={s.hintText}>
+              서버 실행 방법:{'\n'}
+              1. HuggingFace에서 pyannote/speaker-diarization-3.1 접근 승인{'\n'}
+              2. HF_TOKEN=your_token uvicorn server:app --host 0.0.0.0 --port 8000{'\n'}
+              3. ffmpeg이 설치되어 있어야 합니다
+            </Text>
+          </View>
+        </View>
       </View>
 
       {/* ── AI 기능 안내 ── */}
