@@ -321,25 +321,6 @@ export default function ClientScreen() {
               }
             </View>
 
-            {/* 연결된 회의록 */}
-            {(() => {
-              const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));
-              if (!linked.length) return null;
-              return (
-                <View style={s.linkedSection}>
-                  <Text style={s.linkedSectionLabel}>연결된 회의록</Text>
-                  <View style={s.linkedChipRow}>
-                    {linked.map((r) => (
-                      <View key={r.id} style={s.meetingRecordChip}>
-                        <Text style={s.meetingRecordChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
-                        <Text style={s.meetingRecordChipDate}>{formatDate(r.createdAt)}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              );
-            })()}
-
             {/* 연결된 프로젝트 */}
             {(() => {
               const linked = projects.filter((p) => p.clientIds?.includes(selectedClient?.id));
@@ -395,6 +376,26 @@ export default function ClientScreen() {
                   </View>
                 ))
               )}
+
+              {/* 연결된 회의록 */}
+              {(() => {
+                const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));
+                if (!linked.length) return null;
+                return (
+                  <View style={[s.linkedSection, { marginTop: 16 }]}>
+                    <Text style={s.linkedSectionLabel}>연결된 회의록 {linked.length}건</Text>
+                    {linked.map((r) => (
+                      <View key={r.id} style={s.meetingRecordItem}>
+                        <View style={s.meetingRecordItemHeader}>
+                          <Text style={s.meetingRecordItemTitle} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
+                          <Text style={s.meetingRecordItemDate}>{formatDate(r.createdAt)}</Text>
+                        </View>
+                        {r.summary ? <Text style={s.meetingRecordItemSummary} numberOfLines={2}>{r.summary}</Text> : null}
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
             </ScrollView>
           </View>
         </View>
@@ -579,9 +580,11 @@ const s = StyleSheet.create({
   linkedSection: { marginBottom: 12 },
   linkedSectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 8 },
   linkedChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  meetingRecordChip: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10, gap: 2 },
-  meetingRecordChipText: { color: C.accentPurple, fontSize: 11, fontWeight: '500' },
-  meetingRecordChipDate: { color: C.accentPurple + 'AA', fontSize: 10 },
+  meetingRecordItem: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 10, padding: 12, marginBottom: 8, gap: 5 },
+  meetingRecordItemHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  meetingRecordItemTitle: { color: C.accentPurple, fontSize: 13, fontWeight: '500', flex: 1, marginRight: 8 },
+  meetingRecordItemDate: { color: C.textDim, fontSize: 10 },
+  meetingRecordItemSummary: { color: C.textSecondary, fontSize: 12, lineHeight: 17 },
   projectChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10 },
   projectChipDot: { width: 5, height: 5, borderRadius: 3 },
   projectChipText: { fontSize: 11, fontWeight: '500', maxWidth: 160 },
