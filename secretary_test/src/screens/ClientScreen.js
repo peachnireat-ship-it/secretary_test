@@ -2,8 +2,9 @@ import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { getClients, addClient, saveClients, getHistories, addHistory, getMeetingRecords, getProjects } from '../services/storage';
@@ -47,9 +48,7 @@ export default function ClientScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
-  useEffect(() => {
-    load();
-  }, []);
+  useFocusEffect(useCallback(() => { load(); }, []));
 
   async function load() {
     const [c, h, m, p] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects()]);

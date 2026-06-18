@@ -3,8 +3,9 @@ import {
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
@@ -131,9 +132,7 @@ export default function ProjectScreen({ navigation, route }) {
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
-  useEffect(() => {
-    load();
-  }, []);
+  useFocusEffect(useCallback(() => { load(); }, []));
 
   useEffect(() => {
     const addTask = route?.params?.addTask;
