@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
@@ -139,6 +139,9 @@ export default function ProjectScreen({ navigation, route }) {
   const [projects, setProjects] = useState([]);
   const [meetingRecords, setMeetingRecords] = useState([]);
   const [clients, setClients] = useState([]);
+  const [histories, setHistories] = useState([]);
+  const [showPersonDetail, setShowPersonDetail] = useState(false);
+  const [personDetailClient, setPersonDetailClient] = useState(null);
   const [pendingMeetingRecordId, setPendingMeetingRecordId] = useState(null);
   const [filter, setFilter] = useState('전체');
 
@@ -178,6 +181,9 @@ export default function ProjectScreen({ navigation, route }) {
   const [clientPickerSpeaker, setClientPickerSpeaker] = useState(null);
   const [clientPickerSearch, setClientPickerSearch] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editClientIds, setEditClientIds] = useState([]);
+  const [detailPersonPickerVisible, setDetailPersonPickerVisible] = useState(false);
+  const [detailPersonPickerSearch, setDetailPersonPickerSearch] = useState('');
 
   const [showAI, setShowAI] = useState(false);
   const [chatMessages, setChatMessages] = useState([
@@ -204,10 +210,11 @@ export default function ProjectScreen({ navigation, route }) {
   }, [route?.params?.addTask]);
 
   async function load() {
-    const [all, records, clientList] = await Promise.all([getProjects(), getMeetingRecords(), getClients()]);
+    const [all, records, clientList, histList] = await Promise.all([getProjects(), getMeetingRecords(), getClients(), getHistories()]);
     setProjects(all);
     setMeetingRecords(records);
     setClients(clientList);
+    setHistories(histList);
   }
 
   const filtered = projects.filter((p) => filter === '전체' || p.status === filter);
@@ -253,6 +260,7 @@ export default function ProjectScreen({ navigation, route }) {
     setEditProgress(project.progress ?? 0);
     setEditPriority(project.priority);
     setEditNotes(project.notes || '');
+    setEditClientIds(project.clientIds || []);
     setShowDetail(true);
   }
 
@@ -269,6 +277,7 @@ export default function ProjectScreen({ navigation, route }) {
       progress: editProgress,
       priority: editPriority,
       notes: editNotes.trim(),
+      clientIds: editClientIds,
     });
     setProjects(updated);
     const refreshed = updated.find((p) => p.id === detailProject.id);
@@ -369,6 +378,14 @@ export default function ProjectScreen({ navigation, route }) {
     setSpeakerEditNames((prev) => ({ ...prev, [clientPickerSpeaker]: client.name }));
     if (client.id) setSpeakerClientEditMap((prev) => ({ ...prev, [clientPickerSpeaker]: client.id }));
     setClientPickerSpeaker(null);
+  }
+
+  function addClientToDetail(client) {
+    if (client.id && !editClientIds.includes(client.id)) {
+      setEditClientIds((prev) => [...prev, client.id]);
+    }
+    setDetailPersonPickerVisible(false);
+    setDetailPersonPickerSearch('');
   }
 
   function openSpeakerEditModal(item) {
@@ -676,27 +693,57 @@ export default function ProjectScreen({ navigation, route }) {
 
                 {/* 관련 인물 */}
                 {(() => {
-                  if (!detailProject?.meetingRecordIds?.length) return null;
-                  const linkedMeetings = meetingRecords.filter((r) => detailProject.meetingRecordIds.includes(r.id));
-                  const clientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
-                  const people = clientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
-                  if (!people.length) return null;
+                  const linkedMeetings = detailProject?.meetingRecordIds?.length
+                    ? meetingRecords.filter((r) => detailProject.meetingRecordIds.includes(r.id))
+                    : [];
+                  const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
+                  const allClientIds = [...new Set([...editClientIds, ...meetingClientIds])];
+                  const people = allClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
                   return (
                     <>
-                      <Text style={s.inputLabel}>관련 인물</Text>
-                      <View style={s.relatedPeopleRow}>
-                        {people.map((c) => (
-                          <View key={c.id} style={s.relatedPersonChip}>
-                            <View style={s.relatedPersonAvatar}>
-                              <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Text style={s.relatedPersonName}>{c.name}</Text>
-                              {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
-                            </View>
-                          </View>
-                        ))}
+                      <View style={s.relatedPeopleHeaderRow}>
+                        <Text style={[s.inputLabel, { marginTop: 0, marginBottom: 0 }]}>관련 인물</Text>
+                        <TouchableOpacity
+                          onPress={() => { setDetailPersonPickerVisible(true); setDetailPersonPickerSearch(''); }}
+                          style={s.addPersonBtn}
+                        >
+                          <Text style={s.addPersonBtnText}>+ 추가</Text>
+                        </TouchableOpacity>
                       </View>
+                      {people.length > 0 && (
+                        <View style={s.relatedPeopleRow}>
+                          {people.map((c) => {
+                            const isDirect = editClientIds.includes(c.id);
+                            return (
+                              <View key={c.id} style={s.relatedPersonChip}>
+                                <TouchableOpacity
+                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}
+                                  activeOpacity={0.7}
+                                  onPress={() => { setPersonDetailClient(c); setShowPersonDetail(true); }}
+                                >
+                                  <View style={s.relatedPersonAvatar}>
+                                    <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={s.relatedPersonName}>{c.name}</Text>
+                                    {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                                  </View>
+                                </TouchableOpacity>
+                                {isDirect ? (
+                                  <TouchableOpacity
+                                    onPress={() => setEditClientIds((prev) => prev.filter((id) => id !== c.id))}
+                                    hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
+                                  >
+                                    <Text style={{ color: C.textDim, fontSize: 13 }}>✕</Text>
+                                  </TouchableOpacity>
+                                ) : (
+                                  <Text style={{ color: C.textDim, fontSize: 16, paddingLeft: 4 }}>›</Text>
+                                )}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
                     </>
                   );
                 })()}
@@ -1166,6 +1213,104 @@ export default function ProjectScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* ── 인물 상세 모달 ── */}
+      <Modal visible={showPersonDetail} animationType="slide" transparent onRequestClose={() => setShowPersonDetail(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '85%' }]}>
+            <View style={s.modalHandle} />
+            {personDetailClient && (
+              <>
+                <View style={s.personDetailHeader}>
+                  <View style={s.personDetailAvatar}>
+                    <Text style={s.relatedPersonAvatarText}>{personDetailClient.name[0]}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.personDetailName}>{personDetailClient.name}</Text>
+                    {personDetailClient.company ? (
+                      <Text style={s.personDetailCompany}>{personDetailClient.company}{personDetailClient.role ? ` · ${personDetailClient.role}` : ''}</Text>
+                    ) : null}
+                    {personDetailClient.contact ? (
+                      <Text style={s.personDetailContact}>{personDetailClient.contact}</Text>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity onPress={() => setShowPersonDetail(false)}>
+                    <Text style={s.closeBtn}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {personDetailClient.notes ? (
+                    <>
+                      <Text style={s.inputLabel}>메모</Text>
+                      <View style={s.meetingDetailSection}>
+                        <Text style={s.meetingDetailText}>{personDetailClient.notes}</Text>
+                      </View>
+                    </>
+                  ) : null}
+                  {(() => {
+                    const personHistories = histories.filter((h) => h.clientId === personDetailClient.id).sort((a, b) => b.createdAt - a.createdAt);
+                    if (!personHistories.length) return null;
+                    return (
+                      <>
+                        <Text style={s.inputLabel}>히스토리 {personHistories.length}건</Text>
+                        {personHistories.map((h, i) => (
+                          <View key={h.id} style={[s.personHistoryItem, i < personHistories.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}>
+                            <Text style={s.personHistoryDate}>{h.date}</Text>
+                            <Text style={s.personHistoryTitle}>{h.title}</Text>
+                            {h.content ? <Text style={s.personHistoryContent}>{h.content}</Text> : null}
+                          </View>
+                        ))}
+                      </>
+                    );
+                  })()}
+                  {!personDetailClient.notes && !histories.filter((h) => h.clientId === personDetailClient.id).length && (
+                    <Text style={[s.emptyText, { marginTop: 20 }]}>저장된 정보가 없습니다.</Text>
+                  )}
+                  <View style={{ height: 20 }} />
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── 인물 추가 피커 모달 (프로젝트 상세) ── */}
+      <Modal visible={detailPersonPickerVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setDetailPersonPickerVisible(false)}>
+        <View style={[s.modalOverlay, { justifyContent: 'center', paddingHorizontal: 32 }]}>
+          <View style={[s.speakerModalBox, s.clientPickerBox]}>
+            <Text style={s.speakerModalTitle}>인물 추가</Text>
+            <TextInput
+              style={s.clientPickerInput}
+              value={detailPersonPickerSearch}
+              onChangeText={setDetailPersonPickerSearch}
+              placeholder="이름 또는 회사 검색"
+              placeholderTextColor={C.textDim}
+              autoFocus
+            />
+            <ScrollView style={s.clientPickerList} keyboardShouldPersistTaps="handled">
+              {clients
+                .filter((c) => !editClientIds.includes(c.id))
+                .filter((c) => !detailPersonPickerSearch || c.name.includes(detailPersonPickerSearch) || (c.company || '').includes(detailPersonPickerSearch))
+                .map((c) => (
+                  <TouchableOpacity key={c.id} style={s.clientPickerItem} onPress={() => addClientToDetail(c)} activeOpacity={0.7}>
+                    <Text style={s.clientPickerName}>{c.name}</Text>
+                    {!!c.company && <Text style={s.clientPickerCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text>}
+                  </TouchableOpacity>
+                ))
+              }
+              {clients
+                .filter((c) => !editClientIds.includes(c.id))
+                .filter((c) => !detailPersonPickerSearch || c.name.includes(detailPersonPickerSearch) || (c.company || '').includes(detailPersonPickerSearch))
+                .length === 0 && (
+                <Text style={s.clientPickerEmpty}>검색 결과가 없습니다</Text>
+              )}
+            </ScrollView>
+            <TouchableOpacity style={s.speakerCancelBtn} onPress={() => setDetailPersonPickerVisible(false)} activeOpacity={0.7}>
+              <Text style={s.speakerCancelText}>취소</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── 진행률 슬라이더 모달 ── */}
       {quickSlider && (
         <Modal visible animationType="fade" transparent onRequestClose={() => setQuickSlider(null)}>
@@ -1346,12 +1491,25 @@ const s = StyleSheet.create({
   modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.gold, alignItems: 'center' },
   modalConfirmText: { color: '#09090E', fontSize: 14, fontWeight: '600' },
 
+  relatedPeopleHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, marginBottom: 8 },
+  addPersonBtn: { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: C.accentTeal + '18', borderWidth: 1, borderColor: C.accentTeal + '44', borderRadius: 6 },
+  addPersonBtnText: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
   relatedPeopleRow: { gap: 8 },
   relatedPersonChip: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.accentTeal + '15', borderWidth: 1, borderColor: C.accentTeal + '44', borderRadius: 10, padding: 10 },
   relatedPersonAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
   relatedPersonAvatarText: { color: C.accentTeal, fontSize: 13, fontWeight: '500' },
   relatedPersonName: { color: C.textPrimary, fontSize: 13, fontWeight: '500' },
   relatedPersonCompany: { color: C.textDim, fontSize: 11, marginTop: 1 },
+
+  personDetailHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
+  personDetailAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
+  personDetailName: { color: C.textPrimary, fontSize: 16, fontWeight: '500' },
+  personDetailCompany: { color: C.textDim, fontSize: 12, marginTop: 2 },
+  personDetailContact: { color: C.accentTeal, fontSize: 12, marginTop: 2 },
+  personHistoryItem: { paddingVertical: 10, gap: 3 },
+  personHistoryDate: { color: C.textDim, fontSize: 11 },
+  personHistoryTitle: { color: C.textSecondary, fontSize: 13, fontWeight: '500' },
+  personHistoryContent: { color: C.textDim, fontSize: 12, lineHeight: 18 },
 
   detailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
   detailTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '500', flex: 1, marginRight: 12 },
