@@ -308,6 +308,7 @@ export default function ProjectScreen({ navigation, route }) {
       summary: contentEditSummary,
       transcript: contentEditTranscript,
     });
+    setMeetingRecords(updated);
     const updatedRecord = updated.find((r) => r.id === contentEditRecordId);
     if (updatedRecord) setSelectedMeeting(updatedRecord);
     setContentEditRecordId(null);
@@ -424,7 +425,11 @@ export default function ProjectScreen({ navigation, route }) {
                         key={r.id}
                         style={s.meetingChip}
                         activeOpacity={0.7}
-                        onPress={() => { setSelectedMeeting(r); setShowMeetingDetail(true); }}
+                        onPress={() => {
+                          const latest = meetingRecords.find((rec) => rec.id === r.id) || r;
+                          setSelectedMeeting(latest);
+                          setShowMeetingDetail(true);
+                        }}
                       >
                         <Text style={s.meetingChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
                       </TouchableOpacity>
