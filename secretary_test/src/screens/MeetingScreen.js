@@ -884,6 +884,7 @@ export default function MeetingScreen({ navigation }) {
               const linkedMeetings = meetingRecords.filter((r) => r.clientIds?.includes(selectedPersonClient.id));
               return (
                 <>
+                  {/* 헤더 - ScrollView 밖 고정 */}
                   <View style={s.personDetailHeader}>
                     <View style={s.personDetailAvatar}>
                       <Text style={s.personDetailAvatarText}>{selectedPersonClient.name[0]}</Text>
@@ -902,60 +903,64 @@ export default function MeetingScreen({ navigation }) {
                     </TouchableOpacity>
                   </View>
 
-                  <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                  {/* 연결된 프로젝트 - ScrollView 밖 고정 */}
+                  {linkedProjects.length > 0 && (
+                    <View style={s.personLinkedSection}>
+                      <Text style={s.personSectionLabel}>연결된 프로젝트</Text>
+                      <View style={s.personChipRow}>
+                        {linkedProjects.map((p) => (
+                          <View key={p.id} style={[s.personProjectChip, { borderColor: statusColor(p.status) + '55', backgroundColor: statusColor(p.status) + '15' }]}>
+                            <View style={[s.personProjectChipDot, { backgroundColor: statusColor(p.status) }]} />
+                            <Text style={[s.personProjectChipText, { color: statusColor(p.status) }]} numberOfLines={1}>{p.title}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* 히스토리 헤더 - ScrollView 밖 고정 */}
+                  <View style={s.personHistoryHeader}>
+                    <Text style={s.personSectionLabel}>히스토리 {personHistories.length}건</Text>
+                  </View>
+
+                  {/* 스크롤 영역 */}
+                  <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
                     {selectedPersonClient.notes ? (
                       <View style={s.personNotesBox}>
                         <Text style={s.personNotesText}>{selectedPersonClient.notes}</Text>
                       </View>
                     ) : null}
 
-                    {linkedProjects.length > 0 && (
-                      <View style={s.personSection}>
-                        <Text style={s.personSectionLabel}>연결된 프로젝트</Text>
-                        <View style={s.personChipRow}>
-                          {linkedProjects.map((p) => (
-                            <View key={p.id} style={[s.personProjectChip, { borderColor: statusColor(p.status) + '55', backgroundColor: statusColor(p.status) + '15' }]}>
-                              <View style={[s.personProjectChipDot, { backgroundColor: statusColor(p.status) }]} />
-                              <Text style={[s.personProjectChipText, { color: statusColor(p.status) }]} numberOfLines={1}>{p.title}</Text>
+                    {personHistories.length === 0 ? (
+                      <Text style={s.personEmptyText}>기록된 히스토리가 없습니다</Text>
+                    ) : (
+                      personHistories.map((h, i) => (
+                        <View key={h.id} style={s.personHistoryItem}>
+                          <View style={s.personHistoryLeft}>
+                            <Text style={s.personHistoryDate}>{h.date}</Text>
+                            {i < personHistories.length - 1 && <View style={s.personHistoryLine} />}
+                          </View>
+                          <View style={s.personHistoryRight}>
+                            <View style={s.personHistoryMeta}>
+                              <View style={[s.personTypeBadge, { backgroundColor: histTypeColor(h.type) + '22', borderColor: histTypeColor(h.type) + '55' }]}>
+                                <Text style={[s.personTypeText, { color: histTypeColor(h.type) }]}>{h.type}</Text>
+                              </View>
+                              <Text style={s.personHistoryTitle}>{h.title}</Text>
                             </View>
-                          ))}
+                            {h.content ? <Text style={s.personHistoryContent}>{h.content}</Text> : null}
+                            {h.result ? (
+                              <View style={s.personResultRow}>
+                                <Text style={s.personResultLabel}>결과</Text>
+                                <Text style={s.personResultText}>{h.result}</Text>
+                              </View>
+                            ) : null}
+                          </View>
                         </View>
-                      </View>
+                      ))
                     )}
 
-                    <View style={s.personSection}>
-                      <Text style={s.personSectionLabel}>히스토리 {personHistories.length}건</Text>
-                      {personHistories.length === 0 ? (
-                        <Text style={s.personEmptyText}>기록된 히스토리가 없습니다</Text>
-                      ) : (
-                        personHistories.map((h, i) => (
-                          <View key={h.id} style={s.personHistoryItem}>
-                            <View style={s.personHistoryLeft}>
-                              <Text style={s.personHistoryDate}>{h.date}</Text>
-                              {i < personHistories.length - 1 && <View style={s.personHistoryLine} />}
-                            </View>
-                            <View style={s.personHistoryRight}>
-                              <View style={s.personHistoryMeta}>
-                                <View style={[s.personTypeBadge, { backgroundColor: histTypeColor(h.type) + '22', borderColor: histTypeColor(h.type) + '55' }]}>
-                                  <Text style={[s.personTypeText, { color: histTypeColor(h.type) }]}>{h.type}</Text>
-                                </View>
-                                <Text style={s.personHistoryTitle}>{h.title}</Text>
-                              </View>
-                              {h.content ? <Text style={s.personHistoryContent}>{h.content}</Text> : null}
-                              {h.result ? (
-                                <View style={s.personResultRow}>
-                                  <Text style={s.personResultLabel}>결과</Text>
-                                  <Text style={s.personResultText}>{h.result}</Text>
-                                </View>
-                              ) : null}
-                            </View>
-                          </View>
-                        ))
-                      )}
-                    </View>
-
                     {linkedMeetings.length > 0 && (
-                      <View style={s.personSection}>
+                      <View style={[s.personLinkedSection, { marginTop: 16 }]}>
                         <Text style={s.personSectionLabel}>연결된 회의록 {linkedMeetings.length}건</Text>
                         {linkedMeetings.map((r) => (
                           <View key={r.id} style={s.personMeetingItem}>
@@ -965,8 +970,6 @@ export default function MeetingScreen({ navigation }) {
                         ))}
                       </View>
                     )}
-
-                    <View style={{ height: 40 }} />
                   </ScrollView>
                 </>
               );
@@ -1642,7 +1645,7 @@ const s = StyleSheet.create({
   linkedPersonAvatarText: { color: C.accentTeal, fontSize: 12, fontWeight: '600' },
   // 인물 상세 모달
   personModalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  personModalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 0, paddingTop: 12, maxHeight: '90%' },
+  personModalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, height: '90%' },
   personModalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   personDetailHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   personDetailAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
@@ -1654,6 +1657,8 @@ const s = StyleSheet.create({
   personNotesBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, marginBottom: 12 },
   personNotesText: { color: C.textSecondary, fontSize: 13, lineHeight: 19 },
   personSection: { marginBottom: 16 },
+  personLinkedSection: { marginBottom: 12 },
+  personHistoryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   personSectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 8 },
   personChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   personProjectChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10 },
