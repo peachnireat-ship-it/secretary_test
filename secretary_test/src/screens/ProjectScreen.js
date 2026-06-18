@@ -524,8 +524,13 @@ export default function ProjectScreen({ navigation, route }) {
                       {risk && <Text style={s.riskIcon}>⚠ </Text>}
                       <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
                     </View>
-                    <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
-                      <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
+                    <View style={s.cardTopRight}>
+                      <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
+                        <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
+                      </View>
+                      <TouchableOpacity style={s.editProgressChip} onPress={() => setQuickSlider({ id: item.id, value: item.progress })}>
+                        <Text style={s.editProgress}>수정</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
 
@@ -535,9 +540,6 @@ export default function ProjectScreen({ navigation, route }) {
                   </View>
                   <View style={s.progressRow}>
                     <Text style={s.progressLabel}>{item.progress}% 완료</Text>
-                    <TouchableOpacity style={s.editProgressChip} onPress={() => setQuickSlider({ id: item.id, value: item.progress })}>
-                      <Text style={s.editProgress}>수정</Text>
-                    </TouchableOpacity>
                   </View>
 
                   {/* 메타 정보 */}
@@ -1201,6 +1203,7 @@ const s = StyleSheet.create({
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 16, gap: 10 },
   cardRisk: { borderColor: C.gold + '55' },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
   riskIcon: { color: C.gold, fontSize: 12 },
   cardTitle: { color: C.textPrimary, fontSize: 14, fontWeight: '500', flex: 1 },
@@ -1211,8 +1214,8 @@ const s = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 2 },
   progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   progressLabel: { color: C.textDim, fontSize: 11 },
-  editProgressChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#2E7D5E99', backgroundColor: '#2E7D5E22' },
-  editProgress: { color: '#2E7D5E', fontSize: 10, fontWeight: '600' },
+  editProgressChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#2E7D5E99', backgroundColor: '#2E7D5E22', alignItems: 'center', justifyContent: 'center' },
+  editProgress: { color: '#2E7D5E', fontSize: 10, fontWeight: '600', textAlign: 'center' },
 
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   priorityBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
