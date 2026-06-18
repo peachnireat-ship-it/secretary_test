@@ -59,12 +59,9 @@ export function josa과와(word) {
   return '와';
 }
 
-// 한자(CJK 통합한자·확장·호환), 히라가나, 가타카나 제거
+// 한국어, 공백(\s), 숫자(0-9), 기본 문장부호(.?!,)를 제외한 모든 것을 제거
 function stripNonKorean(text) {
-  return text.replace(
-    /[぀-ヿ㐀-䶿一-鿿豈-﫿\u{20000}-\u{2A6DF}\u{2A700}-\u{2CEAF}\u{2CEB0}-\u{2EBEF}]/gu,
-    ''
-  );
+  return text.replace(/[^\p{Script=Hangul}\s0-9.?!,]/gu, '');
 }
 
 export async function askClaude(messages, systemPrompt) {
