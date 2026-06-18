@@ -6,7 +6,7 @@ import Slider from '@react-native-community/slider';
 import { useState, useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
 
 const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
@@ -116,6 +116,9 @@ export default function ProjectScreen({ navigation, route }) {
 
   const [showMeetingDetail, setShowMeetingDetail] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
+  const [contentEditRecordId, setContentEditRecordId] = useState(null);
+  const [contentEditSummary, setContentEditSummary] = useState('');
+  const [contentEditTranscript, setContentEditTranscript] = useState('');
   const [editPriority, setEditPriority] = useState('보통');
   const [editNotes, setEditNotes] = useState('');
 
@@ -291,6 +294,22 @@ export default function ProjectScreen({ navigation, route }) {
     }
   }
 
+  function openContentEditModal(item) {
+    setContentEditRecordId(item.id);
+    setContentEditSummary(item.summary || '');
+    setContentEditTranscript(item.transcript || '');
+  }
+
+  async function confirmContentEdit() {
+    const updated = await updateMeetingRecord(contentEditRecordId, {
+      summary: contentEditSummary,
+      transcript: contentEditTranscript,
+    });
+    const updatedRecord = updated.find((r) => r.id === contentEditRecordId);
+    if (updatedRecord) setSelectedMeeting(updatedRecord);
+    setContentEditRecordId(null);
+  }
+
   return (
     <View style={s.root}>
       {/* ── 헤더 ── */}
@@ -335,66 +354,66 @@ export default function ProjectScreen({ navigation, route }) {
           filtered.map((item) => {
             const days = daysUntil(item.deadline);
             const risk = isAtRisk(item);
+            const linkedMeetings = item.meetingRecordIds?.length > 0
+              ? meetingRecords.filter((r) => item.meetingRecordIds.includes(r.id))
+              : [];
             return (
-              <TouchableOpacity
-                key={item.id}
-                style={[s.card, risk && s.cardRisk]}
-                activeOpacity={0.75}
-                onPress={() => openDetail(item)}
-                onLongPress={() => handleDelete(item.id, item.title)}
-              >
-                {/* 타이틀 행 */}
-                <View style={s.cardTop}>
-                  <View style={s.cardTitleRow}>
-                    {risk && <Text style={s.riskIcon}>⚠ </Text>}
-                    <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
-                  </View>
-                  <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
-                    <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
-                  </View>
-                </View>
-
-                {/* 프로그레스 바 */}
-                <View style={s.progressTrack}>
-                  <View style={[s.progressFill, { width: `${item.progress}%`, backgroundColor: statusColor(item.status) }]} />
-                </View>
-                <View style={s.progressRow}>
-                  <Text style={s.progressLabel}>{item.progress}% 완료</Text>
-                  <TouchableOpacity onPress={() => setQuickSlider({ id: item.id, value: item.progress })}>
-                    <Text style={s.editProgress}>수정</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* 메타 정보 */}
-                <View style={s.cardMeta}>
-                  <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
-                    <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
-                  </View>
-                  <Text style={[s.deadlineText, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
-                    {item.deadline} · {daysLabel(days)}
-                  </Text>
-                </View>
-
-                {item.notes ? <Text style={s.cardNotes} numberOfLines={1}>{item.notes}</Text> : null}
-                {item.meetingRecordIds?.length > 0 && (() => {
-                  const linked = meetingRecords.filter((r) => item.meetingRecordIds.includes(r.id));
-                  if (!linked.length) return null;
-                  return (
-                    <View style={s.meetingChipRow}>
-                      {linked.map((r) => (
-                        <TouchableOpacity
-                          key={r.id}
-                          style={s.meetingChip}
-                          activeOpacity={0.7}
-                          onPress={() => { setSelectedMeeting(r); setShowMeetingDetail(true); }}
-                        >
-                          <Text style={s.meetingChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
-                        </TouchableOpacity>
-                      ))}
+              <View key={item.id} style={[s.card, risk && s.cardRisk]}>
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => openDetail(item)}
+                  onLongPress={() => handleDelete(item.id, item.title)}
+                >
+                  {/* 타이틀 행 */}
+                  <View style={s.cardTop}>
+                    <View style={s.cardTitleRow}>
+                      {risk && <Text style={s.riskIcon}>⚠ </Text>}
+                      <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
                     </View>
-                  );
-                })()}
-              </TouchableOpacity>
+                    <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
+                      <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
+                    </View>
+                  </View>
+
+                  {/* 프로그레스 바 */}
+                  <View style={s.progressTrack}>
+                    <View style={[s.progressFill, { width: `${item.progress}%`, backgroundColor: statusColor(item.status) }]} />
+                  </View>
+                  <View style={s.progressRow}>
+                    <Text style={s.progressLabel}>{item.progress}% 완료</Text>
+                    <TouchableOpacity onPress={() => setQuickSlider({ id: item.id, value: item.progress })}>
+                      <Text style={s.editProgress}>수정</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* 메타 정보 */}
+                  <View style={s.cardMeta}>
+                    <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
+                      <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
+                    </View>
+                    <Text style={[s.deadlineText, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                      {item.deadline} · {daysLabel(days)}
+                    </Text>
+                  </View>
+
+                  {item.notes ? <Text style={s.cardNotes} numberOfLines={1}>{item.notes}</Text> : null}
+                </TouchableOpacity>
+
+                {linkedMeetings.length > 0 && (
+                  <View style={s.meetingChipRow}>
+                    {linkedMeetings.map((r) => (
+                      <TouchableOpacity
+                        key={r.id}
+                        style={s.meetingChip}
+                        activeOpacity={0.7}
+                        onPress={() => { setSelectedMeeting(r); setShowMeetingDetail(true); }}
+                      >
+                        <Text style={s.meetingChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
             );
           })
         )}
@@ -626,8 +645,19 @@ export default function ProjectScreen({ navigation, route }) {
             {selectedMeeting && (
               <>
                 <View style={s.meetingDetailHeader}>
-                  <Text style={[s.modalTitle, { flex: 1, marginBottom: 0 }]} numberOfLines={2}>{selectedMeeting.title || '회의록'}</Text>
-                  <TouchableOpacity onPress={() => setShowMeetingDetail(false)} style={{ marginLeft: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.modalTitle, { marginBottom: 0 }]} numberOfLines={2}>{selectedMeeting.title || '회의록'}</Text>
+                    {selectedMeeting.createdAt && (
+                      <Text style={s.meetingDetailDate}>
+                        {new Date(selectedMeeting.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+                        {selectedMeeting.source ? ` · ${selectedMeeting.source}` : ''}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity onPress={() => openContentEditModal(selectedMeeting)} style={s.meetingEditBtn}>
+                    <Text style={s.meetingEditBtnText}>내용 편집</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowMeetingDetail(false)} style={{ marginLeft: 8 }}>
                     <Text style={s.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -640,6 +670,23 @@ export default function ProjectScreen({ navigation, route }) {
                       </View>
                     </>
                   ) : null}
+                  {selectedMeeting.tasks?.length > 0 ? (
+                    <>
+                      <Text style={s.inputLabel}>태스크</Text>
+                      <View style={s.meetingDetailSection}>
+                        {selectedMeeting.tasks.map((task, i) => (
+                          <View key={i} style={[s.meetingTaskRow, i < selectedMeeting.tasks.length - 1 && s.meetingTaskRowBorder]}>
+                            <Text style={s.meetingTaskContent}>{task.content}</Text>
+                            <View style={s.meetingTaskMeta}>
+                              {task.assignee ? <Text style={s.meetingTaskMetaText}>{task.assignee}</Text> : null}
+                              {task.deadline && task.deadline !== '미정' ? <Text style={s.meetingTaskMetaText}>· {task.deadline}</Text> : null}
+                              {task.priority ? <Text style={[s.meetingTaskMetaText, { color: priorityColor(task.priority) }]}>{task.priority}</Text> : null}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  ) : null}
                   {selectedMeeting.transcript ? (
                     <>
                       <Text style={s.inputLabel}>전문</Text>
@@ -648,7 +695,7 @@ export default function ProjectScreen({ navigation, route }) {
                       </View>
                     </>
                   ) : null}
-                  {!selectedMeeting.summary && !selectedMeeting.transcript && (
+                  {!selectedMeeting.summary && !selectedMeeting.transcript && !selectedMeeting.tasks?.length && (
                     <Text style={[s.emptyText, { marginTop: 20 }]}>저장된 내용이 없습니다.</Text>
                   )}
                   <View style={{ height: 20 }} />
@@ -657,6 +704,45 @@ export default function ProjectScreen({ navigation, route }) {
             )}
           </View>
         </View>
+      </Modal>
+
+      {/* ── 내용 편집 모달 ── */}
+      <Modal visible={!!contentEditRecordId} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setContentEditRecordId(null)}>
+        <KeyboardAvoidingView style={s.contentEditOverlay} behavior="padding">
+          <ScrollView contentContainerStyle={s.contentEditScroll} keyboardShouldPersistTaps="handled">
+            <View style={s.contentEditBox}>
+              <Text style={s.modalTitle}>내용 편집</Text>
+              <Text style={s.inputLabel}>요약 (SUMMARY)</Text>
+              <TextInput
+                style={s.contentEditInput}
+                value={contentEditSummary}
+                onChangeText={setContentEditSummary}
+                placeholder="요약 내용을 입력하세요"
+                placeholderTextColor={C.textDim}
+                multiline
+                textAlignVertical="top"
+              />
+              <Text style={s.inputLabel}>원문 (TRANSCRIPT)</Text>
+              <TextInput
+                style={s.contentEditInput}
+                value={contentEditTranscript}
+                onChangeText={setContentEditTranscript}
+                placeholder="원문을 입력하세요"
+                placeholderTextColor={C.textDim}
+                multiline
+                textAlignVertical="top"
+              />
+              <View style={s.modalBtns}>
+                <TouchableOpacity style={s.modalCancel} onPress={() => setContentEditRecordId(null)} activeOpacity={0.7}>
+                  <Text style={s.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.modalConfirm} onPress={confirmContentEdit} activeOpacity={0.8}>
+                  <Text style={s.modalConfirmText}>저장</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── 진행률 슬라이더 모달 ── */}
@@ -744,8 +830,20 @@ const s = StyleSheet.create({
   meetingChip: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   meetingChipText: { color: C.accentPurple, fontSize: 11, fontWeight: '500' },
   meetingDetailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
+  meetingEditBtn: { borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginLeft: 12, marginTop: 2 },
+  meetingEditBtnText: { color: C.accentTeal, fontSize: 12, fontWeight: '500' },
+  contentEditOverlay: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },
+  contentEditScroll: { flexGrow: 1, justifyContent: 'center' },
+  contentEditBox: { backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 24 },
+  contentEditInput: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: C.textPrimary, fontSize: 13, lineHeight: 20, minHeight: 100, maxHeight: 220 },
+  meetingDetailDate: { color: C.textDim, fontSize: 11, marginTop: 4 },
   meetingDetailSection: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 14, marginBottom: 4 },
   meetingDetailText: { color: C.textSecondary, fontSize: 13, lineHeight: 20 },
+  meetingTaskRow: { paddingVertical: 8 },
+  meetingTaskRowBorder: { borderBottomWidth: 1, borderBottomColor: C.border },
+  meetingTaskContent: { color: C.textSecondary, fontSize: 13, lineHeight: 18 },
+  meetingTaskMeta: { flexDirection: 'row', gap: 6, marginTop: 3 },
+  meetingTaskMetaText: { color: C.textDim, fontSize: 11 },
 
   fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
   fabText: { color: '#09090E', fontSize: 26, lineHeight: 30, fontWeight: '300' },
