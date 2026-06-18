@@ -372,12 +372,12 @@ export default function MeetingScreen({ navigation }) {
   }
 
   async function confirmContentEdit() {
-    const updated = await updateMeetingRecord(contentEditRecordId, {
-      summary: contentEditSummary,
-      transcript: contentEditTranscript,
-    });
-    setMeetingRecords(updated);
+    const id = contentEditRecordId;
+    const summary = contentEditSummary;
+    const transcript = contentEditTranscript;
+    setMeetingRecords((prev) => prev.map((r) => r.id === id ? { ...r, summary, transcript } : r));
     setContentEditRecordId(null);
+    await updateMeetingRecord(id, { summary, transcript });
   }
 
   function openSpeakerEditModal(item) {
