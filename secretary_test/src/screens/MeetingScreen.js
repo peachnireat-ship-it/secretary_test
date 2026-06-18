@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
@@ -110,6 +111,10 @@ export default function MeetingScreen({ navigation }) {
   useEffect(() => {
     if (activeTab === 'history') loadRecords();
   }, [activeTab, loadRecords]);
+
+  useFocusEffect(useCallback(() => {
+    if (activeTab === 'history') loadRecords();
+  }, [activeTab, loadRecords]));
 
   useEffect(() => {
     getWorkTopics().then((v) => { if (v) setWorkTopics(v); });
