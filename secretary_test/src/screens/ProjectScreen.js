@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
@@ -21,6 +21,35 @@ function parseTranscriptSegments(text) {
     segments.push({ speaker: m[1], text: m[2].trim() });
   }
   return segments;
+}
+
+function extractSpeakers(text) {
+  const found = new Set();
+  const regex = /(?:^|\n)\[([^\]\n]+)\]/g;
+  let m;
+  while ((m = regex.exec(text)) !== null) found.add(m[1]);
+  return [...found];
+}
+
+function applyNames(text, nameMap) {
+  return Object.entries(nameMap).reduce((t, [orig, name]) => {
+    const replacement = name.trim() || orig;
+    return t.split(`[${orig}]`).join(`[${replacement}]`);
+  }, text);
+}
+
+function deleteSpeakers(text, toDelete) {
+  if (toDelete.length === 0) return text;
+  const deleteSet = new Set(toDelete);
+  const segments = parseTranscriptSegments(text);
+  return segments
+    .map((s) => (deleteSet.has(s.speaker) ? s.text : `[${s.speaker}]\n${s.text}`))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function buildTranscriptFromSegments(segments) {
+  return segments.map((s) => `[${s.speaker}]\n${s.text}`).join('\n\n');
 }
 
 const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
@@ -135,6 +164,19 @@ export default function ProjectScreen({ navigation, route }) {
   const [contentEditSummary, setContentEditSummary] = useState('');
   const [contentEditTranscript, setContentEditTranscript] = useState('');
   const [editPriority, setEditPriority] = useState('보통');
+
+  const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
+  const [speakerEditNames, setSpeakerEditNames] = useState({});
+  const [speakerEditDeleted, setSpeakerEditDeleted] = useState(new Set());
+  const [speakerEditCustom, setSpeakerEditCustom] = useState([]);
+  const [speakerClientEditMap, setSpeakerClientEditMap] = useState({});
+
+  const [segmentEditRecordId, setSegmentEditRecordId] = useState(null);
+  const [editableSegments, setEditableSegments] = useState([]);
+  const [segmentPickerIdx, setSegmentPickerIdx] = useState(null);
+
+  const [clientPickerSpeaker, setClientPickerSpeaker] = useState(null);
+  const [clientPickerSearch, setClientPickerSearch] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
   const [showAI, setShowAI] = useState(false);
@@ -308,6 +350,98 @@ export default function ProjectScreen({ navigation, route }) {
       setAiLoading(false);
       setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
+  }
+
+  function openClientPicker(speaker) {
+    setClientPickerSpeaker(speaker);
+    setClientPickerSearch('');
+  }
+
+  async function addAndSelectClient() {
+    const name = clientPickerSearch.trim();
+    if (!name) return;
+    const updated = await addClient({ name });
+    setClients(updated);
+    selectClient({ name });
+  }
+
+  function selectClient(client) {
+    setSpeakerEditNames((prev) => ({ ...prev, [clientPickerSpeaker]: client.name }));
+    if (client.id) setSpeakerClientEditMap((prev) => ({ ...prev, [clientPickerSpeaker]: client.id }));
+    setClientPickerSpeaker(null);
+  }
+
+  function openSpeakerEditModal(item) {
+    const speakers = extractSpeakers(item.transcript || '');
+    setSpeakerEditRecordId(item.id);
+    setSpeakerEditNames(Object.fromEntries(speakers.map((sp) => [sp, ''])));
+    setSpeakerClientEditMap({});
+    setSpeakerEditDeleted(new Set());
+    setSpeakerEditCustom([]);
+  }
+
+  async function confirmSpeakerEdit() {
+    const record = meetingRecords.find((r) => r.id === speakerEditRecordId);
+    if (!record) return;
+    const recordId = speakerEditRecordId;
+    setSpeakerEditRecordId(null);
+
+    const renames = Object.fromEntries(
+      Object.entries(speakerEditNames).filter(([k]) => !speakerEditDeleted.has(k))
+    );
+    let updatedTranscript = applyNames(record.transcript || '', renames);
+    let updatedSummary = applyNames(record.summary || '', renames);
+
+    const customRenames = Object.fromEntries(
+      speakerEditCustom
+        .filter((c) => c.origKey.trim())
+        .map((c) => [c.origKey.trim(), c.newName.trim()])
+    );
+    updatedTranscript = applyNames(updatedTranscript, customRenames);
+    updatedSummary = applyNames(updatedSummary, customRenames);
+
+    updatedTranscript = deleteSpeakers(updatedTranscript, [...speakerEditDeleted]);
+    updatedSummary = deleteSpeakers(updatedSummary, [...speakerEditDeleted]);
+
+    const newClientIds = Object.values(speakerClientEditMap).filter(Boolean);
+    const mergedClientIds = [...new Set([...(record.clientIds || []), ...newClientIds])];
+    const updated = await updateMeetingRecord(recordId, {
+      transcript: updatedTranscript,
+      summary: updatedSummary,
+      clientIds: mergedClientIds,
+    });
+    setMeetingRecords(updated);
+    const updatedRecord = updated.find((r) => r.id === recordId);
+    if (updatedRecord) setSelectedMeeting(updatedRecord);
+    setSpeakerEditNames({});
+    setSpeakerClientEditMap({});
+    setSpeakerEditDeleted(new Set());
+    setSpeakerEditCustom([]);
+  }
+
+  function openSegmentEditModal(item) {
+    const segments = parseTranscriptSegments(item.transcript || '');
+    if (segments.length === 0) {
+      Alert.alert('수정 불가', '화자가 구분된 회의록이 아닙니다.');
+      return;
+    }
+    setEditableSegments(segments);
+    setSegmentEditRecordId(item.id);
+    setSegmentPickerIdx(null);
+  }
+
+  async function confirmSegmentEdit() {
+    const record = meetingRecords.find((r) => r.id === segmentEditRecordId);
+    if (!record) return;
+    const recordId = segmentEditRecordId;
+    setSegmentEditRecordId(null);
+    const updatedTranscript = buildTranscriptFromSegments(editableSegments);
+    const updated = await updateMeetingRecord(recordId, { transcript: updatedTranscript });
+    setMeetingRecords(updated);
+    const updatedRecord = updated.find((r) => r.id === recordId);
+    if (updatedRecord) setSelectedMeeting(updatedRecord);
+    setEditableSegments([]);
+    setSegmentPickerIdx(null);
   }
 
   function openContentEditModal(item) {
@@ -690,6 +824,12 @@ export default function ProjectScreen({ navigation, route }) {
                       </Text>
                     )}
                   </View>
+                  <TouchableOpacity onPress={() => openSpeakerEditModal(selectedMeeting)} style={s.speakerEditBtn}>
+                    <Text style={s.speakerEditBtnText}>화자 변경</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => openSegmentEditModal(selectedMeeting)} style={s.segmentEditBtn}>
+                    <Text style={s.segmentEditBtnText}>화자 수정</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => openContentEditModal(selectedMeeting)} style={s.meetingEditBtn}>
                     <Text style={s.meetingEditBtnText}>내용 편집</Text>
                   </TouchableOpacity>
@@ -755,6 +895,205 @@ export default function ProjectScreen({ navigation, route }) {
                 </ScrollView>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── 화자 관리 모달 ── */}
+      <Modal visible={!!speakerEditRecordId} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setSpeakerEditRecordId(null)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior="padding">
+          <ScrollView contentContainerStyle={[s.speakerModalScroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
+            <View style={s.speakerModalBox}>
+              <Text style={s.speakerModalTitle}>화자 관리</Text>
+              {Object.keys(speakerEditNames).length > 0 && (
+                <Text style={s.speakerModalSubtitle}>이름 변경 또는 삭제 (빈칸이면 원래 이름 유지)</Text>
+              )}
+              {Object.keys(speakerEditNames).map((speaker, idx) => {
+                const isDeleted = speakerEditDeleted.has(speaker);
+                const linked = clients.find((c) => c.name === speakerEditNames[speaker]);
+                const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
+                return (
+                  <View key={speaker} style={[s.speakerRow, isDeleted && s.speakerRowDeleted]}>
+                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && { opacity: 0.4 }]} />
+                    <Text style={[s.speakerOrigLabel, { color }, isDeleted && s.speakerOrigLabelDeleted]}>{speaker}</Text>
+                    <Text style={s.speakerArrow}>→</Text>
+                    <TextInput
+                      style={[s.speakerInput, isDeleted && s.speakerInputDeleted]}
+                      value={speakerEditNames[speaker]}
+                      onChangeText={(v) => setSpeakerEditNames((prev) => ({ ...prev, [speaker]: v }))}
+                      placeholder={isDeleted ? '(삭제됨)' : speaker}
+                      placeholderTextColor={C.textDim}
+                      editable={!isDeleted}
+                    />
+                    {!isDeleted && (
+                      <TouchableOpacity
+                        style={[s.clientRegBtn, !!linked && s.clientRegBtnActive]}
+                        onPress={() => openClientPicker(speaker)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[s.clientRegBtnText, !!linked && s.clientRegBtnTextActive]}>
+                          {linked ? linked.name : '거래처'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={[s.speakerDeleteBtn, isDeleted && s.speakerDeleteBtnActive]}
+                      onPress={() => setSpeakerEditDeleted((prev) => {
+                        const next = new Set(prev);
+                        next.has(speaker) ? next.delete(speaker) : next.add(speaker);
+                        return next;
+                      })}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[s.speakerDeleteBtnText, isDeleted && s.speakerDeleteBtnTextActive]}>
+                        {isDeleted ? '복원' : '✕'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+              {speakerEditCustom.map((item, idx) => (
+                <View key={`custom-${idx}`} style={s.speakerRow}>
+                  <TextInput
+                    style={[s.speakerInput, { width: 64, flex: 0 }]}
+                    value={item.origKey}
+                    onChangeText={(v) => setSpeakerEditCustom((prev) => prev.map((c, i) => i === idx ? { ...c, origKey: v } : c))}
+                    placeholder="원본 ID"
+                    placeholderTextColor={C.textDim}
+                  />
+                  <Text style={s.speakerArrow}>→</Text>
+                  <TextInput
+                    style={s.speakerInput}
+                    value={item.newName}
+                    onChangeText={(v) => setSpeakerEditCustom((prev) => prev.map((c, i) => i === idx ? { ...c, newName: v } : c))}
+                    placeholder="새 이름"
+                    placeholderTextColor={C.textDim}
+                  />
+                  <TouchableOpacity
+                    style={s.speakerDeleteBtn}
+                    onPress={() => setSpeakerEditCustom((prev) => prev.filter((_, i) => i !== idx))}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.speakerDeleteBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity
+                style={s.speakerAddBtn}
+                onPress={() => setSpeakerEditCustom((prev) => [...prev, { origKey: '', newName: '' }])}
+                activeOpacity={0.8}
+              >
+                <Text style={s.speakerAddBtnText}>+ 화자 추가</Text>
+              </TouchableOpacity>
+              <View style={s.speakerModalBtns}>
+                <TouchableOpacity style={s.speakerCancelBtn} onPress={() => setSpeakerEditRecordId(null)} activeOpacity={0.7}>
+                  <Text style={s.speakerCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.speakerSaveBtn} onPress={confirmSpeakerEdit} activeOpacity={0.8}>
+                  <Text style={s.speakerSaveText}>변경</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 화자 수동 수정 모달 ── */}
+      <Modal visible={!!segmentEditRecordId} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setSegmentEditRecordId(null)}>
+        <View style={s.segModalOverlay}>
+          <View style={s.segModalBox}>
+            <View style={s.segModalHeader}>
+              <Text style={s.speakerModalTitle}>화자 수동 수정</Text>
+              <Text style={s.speakerModalSubtitle}>화자 레이블을 탭해 변경하세요</Text>
+            </View>
+            <ScrollView style={s.segModalScroll} keyboardShouldPersistTaps="handled">
+              {(() => {
+                const allSpeakers = [...new Set(editableSegments.map((seg) => seg.speaker))];
+                return editableSegments.map((seg, idx) => {
+                  const isPicking = segmentPickerIdx === idx;
+                  const color = SPEAKER_COLORS[allSpeakers.indexOf(seg.speaker) % SPEAKER_COLORS.length];
+                  return (
+                    <View key={idx} style={s.segRow}>
+                      <TouchableOpacity
+                        style={[s.segSpeakerBadge, { backgroundColor: color + '22', borderColor: color + '55' }, isPicking && { backgroundColor: color + '44', borderColor: color }]}
+                        onPress={() => setSegmentPickerIdx(isPicking ? null : idx)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[s.segSpeakerText, { color }]}>{seg.speaker}</Text>
+                      </TouchableOpacity>
+                      <Text style={s.segContent} numberOfLines={isPicking ? undefined : 3}>{seg.text}</Text>
+                      {isPicking && (
+                        <View style={s.segPickerBox}>
+                          {allSpeakers.map((sp) => {
+                            const chipColor = SPEAKER_COLORS[allSpeakers.indexOf(sp) % SPEAKER_COLORS.length];
+                            return (
+                              <TouchableOpacity
+                                key={sp}
+                                style={[s.segPickerChip, { borderColor: chipColor + '55' }, seg.speaker === sp && { backgroundColor: chipColor + '22', borderColor: chipColor + '66' }]}
+                                onPress={() => {
+                                  setEditableSegments((prev) => prev.map((s, i) => i === idx ? { ...s, speaker: sp } : s));
+                                  setSegmentPickerIdx(null);
+                                }}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[s.segPickerChipText, { color: chipColor }, seg.speaker === sp && s.segPickerChipTextActive]}>{sp}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  );
+                });
+              })()}
+            </ScrollView>
+            <View style={[s.speakerModalBtns, s.segModalFooter, { paddingBottom: insets.bottom + 16 }]}>
+              <TouchableOpacity style={s.speakerCancelBtn} onPress={() => setSegmentEditRecordId(null)} activeOpacity={0.7}>
+                <Text style={s.speakerCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.speakerSaveBtn} onPress={confirmSegmentEdit} activeOpacity={0.8}>
+                <Text style={s.speakerSaveText}>저장</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── 거래처 선택 모달 ── */}
+      <Modal visible={!!clientPickerSpeaker} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setClientPickerSpeaker(null)}>
+        <View style={[s.modalOverlay, { justifyContent: 'center', paddingHorizontal: 32 }]}>
+          <View style={[s.speakerModalBox, s.clientPickerBox]}>
+            <Text style={s.speakerModalTitle}>거래처 선택</Text>
+            <TextInput
+              style={s.clientPickerInput}
+              value={clientPickerSearch}
+              onChangeText={setClientPickerSearch}
+              placeholder="이름 또는 회사 검색"
+              placeholderTextColor={C.textDim}
+              autoFocus
+            />
+            <ScrollView style={s.clientPickerList} keyboardShouldPersistTaps="handled">
+              {clients
+                .filter((c) => !clientPickerSearch || c.name.includes(clientPickerSearch) || (c.company || '').includes(clientPickerSearch))
+                .map((c) => (
+                  <TouchableOpacity key={c.id} style={s.clientPickerItem} onPress={() => selectClient(c)} activeOpacity={0.7}>
+                    <Text style={s.clientPickerName}>{c.name}</Text>
+                    {!!c.company && <Text style={s.clientPickerCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text>}
+                  </TouchableOpacity>
+                ))
+              }
+              {clients.filter((c) => !clientPickerSearch || c.name.includes(clientPickerSearch) || (c.company || '').includes(clientPickerSearch)).length === 0 && (
+                <Text style={s.clientPickerEmpty}>검색 결과가 없습니다</Text>
+              )}
+            </ScrollView>
+            {!!clientPickerSearch.trim() && (
+              <TouchableOpacity style={s.clientAddBtn} onPress={addAndSelectClient} activeOpacity={0.8}>
+                <Text style={s.clientAddBtnText}>'{clientPickerSearch.trim()}' 새로 추가</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={s.speakerCancelBtn} onPress={() => setClientPickerSpeaker(null)} activeOpacity={0.7}>
+              <Text style={s.speakerCancelText}>취소</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -887,8 +1226,64 @@ const s = StyleSheet.create({
   meetingChip: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   meetingChipText: { color: C.accentPurple, fontSize: 11, fontWeight: '500' },
   meetingDetailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
-  meetingEditBtn: { borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginLeft: 12, marginTop: 2 },
+  meetingEditBtn: { borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 8, marginLeft: 6, marginTop: 2 },
   meetingEditBtnText: { color: C.accentTeal, fontSize: 12, fontWeight: '500' },
+  speakerEditBtn: { borderWidth: 1, borderColor: C.accentPurple + '55', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 8, marginLeft: 6, marginTop: 2 },
+  speakerEditBtnText: { color: C.accentPurple, fontSize: 12, fontWeight: '500' },
+  segmentEditBtn: { borderWidth: 1, borderColor: C.gold + '55', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 8, marginLeft: 6, marginTop: 2 },
+  segmentEditBtnText: { color: C.gold, fontSize: 12, fontWeight: '500' },
+
+  speakerModalScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 40 },
+  speakerModalBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16 },
+  speakerModalTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '500', letterSpacing: 0.3 },
+  speakerModalSubtitle: { color: C.textDim, fontSize: 12, letterSpacing: 0.3, marginTop: -8 },
+  speakerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  speakerColorDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  speakerOrigLabel: { fontSize: 13, fontWeight: '500', width: 58 },
+  speakerArrow: { color: C.textDim, fontSize: 12 },
+  speakerInput: { flex: 1, backgroundColor: C.bg, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, color: C.textPrimary, fontSize: 13 },
+  speakerRowDeleted: { opacity: 0.45 },
+  speakerOrigLabelDeleted: { textDecorationLine: 'line-through' },
+  speakerInputDeleted: { backgroundColor: C.bg + '80' },
+  speakerDeleteBtn: { borderWidth: 1, borderColor: C.red + '55', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 8, minWidth: 36, alignItems: 'center' },
+  speakerDeleteBtnActive: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '66' },
+  speakerDeleteBtnText: { color: C.red, fontSize: 11, fontWeight: '600' },
+  speakerDeleteBtnTextActive: { color: C.accentTeal },
+  speakerAddBtn: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  speakerAddBtnText: { color: C.accentPurple, fontSize: 13, fontWeight: '500' },
+  speakerModalBtns: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  speakerCancelBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 10 },
+  speakerCancelText: { color: C.textSecondary, fontSize: 14 },
+  speakerSaveBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', backgroundColor: C.accentTeal + '22', borderWidth: 1, borderColor: C.accentTeal + '66', borderRadius: 10 },
+  speakerSaveText: { color: C.accentTeal, fontSize: 14, fontWeight: '600' },
+  clientRegBtn: { borderWidth: 1, borderColor: C.borderHigh, borderRadius: 6, paddingVertical: 6, paddingHorizontal: 8, maxWidth: 72 },
+  clientRegBtnActive: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '66' },
+  clientRegBtnText: { color: C.textDim, fontSize: 11, fontWeight: '500' },
+  clientRegBtnTextActive: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
+
+  segModalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
+  segModalBox: { backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: C.borderHigh, maxHeight: '88%', paddingTop: 20 },
+  segModalHeader: { paddingHorizontal: 24, paddingBottom: 16, gap: 6 },
+  segModalScroll: { flexGrow: 0 },
+  segModalFooter: { paddingHorizontal: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: C.border },
+  segRow: { paddingHorizontal: 24, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, gap: 8 },
+  segSpeakerBadge: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 6, paddingVertical: 4, paddingHorizontal: 10 },
+  segSpeakerText: { fontSize: 12, fontWeight: '600' },
+  segContent: { color: C.textSecondary, fontSize: 13, lineHeight: 20 },
+  segPickerBox: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  segPickerChip: { borderWidth: 1, borderRadius: 6, paddingVertical: 6, paddingHorizontal: 14 },
+  segPickerChipText: { fontSize: 13 },
+  segPickerChipTextActive: { fontWeight: '600' },
+
+  clientPickerBox: { maxHeight: '70%', gap: 12 },
+  clientPickerInput: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: C.textPrimary, fontSize: 14 },
+  clientPickerList: { maxHeight: 280 },
+  clientPickerItem: { paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.border },
+  clientPickerName: { color: C.textPrimary, fontSize: 14, fontWeight: '500' },
+  clientPickerCompany: { color: C.textDim, fontSize: 12, marginTop: 2 },
+  clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },
+  clientAddBtn: { backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 8, paddingVertical: 11, alignItems: 'center' },
+  clientAddBtnText: { color: C.accentBlue, fontSize: 13, fontWeight: '500' },
   contentEditOverlay: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },
   contentEditScroll: { flexGrow: 1, justifyContent: 'center' },
   contentEditBox: { backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 24 },
