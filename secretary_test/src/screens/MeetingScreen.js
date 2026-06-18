@@ -934,6 +934,7 @@ export default function MeetingScreen({ navigation }) {
         /* 기록 탭 */
         <FlatList
           data={meetingRecords}
+          extraData={meetingRecords}
           keyExtractor={(item) => item.id}
           contentContainerStyle={s.historyContent}
           ListHeaderComponent={meetingRecords.length > 0 ? (
@@ -980,6 +981,9 @@ export default function MeetingScreen({ navigation }) {
                 <View style={s.historyMeta}>
                   <View style={s.historyMetaRow}>
                     <Text style={s.historyDate} numberOfLines={1}>{item.title || formatDateTime(item.createdAt)}</Text>
+                    <Text style={s.historyChevron}>{isExpanded ? '▲' : '▼'}</Text>
+                  </View>
+                  <View style={s.historyBtnRow}>
                     <TouchableOpacity style={s.editTitleBtn} onPress={() => openEditModal(item)} activeOpacity={0.7}>
                       <Text style={s.editTitleBtnText}>제목 변경</Text>
                     </TouchableOpacity>
@@ -992,7 +996,6 @@ export default function MeetingScreen({ navigation }) {
                     <TouchableOpacity style={s.deleteBtn} onPress={() => handleDelete(item.id)} activeOpacity={0.7}>
                       <Text style={s.deleteBtnText}>삭제</Text>
                     </TouchableOpacity>
-                    <Text style={s.historyChevron}>{isExpanded ? '▲' : '▼'}</Text>
                   </View>
                   <Text style={[s.historySource, { marginTop: 6 }]}>{formatDateTime(item.createdAt)} · {item.source}</Text>
                 </View>
@@ -1304,6 +1307,7 @@ const s = StyleSheet.create({
   },
   historyMeta: {},
   historyMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  historyBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' },
   historyDate: { color: C.textPrimary, fontSize: 13, fontWeight: '500', flex: 1 },
   historySource: { color: C.textDim, fontSize: 11, letterSpacing: 0.3 },
   historyChevron: { color: C.textDim, fontSize: 12 },
