@@ -525,9 +525,9 @@ export default function ProjectScreen({ navigation, route }) {
             const linkedMeetings = item.meetingRecordIds?.length > 0
               ? meetingRecords.filter((r) => item.meetingRecordIds.includes(r.id))
               : [];
-            const linkedClients = item.clientIds?.length > 0
-              ? item.clientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean)
-              : [];
+            const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
+            const allRelatedClientIds = [...new Set([...(item.clientIds || []), ...meetingClientIds])];
+            const allRelatedPeople = allRelatedClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
             return (
               <View key={item.id} style={[s.card, risk && s.cardRisk]}>
                 <TouchableOpacity
@@ -572,16 +572,27 @@ export default function ProjectScreen({ navigation, route }) {
                   {item.notes ? <Text style={s.cardNotes} numberOfLines={1}>{item.notes}</Text> : null}
                 </TouchableOpacity>
 
-                {linkedClients.length > 0 && (
-                  <View style={s.clientChipRow}>
-                    {linkedClients.map((c) => (
-                      <View key={c.id} style={s.clientChip}>
-                        <View style={s.clientChipDot} />
-                        <Text style={s.clientChipText} numberOfLines={1}>
-                          {c.name}{c.company ? ` · ${c.company}` : ''}
-                        </Text>
-                      </View>
-                    ))}
+                {allRelatedPeople.length > 0 && (
+                  <View style={s.cardRelatedPeopleWrap}>
+                    <Text style={s.cardRelatedPeopleLabel}>관련 인물</Text>
+                    <View style={s.cardRelatedPeopleRow}>
+                      {allRelatedPeople.map((c) => (
+                        <TouchableOpacity
+                          key={c.id}
+                          style={s.cardPersonChip}
+                          activeOpacity={0.7}
+                          onPress={() => { setPersonDetailClient(c); setShowPersonDetail(true); }}
+                        >
+                          <View style={s.cardPersonAvatar}>
+                            <Text style={s.cardPersonAvatarText}>{c.name[0]}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={s.cardPersonName} numberOfLines={1}>{c.name}</Text>
+                            {c.company ? <Text style={s.cardPersonCompany} numberOfLines={1}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </View>
                 )}
                 {linkedMeetings.length > 0 && (
@@ -1394,6 +1405,14 @@ const s = StyleSheet.create({
   priorityText: { fontSize: 10, fontWeight: '500' },
   deadlineText: { color: C.textDim, fontSize: 11 },
   cardNotes: { color: C.textDim, fontSize: 11, fontStyle: 'italic' },
+  cardRelatedPeopleWrap: { marginTop: 10, gap: 5 },
+  cardRelatedPeopleLabel: { color: C.textDim, fontSize: 10, fontWeight: '500', letterSpacing: 0.4 },
+  cardRelatedPeopleRow: { gap: 6 },
+  cardPersonChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.accentTeal + '12', borderWidth: 1, borderColor: C.accentTeal + '33', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 8 },
+  cardPersonAvatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.accentTeal + '2A', borderWidth: 1, borderColor: C.accentTeal + '44', alignItems: 'center', justifyContent: 'center' },
+  cardPersonAvatarText: { color: C.accentTeal, fontSize: 11, fontWeight: '600' },
+  cardPersonName: { color: C.textSecondary, fontSize: 12, fontWeight: '500' },
+  cardPersonCompany: { color: C.textDim, fontSize: 10, marginTop: 1 },
   clientChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   clientChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.accentTeal + '18', borderWidth: 1, borderColor: C.accentTeal + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   clientChipDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: C.accentTeal },
