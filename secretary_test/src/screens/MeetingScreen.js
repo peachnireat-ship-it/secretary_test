@@ -11,7 +11,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
 import { transcribeAudio, diarizeSegments, diarizeWithPyannote } from '../services/groqStt';
 import { askClaude, buildTaskExtractionSystem } from '../services/claude';
-import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects } from '../services/storage';
+import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects, getHistories } from '../services/storage';
 
 function formatTime(sec) {
   const m = String(Math.floor(sec / 60)).padStart(2, '0');
@@ -116,6 +116,8 @@ export default function MeetingScreen({ navigation }) {
 
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
+  const [histories, setHistories] = useState([]);
+  const [selectedPersonClient, setSelectedPersonClient] = useState(null);
   const [clientPickerSpeaker, setClientPickerSpeaker] = useState(null);
   const [clientPickerContext, setClientPickerContext] = useState(null);
   const [clientPickerSearch, setClientPickerSearch] = useState('');
@@ -159,6 +161,10 @@ export default function MeetingScreen({ navigation }) {
 
   useEffect(() => {
     getProjects().then(setProjects);
+  }, []);
+
+  useEffect(() => {
+    getHistories().then(setHistories);
   }, []);
 
   useEffect(() => {
@@ -867,6 +873,108 @@ export default function MeetingScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* ── 인물 상세 모달 ── */}
+      <Modal visible={!!selectedPersonClient} animationType="slide" transparent onRequestClose={() => setSelectedPersonClient(null)}>
+        <View style={s.personModalOverlay}>
+          <View style={s.personModalSheet}>
+            <View style={s.personModalHandle} />
+            {selectedPersonClient && (() => {
+              const personHistories = histories.filter((h) => h.clientId === selectedPersonClient.id).sort((a, b) => b.createdAt - a.createdAt);
+              const linkedProjects = projects.filter((p) => p.clientIds?.includes(selectedPersonClient.id));
+              const linkedMeetings = meetingRecords.filter((r) => r.clientIds?.includes(selectedPersonClient.id));
+              return (
+                <>
+                  <View style={s.personDetailHeader}>
+                    <View style={s.personDetailAvatar}>
+                      <Text style={s.personDetailAvatarText}>{selectedPersonClient.name[0]}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.personDetailName}>{selectedPersonClient.name}</Text>
+                      {selectedPersonClient.company ? (
+                        <Text style={s.personDetailCompany}>{selectedPersonClient.company}{selectedPersonClient.role ? ` · ${selectedPersonClient.role}` : ''}</Text>
+                      ) : null}
+                      {selectedPersonClient.contact ? (
+                        <Text style={s.personDetailContact}>{selectedPersonClient.contact}</Text>
+                      ) : null}
+                    </View>
+                    <TouchableOpacity onPress={() => setSelectedPersonClient(null)}>
+                      <Text style={s.personCloseBtn}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                    {selectedPersonClient.notes ? (
+                      <View style={s.personNotesBox}>
+                        <Text style={s.personNotesText}>{selectedPersonClient.notes}</Text>
+                      </View>
+                    ) : null}
+
+                    {linkedProjects.length > 0 && (
+                      <View style={s.personSection}>
+                        <Text style={s.personSectionLabel}>연결된 프로젝트</Text>
+                        <View style={s.personChipRow}>
+                          {linkedProjects.map((p) => (
+                            <View key={p.id} style={[s.personProjectChip, { borderColor: statusColor(p.status) + '55', backgroundColor: statusColor(p.status) + '15' }]}>
+                              <View style={[s.personProjectChipDot, { backgroundColor: statusColor(p.status) }]} />
+                              <Text style={[s.personProjectChipText, { color: statusColor(p.status) }]} numberOfLines={1}>{p.title}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    <View style={s.personSection}>
+                      <Text style={s.personSectionLabel}>히스토리 {personHistories.length}건</Text>
+                      {personHistories.length === 0 ? (
+                        <Text style={s.personEmptyText}>기록된 히스토리가 없습니다</Text>
+                      ) : (
+                        personHistories.map((h, i) => (
+                          <View key={h.id} style={s.personHistoryItem}>
+                            <View style={s.personHistoryLeft}>
+                              <Text style={s.personHistoryDate}>{h.date}</Text>
+                              {i < personHistories.length - 1 && <View style={s.personHistoryLine} />}
+                            </View>
+                            <View style={s.personHistoryRight}>
+                              <View style={s.personHistoryMeta}>
+                                <View style={[s.personTypeBadge, { backgroundColor: histTypeColor(h.type) + '22', borderColor: histTypeColor(h.type) + '55' }]}>
+                                  <Text style={[s.personTypeText, { color: histTypeColor(h.type) }]}>{h.type}</Text>
+                                </View>
+                                <Text style={s.personHistoryTitle}>{h.title}</Text>
+                              </View>
+                              {h.content ? <Text style={s.personHistoryContent}>{h.content}</Text> : null}
+                              {h.result ? (
+                                <View style={s.personResultRow}>
+                                  <Text style={s.personResultLabel}>결과</Text>
+                                  <Text style={s.personResultText}>{h.result}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          </View>
+                        ))
+                      )}
+                    </View>
+
+                    {linkedMeetings.length > 0 && (
+                      <View style={s.personSection}>
+                        <Text style={s.personSectionLabel}>연결된 회의록 {linkedMeetings.length}건</Text>
+                        {linkedMeetings.map((r) => (
+                          <View key={r.id} style={s.personMeetingItem}>
+                            <Text style={s.personMeetingTitle} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
+                            {r.summary ? <Text style={s.personMeetingSummary} numberOfLines={2}>{r.summary}</Text> : null}
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    <View style={{ height: 40 }} />
+                  </ScrollView>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
       {/* 상단 탭 */}
       <View style={s.topTab}>
         <TouchableOpacity
@@ -1254,17 +1362,22 @@ export default function MeetingScreen({ navigation }) {
                       if (!linked.length) return null;
                       return (
                         <View style={s.historySection}>
-                          <Text style={s.historySectionLabel}>관련 거래처</Text>
+                          <Text style={s.historySectionLabel}>관련 인물</Text>
                           {linked.map((c) => (
-                            <View key={c.id} style={s.linkedClientRow}>
-                              <View style={s.linkedClientDot} />
-                              <Text style={s.linkedClientName} numberOfLines={1}>{c.name}</Text>
-                              {!!c.company && (
-                                <Text style={s.linkedClientCompany} numberOfLines={1}>
-                                  {c.company}{c.role ? ` · ${c.role}` : ''}
-                                </Text>
-                              )}
-                            </View>
+                            <TouchableOpacity key={c.id} style={s.linkedPersonRow} activeOpacity={0.7} onPress={() => setSelectedPersonClient(c)}>
+                              <View style={s.linkedPersonAvatar}>
+                                <Text style={s.linkedPersonAvatarText}>{c.name[0]}</Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={s.linkedClientName} numberOfLines={1}>{c.name}</Text>
+                                {!!c.company && (
+                                  <Text style={s.linkedClientCompany} numberOfLines={1}>
+                                    {c.company}{c.role ? ` · ${c.role}` : ''}
+                                  </Text>
+                                )}
+                              </View>
+                              <Text style={{ color: C.textDim, fontSize: 16 }}>›</Text>
+                            </TouchableOpacity>
                           ))}
                         </View>
                       );
@@ -1375,6 +1488,11 @@ function taskToProject(task) {
 function statusColor(status) {
   const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
   return map[status] || C.textDim;
+}
+
+function histTypeColor(type) {
+  const map = { 미팅: C.accentBlue, 통화: C.gold, 이메일: C.accentTeal, 계약: C.accentPurple, 기타: C.textSecondary };
+  return map[type] || C.textSecondary;
 }
 
 function priorityColor(priority) {
@@ -1519,6 +1637,45 @@ const s = StyleSheet.create({
   linkedClientDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.accentPurple },
   linkedClientName: { color: C.textPrimary, fontSize: 13, fontWeight: '500' },
   linkedClientCompany: { flex: 1, color: C.textDim, fontSize: 11 },
+  linkedPersonRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, backgroundColor: C.accentTeal + '10', borderWidth: 1, borderColor: C.accentTeal + '33', borderRadius: 10, paddingHorizontal: 10, marginBottom: 6 },
+  linkedPersonAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: C.accentTeal + '2A', borderWidth: 1, borderColor: C.accentTeal + '44', alignItems: 'center', justifyContent: 'center' },
+  linkedPersonAvatarText: { color: C.accentTeal, fontSize: 12, fontWeight: '600' },
+  // 인물 상세 모달
+  personModalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  personModalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 0, paddingTop: 12, maxHeight: '90%' },
+  personModalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  personDetailHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
+  personDetailAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
+  personDetailAvatarText: { color: C.accentTeal, fontSize: 22, fontWeight: '400' },
+  personDetailName: { color: C.textPrimary, fontSize: 18, fontWeight: '400' },
+  personDetailCompany: { color: C.textSecondary, fontSize: 12, marginTop: 2 },
+  personDetailContact: { color: C.textDim, fontSize: 11, marginTop: 2 },
+  personCloseBtn: { color: C.textSecondary, fontSize: 18, padding: 4 },
+  personNotesBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, marginBottom: 12 },
+  personNotesText: { color: C.textSecondary, fontSize: 13, lineHeight: 19 },
+  personSection: { marginBottom: 16 },
+  personSectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 8 },
+  personChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  personProjectChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10 },
+  personProjectChipDot: { width: 5, height: 5, borderRadius: 3 },
+  personProjectChipText: { fontSize: 11, fontWeight: '500', maxWidth: 160 },
+  personEmptyText: { color: C.textDim, fontSize: 13, paddingTop: 8 },
+  personHistoryItem: { flexDirection: 'row', gap: 14, marginBottom: 4 },
+  personHistoryLeft: { alignItems: 'center', width: 72 },
+  personHistoryDate: { color: C.textDim, fontSize: 10, textAlign: 'center', lineHeight: 16 },
+  personHistoryLine: { width: 1, flex: 1, backgroundColor: C.border, marginTop: 6 },
+  personHistoryRight: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, marginBottom: 10, gap: 6 },
+  personHistoryMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  personTypeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
+  personTypeText: { fontSize: 10, fontWeight: '500' },
+  personHistoryTitle: { color: C.textPrimary, fontSize: 13, flex: 1 },
+  personHistoryContent: { color: C.textSecondary, fontSize: 12, lineHeight: 18 },
+  personResultRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
+  personResultLabel: { color: C.gold, fontSize: 10, fontWeight: '600', marginTop: 1 },
+  personResultText: { color: C.textDim, fontSize: 12, flex: 1 },
+  personMeetingItem: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 10, padding: 12, marginBottom: 8, gap: 5 },
+  personMeetingTitle: { color: C.accentPurple, fontSize: 13, fontWeight: '500' },
+  personMeetingSummary: { color: C.textSecondary, fontSize: 12, lineHeight: 17 },
   linkedProjectRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   linkedProjectDot: { width: 7, height: 7, borderRadius: 4 },
   linkedProjectTitle: { flex: 1, color: C.textPrimary, fontSize: 13 },
