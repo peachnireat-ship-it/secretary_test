@@ -69,6 +69,8 @@ function buildTranscriptFromSegments(segments) {
   return segments.map((s) => `[${s.speaker}]\n${s.text}`).join('\n\n');
 }
 
+const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
+
 export default function MeetingScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('record');
@@ -576,11 +578,13 @@ export default function MeetingScreen({ navigation }) {
               {!editingRecordId && !!rawTranscript && (
                 <>
                   <Text style={s.speakerModalSubtitle}>화자 이름 지정 (선택)</Text>
-                  {Object.keys(speakerNames).map((speaker) => {
+                  {Object.keys(speakerNames).map((speaker, idx) => {
                     const linked = clients.find((c) => c.name === speakerNames[speaker]);
+                    const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
                     return (
                       <View key={speaker} style={s.speakerRow}>
-                        <Text style={s.speakerOrigLabel}>{speaker}</Text>
+                        <View style={[s.speakerColorDot, { backgroundColor: color }]} />
+                        <Text style={[s.speakerOrigLabel, { color }]}>{speaker}</Text>
                         <Text style={s.speakerArrow}>→</Text>
                         <TextInput
                           style={s.speakerInput}
@@ -632,12 +636,14 @@ export default function MeetingScreen({ navigation }) {
               {Object.keys(speakerEditNames).length > 0 && (
                 <Text style={s.speakerModalSubtitle}>이름 변경 또는 삭제 (빈칸이면 원래 이름 유지)</Text>
               )}
-              {Object.keys(speakerEditNames).map((speaker) => {
+              {Object.keys(speakerEditNames).map((speaker, idx) => {
                 const isDeleted = speakerEditDeleted.has(speaker);
                 const linked = clients.find((c) => c.name === speakerEditNames[speaker]);
+                const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
                 return (
                   <View key={speaker} style={[s.speakerRow, isDeleted && s.speakerRowDeleted]}>
-                    <Text style={[s.speakerOrigLabel, isDeleted && s.speakerOrigLabelDeleted]}>{speaker}</Text>
+                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && { opacity: 0.4 }]} />
+                    <Text style={[s.speakerOrigLabel, { color }, isDeleted && s.speakerOrigLabelDeleted]}>{speaker}</Text>
                     <Text style={s.speakerArrow}>→</Text>
                     <TextInput
                       style={[s.speakerInput, isDeleted && s.speakerInputDeleted]}
@@ -766,39 +772,45 @@ export default function MeetingScreen({ navigation }) {
               <Text style={s.speakerModalSubtitle}>화자 레이블을 탭해 변경하세요</Text>
             </View>
             <ScrollView style={s.segModalScroll} keyboardShouldPersistTaps="handled">
-              {editableSegments.map((seg, idx) => {
+              {(() => {
                 const allSpeakers = [...new Set(editableSegments.map((s) => s.speaker))];
-                const isPicking = segmentPickerIdx === idx;
-                return (
-                  <View key={idx} style={s.segRow}>
-                    <TouchableOpacity
-                      style={[s.segSpeakerBadge, isPicking && s.segSpeakerBadgeActive]}
-                      onPress={() => setSegmentPickerIdx(isPicking ? null : idx)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[s.segSpeakerText, isPicking && s.segSpeakerTextActive]}>{seg.speaker}</Text>
-                    </TouchableOpacity>
-                    <Text style={s.segContent} numberOfLines={isPicking ? undefined : 3}>{seg.text}</Text>
-                    {isPicking && (
-                      <View style={s.segPickerBox}>
-                        {allSpeakers.map((sp) => (
-                          <TouchableOpacity
-                            key={sp}
-                            style={[s.segPickerChip, seg.speaker === sp && s.segPickerChipActive]}
-                            onPress={() => {
-                              setEditableSegments((prev) => prev.map((s, i) => i === idx ? { ...s, speaker: sp } : s));
-                              setSegmentPickerIdx(null);
-                            }}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={[s.segPickerChipText, seg.speaker === sp && s.segPickerChipTextActive]}>{sp}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
+                return editableSegments.map((seg, idx) => {
+                  const isPicking = segmentPickerIdx === idx;
+                  const color = SPEAKER_COLORS[allSpeakers.indexOf(seg.speaker) % SPEAKER_COLORS.length];
+                  return (
+                    <View key={idx} style={s.segRow}>
+                      <TouchableOpacity
+                        style={[s.segSpeakerBadge, { backgroundColor: color + '22', borderColor: color + '55' }, isPicking && { backgroundColor: color + '44', borderColor: color }]}
+                        onPress={() => setSegmentPickerIdx(isPicking ? null : idx)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[s.segSpeakerText, { color }]}>{seg.speaker}</Text>
+                      </TouchableOpacity>
+                      <Text style={s.segContent} numberOfLines={isPicking ? undefined : 3}>{seg.text}</Text>
+                      {isPicking && (
+                        <View style={s.segPickerBox}>
+                          {allSpeakers.map((sp) => {
+                            const chipColor = SPEAKER_COLORS[allSpeakers.indexOf(sp) % SPEAKER_COLORS.length];
+                            return (
+                              <TouchableOpacity
+                                key={sp}
+                                style={[s.segPickerChip, { borderColor: chipColor + '55' }, seg.speaker === sp && { backgroundColor: chipColor + '22', borderColor: chipColor + '66' }]}
+                                onPress={() => {
+                                  setEditableSegments((prev) => prev.map((s, i) => i === idx ? { ...s, speaker: sp } : s));
+                                  setSegmentPickerIdx(null);
+                                }}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[s.segPickerChipText, { color: chipColor }, seg.speaker === sp && s.segPickerChipTextActive]}>{sp}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  );
+                });
+              })()}
             </ScrollView>
             <View style={[s.modalBtns, s.segModalFooter, { paddingBottom: insets.bottom + 16 }]}>
               <TouchableOpacity style={s.modalCancelBtn} onPress={() => setSegmentEditRecordId(null)} activeOpacity={0.7}>
@@ -1217,7 +1229,24 @@ export default function MeetingScreen({ navigation }) {
                             <Text style={s.copyBtn}>복사</Text>
                           </TouchableOpacity>
                         </View>
-                        <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>
+                        {(() => {
+                          const segs = parseTranscriptSegments(item.transcript);
+                          if (segs.length === 0) return <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>;
+                          const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
+                          return (
+                            <View style={{ gap: 12 }}>
+                              {segs.map((seg, i) => {
+                                const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
+                                return (
+                                  <View key={i}>
+                                    <Text style={{ color, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 }}>{seg.speaker}</Text>
+                                    <Text style={[s.historyBody, { color: C.textSecondary }]}>{seg.text}</Text>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          );
+                        })()}
                       </View>
                     )}
 					{(() => {
@@ -1462,7 +1491,8 @@ const s = StyleSheet.create({
   modalSaveText: { color: C.accentTeal, fontSize: 14, fontWeight: '600' },
   speakerModalSubtitle: { color: C.textDim, fontSize: 12, letterSpacing: 0.3, marginTop: -8 },
   speakerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  speakerOrigLabel: { color: C.textSecondary, fontSize: 13, fontWeight: '500', width: 58 },
+  speakerColorDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  speakerOrigLabel: { fontSize: 13, fontWeight: '500', width: 58 },
   speakerArrow: { color: C.textDim, fontSize: 12 },
   speakerInput: {
     flex: 1, backgroundColor: C.bg, borderWidth: 1, borderColor: C.borderHigh,

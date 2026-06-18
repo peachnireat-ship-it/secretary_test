@@ -10,6 +10,19 @@ import { C } from '../theme';
 import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
 
+const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
+
+function parseTranscriptSegments(text) {
+  if (!text) return [];
+  const regex = /\[([^\]\n]+)\]([\s\S]*?)(?=\n*\[|$)/g;
+  const segments = [];
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    segments.push({ speaker: m[1], text: m[2].trim() });
+  }
+  return segments;
+}
+
 const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
 const PRIORITIES = ['높음', '보통', '낮음'];
 const FILTERS = ['전체', '진행중', '위험', '지연', '완료'];
@@ -714,7 +727,24 @@ export default function ProjectScreen({ navigation, route }) {
                     <>
                       <Text style={s.inputLabel}>전문</Text>
                       <View style={s.meetingDetailSection}>
-                        <Text style={s.meetingDetailText}>{selectedMeeting.transcript}</Text>
+                        {(() => {
+                          const segs = parseTranscriptSegments(selectedMeeting.transcript);
+                          if (segs.length === 0) return <Text style={s.meetingDetailText}>{selectedMeeting.transcript}</Text>;
+                          const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
+                          return (
+                            <View style={{ gap: 12 }}>
+                              {segs.map((seg, i) => {
+                                const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
+                                return (
+                                  <View key={i}>
+                                    <Text style={{ color, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 }}>{seg.speaker}</Text>
+                                    <Text style={s.meetingDetailText}>{seg.text}</Text>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          );
+                        })()}
                       </View>
                     </>
                   ) : null}
