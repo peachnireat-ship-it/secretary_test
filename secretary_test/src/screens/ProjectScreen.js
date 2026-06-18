@@ -674,6 +674,33 @@ export default function ProjectScreen({ navigation, route }) {
                   placeholderTextColor={C.textDim}
                 />
 
+                {/* 관련 인물 */}
+                {(() => {
+                  if (!detailProject?.meetingRecordIds?.length) return null;
+                  const linkedMeetings = meetingRecords.filter((r) => detailProject.meetingRecordIds.includes(r.id));
+                  const clientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
+                  const people = clientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+                  if (!people.length) return null;
+                  return (
+                    <>
+                      <Text style={s.inputLabel}>관련 인물</Text>
+                      <View style={s.relatedPeopleRow}>
+                        {people.map((c) => (
+                          <View key={c.id} style={s.relatedPersonChip}>
+                            <View style={s.relatedPersonAvatar}>
+                              <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={s.relatedPersonName}>{c.name}</Text>
+                              {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  );
+                })()}
+
                 {/* 버튼 */}
                 <View style={s.modalBtns}>
                   <TouchableOpacity style={s.modalCancel} onPress={() => {
@@ -1318,6 +1345,13 @@ const s = StyleSheet.create({
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
   modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.gold, alignItems: 'center' },
   modalConfirmText: { color: '#09090E', fontSize: 14, fontWeight: '600' },
+
+  relatedPeopleRow: { gap: 8 },
+  relatedPersonChip: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.accentTeal + '15', borderWidth: 1, borderColor: C.accentTeal + '44', borderRadius: 10, padding: 10 },
+  relatedPersonAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
+  relatedPersonAvatarText: { color: C.accentTeal, fontSize: 13, fontWeight: '500' },
+  relatedPersonName: { color: C.textPrimary, fontSize: 13, fontWeight: '500' },
+  relatedPersonCompany: { color: C.textDim, fontSize: 11, marginTop: 1 },
 
   detailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
   detailTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '500', flex: 1, marginRight: 12 },
