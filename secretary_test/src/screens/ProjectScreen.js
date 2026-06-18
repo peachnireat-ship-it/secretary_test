@@ -1210,14 +1210,14 @@ const s = StyleSheet.create({
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   statusText: { fontSize: 10, fontWeight: '600' },
 
-  progressTrack: { height: 4, backgroundColor: C.border, borderRadius: 2, overflow: 'hidden' },
+  progressTrack: { height: 4, backgroundColor: C.border, borderRadius: 2, overflow: 'hidden', marginTop: 10 },
   progressFill: { height: '100%', borderRadius: 2 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   progressLabel: { color: C.textDim, fontSize: 11 },
   editProgressChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#2E7D5E99', backgroundColor: '#2E7D5E22', alignItems: 'center', justifyContent: 'center' },
   editProgress: { color: '#2E7D5E', fontSize: 10, fontWeight: '600', textAlign: 'center' },
 
-  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
   priorityBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
   priorityText: { fontSize: 10, fontWeight: '500' },
   deadlineText: { color: C.textDim, fontSize: 11 },
