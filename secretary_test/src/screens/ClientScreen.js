@@ -12,6 +12,19 @@ import { askClaude, buildClientSystem, josa과와 } from '../services/claude';
 
 const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
 
+const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
+
+function parseTranscriptSegments(text) {
+  if (!text) return [];
+  const regex = /\[([^\]\n]+)\]([\s\S]*?)(?=\n*\[|$)/g;
+  const segments = [];
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    segments.push({ speaker: m[1], text: m[2].trim() });
+  }
+  return segments;
+}
+
 export default function ClientScreen() {
   const insets = useSafeAreaInsets();
   const [clients, setClients] = useState([]);
@@ -40,6 +53,7 @@ export default function ClientScreen() {
   const [contactSearch, setContactSearch] = useState('');
   const [contactLoading, setContactLoading] = useState(false);
 
+  const [selectedMeetingRecord, setSelectedMeetingRecord] = useState(null);
   const [showAI, setShowAI] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { role: 'assistant', text: '거래처 관련 무엇이든 물어보세요.\n\n예) "삼성물산이랑 마지막 만난 게 언제야?", "LG전자 다음 미팅 전에 뭘 준비해야 해?", "현재 가장 관리가 필요한 거래처는?"' },
@@ -385,13 +399,13 @@ export default function ClientScreen() {
                   <View style={[s.linkedSection, { marginTop: 16 }]}>
                     <Text style={s.linkedSectionLabel}>연결된 회의록 {linked.length}건</Text>
                     {linked.map((r) => (
-                      <View key={r.id} style={s.meetingRecordItem}>
+                      <TouchableOpacity key={r.id} style={s.meetingRecordItem} activeOpacity={0.7} onPress={() => setSelectedMeetingRecord(r)}>
                         <View style={s.meetingRecordItemHeader}>
                           <Text style={s.meetingRecordItemTitle} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
                           <Text style={s.meetingRecordItemDate}>{formatDate(r.createdAt)}</Text>
                         </View>
                         {r.summary ? <Text style={s.meetingRecordItemSummary} numberOfLines={2}>{r.summary}</Text> : null}
-                      </View>
+                      </TouchableOpacity>
                     ))}
                   </View>
                 );
@@ -513,6 +527,71 @@ export default function ClientScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      {/* ── 회의록 상세 모달 ── */}
+      <Modal visible={!!selectedMeetingRecord} animationType="slide" transparent onRequestClose={() => setSelectedMeetingRecord(null)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
+            <View style={s.modalHandle} />
+            {selectedMeetingRecord && (
+              <>
+                <View style={s.meetingDetailHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.modalTitle, { marginBottom: 0 }]} numberOfLines={2}>{selectedMeetingRecord.title || '회의록'}</Text>
+                    {selectedMeetingRecord.createdAt && (
+                      <Text style={s.meetingDetailDate}>
+                        {new Date(selectedMeetingRecord.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+                        {selectedMeetingRecord.source ? ` · ${selectedMeetingRecord.source}` : ''}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity onPress={() => setSelectedMeetingRecord(null)} style={{ marginLeft: 8 }}>
+                    <Text style={s.closeBtn}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
+                  {selectedMeetingRecord.summary ? (
+                    <>
+                      <Text style={s.meetingDetailSectionLabel}>SUMMARY</Text>
+                      <View style={s.meetingDetailSection}>
+                        <Text style={s.meetingDetailText}>{selectedMeetingRecord.summary}</Text>
+                      </View>
+                    </>
+                  ) : null}
+                  {selectedMeetingRecord.transcript ? (
+                    <>
+                      <Text style={s.meetingDetailSectionLabel}>TRANSCRIPT</Text>
+                      <View style={s.meetingDetailSection}>
+                        {(() => {
+                          const segs = parseTranscriptSegments(selectedMeetingRecord.transcript);
+                          if (segs.length === 0) return <Text style={s.meetingDetailText}>{selectedMeetingRecord.transcript}</Text>;
+                          const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
+                          return (
+                            <View style={{ gap: 12 }}>
+                              {segs.map((seg, i) => {
+                                const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
+                                return (
+                                  <View key={i}>
+                                    <Text style={{ color, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 }}>{seg.speaker}</Text>
+                                    <Text style={s.meetingDetailText}>{seg.text}</Text>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          );
+                        })()}
+                      </View>
+                    </>
+                  ) : null}
+                  {!selectedMeetingRecord.summary && !selectedMeetingRecord.transcript && (
+                    <Text style={[s.emptyText, { marginTop: 20 }]}>저장된 내용이 없습니다.</Text>
+                  )}
+                  <View style={{ height: 20 }} />
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -585,6 +664,11 @@ const s = StyleSheet.create({
   meetingRecordItemTitle: { color: C.accentPurple, fontSize: 13, fontWeight: '500', flex: 1, marginRight: 8 },
   meetingRecordItemDate: { color: C.textDim, fontSize: 10 },
   meetingRecordItemSummary: { color: C.textSecondary, fontSize: 12, lineHeight: 17 },
+  meetingDetailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
+  meetingDetailDate: { color: C.textDim, fontSize: 11, marginTop: 4 },
+  meetingDetailSectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 8, marginTop: 14 },
+  meetingDetailSection: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 14, marginBottom: 4 },
+  meetingDetailText: { color: C.textSecondary, fontSize: 13, lineHeight: 20 },
   projectChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10 },
   projectChipDot: { width: 5, height: 5, borderRadius: 3 },
   projectChipText: { fontSize: 11, fontWeight: '500', maxWidth: 160 },
