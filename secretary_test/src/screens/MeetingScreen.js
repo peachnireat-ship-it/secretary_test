@@ -73,6 +73,8 @@ export default function MeetingScreen({ navigation }) {
 
   const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
   const [speakerEditNames, setSpeakerEditNames] = useState({});
+  const [speakerClientMap, setSpeakerClientMap] = useState({});
+  const [speakerClientEditMap, setSpeakerClientEditMap] = useState({});
 
   const [contentEditRecordId, setContentEditRecordId] = useState(null);
   const [contentEditSummary, setContentEditSummary] = useState('');
@@ -347,8 +349,10 @@ export default function MeetingScreen({ navigation }) {
   function selectClient(client) {
     if (clientPickerContext === 'save') {
       setSpeakerNames((prev) => ({ ...prev, [clientPickerSpeaker]: client.name }));
+      if (client.id) setSpeakerClientMap((prev) => ({ ...prev, [clientPickerSpeaker]: client.id }));
     } else {
       setSpeakerEditNames((prev) => ({ ...prev, [clientPickerSpeaker]: client.name }));
+      if (client.id) setSpeakerClientEditMap((prev) => ({ ...prev, [clientPickerSpeaker]: client.id }));
     }
     setClientPickerSpeaker(null);
   }
@@ -356,6 +360,7 @@ export default function MeetingScreen({ navigation }) {
   function openSaveModal() {
     setEditingRecordId(null);
     setTitleInput(`${formatDate(Date.now())} · ${transcriptSource}`);
+    setSpeakerClientMap({});
     setShowSaveModal(true);
   }
 
@@ -388,6 +393,7 @@ export default function MeetingScreen({ navigation }) {
     }
     setSpeakerEditRecordId(item.id);
     setSpeakerEditNames(Object.fromEntries(speakers.map((s) => [s, ''])));
+    setSpeakerClientEditMap({});
   }
 
   async function confirmSpeakerEdit() {
@@ -396,12 +402,16 @@ export default function MeetingScreen({ navigation }) {
     setSpeakerEditRecordId(null);
     const updatedTranscript = applyNames(record.transcript || '', speakerEditNames);
     const updatedSummary = applyNames(record.summary || '', speakerEditNames);
+    const newClientIds = Object.values(speakerClientEditMap).filter(Boolean);
+    const mergedClientIds = [...new Set([...(record.clientIds || []), ...newClientIds])];
     const updated = await updateMeetingRecord(speakerEditRecordId, {
       transcript: updatedTranscript,
       summary: updatedSummary,
+      clientIds: mergedClientIds,
     });
     setMeetingRecords(updated);
     setSpeakerEditNames({});
+    setSpeakerClientEditMap({});
   }
 
   async function confirmSave() {
@@ -420,7 +430,8 @@ export default function MeetingScreen({ navigation }) {
         setTranscript(finalTranscript);
         setSummary(finalSummary);
       }
-      await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary: finalSummary, transcript: finalTranscript, tasks });
+      const clientIds = [...new Set(Object.values(speakerClientMap).filter(Boolean))];
+      await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary: finalSummary, transcript: finalTranscript, tasks, clientIds });
       setSaved(true);
     }
   }
@@ -1027,6 +1038,26 @@ export default function MeetingScreen({ navigation }) {
                       </View>
                     )}
 					{(() => {
+                      const linked = (item.clientIds || []).map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+                      if (!linked.length) return null;
+                      return (
+                        <View style={s.historySection}>
+                          <Text style={s.historySectionLabel}>관련 거래처</Text>
+                          {linked.map((c) => (
+                            <View key={c.id} style={s.linkedClientRow}>
+                              <View style={s.linkedClientDot} />
+                              <Text style={s.linkedClientName} numberOfLines={1}>{c.name}</Text>
+                              {!!c.company && (
+                                <Text style={s.linkedClientCompany} numberOfLines={1}>
+                                  {c.company}{c.role ? ` · ${c.role}` : ''}
+                                </Text>
+                              )}
+                            </View>
+                          ))}
+                        </View>
+                      );
+                    })()}
+					{(() => {
                       const linked = projects.filter((p) => p.meetingRecordIds?.includes(item.id));
                       if (!linked.length) return null;
                       return (
@@ -1271,6 +1302,10 @@ const s = StyleSheet.create({
   clientPickerName: { color: C.textPrimary, fontSize: 14, fontWeight: '500' },
   clientPickerCompany: { color: C.textDim, fontSize: 12, marginTop: 2 },
   clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },
+  linkedClientRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  linkedClientDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.accentPurple },
+  linkedClientName: { color: C.textPrimary, fontSize: 13, fontWeight: '500' },
+  linkedClientCompany: { flex: 1, color: C.textDim, fontSize: 11 },
   linkedProjectRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   linkedProjectDot: { width: 7, height: 7, borderRadius: 4 },
   linkedProjectTitle: { flex: 1, color: C.textPrimary, fontSize: 13 },

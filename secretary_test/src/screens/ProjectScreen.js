@@ -6,7 +6,7 @@ import Slider from '@react-native-community/slider';
 import { useState, useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
 
 const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
@@ -95,6 +95,7 @@ export default function ProjectScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const [projects, setProjects] = useState([]);
   const [meetingRecords, setMeetingRecords] = useState([]);
+  const [clients, setClients] = useState([]);
   const [pendingMeetingRecordId, setPendingMeetingRecordId] = useState(null);
   const [filter, setFilter] = useState('전체');
 
@@ -149,9 +150,10 @@ export default function ProjectScreen({ navigation, route }) {
   }, [route?.params?.addTask]);
 
   async function load() {
-    const [all, records] = await Promise.all([getProjects(), getMeetingRecords()]);
+    const [all, records, clientList] = await Promise.all([getProjects(), getMeetingRecords(), getClients()]);
     setProjects(all);
     setMeetingRecords(records);
+    setClients(clientList);
   }
 
   const filtered = projects.filter((p) => filter === '전체' || p.status === filter);
@@ -164,6 +166,7 @@ export default function ProjectScreen({ navigation, route }) {
       Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
       return;
     }
+    const meetingRecord = pendingMeetingRecordId ? meetingRecords.find((r) => r.id === pendingMeetingRecordId) : null;
     const updated = await addProject({
       title: newTitle.trim(),
       deadline: normalizeDeadline(newDeadline.trim()),
@@ -172,6 +175,7 @@ export default function ProjectScreen({ navigation, route }) {
       priority: newPriority,
       notes: newNotes.trim(),
       meetingRecordIds: pendingMeetingRecordId ? [pendingMeetingRecordId] : [],
+      clientIds: meetingRecord?.clientIds || [],
     });
     setProjects(updated);
     setShowAdd(false);
@@ -357,6 +361,9 @@ export default function ProjectScreen({ navigation, route }) {
             const linkedMeetings = item.meetingRecordIds?.length > 0
               ? meetingRecords.filter((r) => item.meetingRecordIds.includes(r.id))
               : [];
+            const linkedClients = item.clientIds?.length > 0
+              ? item.clientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean)
+              : [];
             return (
               <View key={item.id} style={[s.card, risk && s.cardRisk]}>
                 <TouchableOpacity
@@ -399,6 +406,18 @@ export default function ProjectScreen({ navigation, route }) {
                   {item.notes ? <Text style={s.cardNotes} numberOfLines={1}>{item.notes}</Text> : null}
                 </TouchableOpacity>
 
+                {linkedClients.length > 0 && (
+                  <View style={s.clientChipRow}>
+                    {linkedClients.map((c) => (
+                      <View key={c.id} style={s.clientChip}>
+                        <View style={s.clientChipDot} />
+                        <Text style={s.clientChipText} numberOfLines={1}>
+                          {c.name}{c.company ? ` · ${c.company}` : ''}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
                 {linkedMeetings.length > 0 && (
                   <View style={s.meetingChipRow}>
                     {linkedMeetings.map((r) => (
@@ -826,7 +845,11 @@ const s = StyleSheet.create({
   priorityText: { fontSize: 10, fontWeight: '500' },
   deadlineText: { color: C.textDim, fontSize: 11 },
   cardNotes: { color: C.textDim, fontSize: 11, fontStyle: 'italic' },
-  meetingChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  clientChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  clientChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.accentTeal + '18', borderWidth: 1, borderColor: C.accentTeal + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
+  clientChipDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: C.accentTeal },
+  clientChipText: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
+  meetingChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   meetingChip: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   meetingChipText: { color: C.accentPurple, fontSize: 11, fontWeight: '500' },
   meetingDetailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
