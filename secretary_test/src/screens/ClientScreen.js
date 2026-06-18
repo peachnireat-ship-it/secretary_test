@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
-import { getClients, addClient, saveClients, getHistories, addHistory } from '../services/storage';
+import { getClients, addClient, saveClients, getHistories, addHistory, getMeetingRecords, getProjects } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와 } from '../services/claude';
 
 const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
@@ -15,6 +15,8 @@ export default function ClientScreen() {
   const insets = useSafeAreaInsets();
   const [clients, setClients] = useState([]);
   const [histories, setHistories] = useState([]);
+  const [meetingRecords, setMeetingRecords] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedClient, setSelectedClient] = useState(null);
 
@@ -50,9 +52,11 @@ export default function ClientScreen() {
   }, []);
 
   async function load() {
-    const [c, h] = await Promise.all([getClients(), getHistories()]);
+    const [c, h, m, p] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects()]);
     setClients(c);
     setHistories(h);
+    setMeetingRecords(m);
+    setProjects(p);
   }
 
   const filteredClients = clients.filter((c) =>
@@ -318,6 +322,44 @@ export default function ClientScreen() {
               }
             </View>
 
+            {/* 연결된 회의록 */}
+            {(() => {
+              const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));
+              if (!linked.length) return null;
+              return (
+                <View style={s.linkedSection}>
+                  <Text style={s.linkedSectionLabel}>연결된 회의록</Text>
+                  <View style={s.linkedChipRow}>
+                    {linked.map((r) => (
+                      <View key={r.id} style={s.meetingRecordChip}>
+                        <Text style={s.meetingRecordChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
+                        <Text style={s.meetingRecordChipDate}>{formatDate(r.createdAt)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* 연결된 프로젝트 */}
+            {(() => {
+              const linked = projects.filter((p) => p.clientIds?.includes(selectedClient?.id));
+              if (!linked.length) return null;
+              return (
+                <View style={s.linkedSection}>
+                  <Text style={s.linkedSectionLabel}>연결된 프로젝트</Text>
+                  <View style={s.linkedChipRow}>
+                    {linked.map((p) => (
+                      <View key={p.id} style={[s.projectChip, { borderColor: projectStatusColor(p.status) + '55', backgroundColor: projectStatusColor(p.status) + '15' }]}>
+                        <View style={[s.projectChipDot, { backgroundColor: projectStatusColor(p.status) }]} />
+                        <Text style={[s.projectChipText, { color: projectStatusColor(p.status) }]} numberOfLines={1}>{p.title}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              );
+            })()}
+
             {/* 히스토리 */}
             <View style={s.historyHeader}>
               <Text style={s.historyTitle}>히스토리 {clientHistories.length}건</Text>
@@ -480,6 +522,16 @@ function typeColor(type) {
   return map[type] || C.textSecondary;
 }
 
+function projectStatusColor(status) {
+  const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
+  return map[status] || C.textDim;
+}
+
+function formatDate(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 12 },
@@ -525,6 +577,15 @@ const s = StyleSheet.create({
   aiGlyph: { color: C.accentTeal, fontSize: 14 },
   summaryLabel: { color: C.accentTeal, fontSize: 10, fontWeight: '600', letterSpacing: 1.5 },
   summaryText: { color: C.textSecondary, fontSize: 12, lineHeight: 19 },
+  linkedSection: { marginBottom: 12 },
+  linkedSectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 8 },
+  linkedChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  meetingRecordChip: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10, gap: 2 },
+  meetingRecordChipText: { color: C.accentPurple, fontSize: 11, fontWeight: '500' },
+  meetingRecordChipDate: { color: C.accentPurple + 'AA', fontSize: 10 },
+  projectChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10 },
+  projectChipDot: { width: 5, height: 5, borderRadius: 3 },
+  projectChipText: { fontSize: 11, fontWeight: '500', maxWidth: 160 },
   historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   historyTitle: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600' },
   addHistoryBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: C.accentTeal + '55', backgroundColor: C.accentTeal + '11' },
