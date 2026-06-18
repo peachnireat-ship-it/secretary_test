@@ -1211,8 +1211,8 @@ const s = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 2 },
   progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   progressLabel: { color: C.textDim, fontSize: 11 },
-  editProgressChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: C.accentBlue + '66', backgroundColor: C.accentBlue + '18' },
-  editProgress: { color: C.accentBlue, fontSize: 10, fontWeight: '600' },
+  editProgressChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#2E7D5E99', backgroundColor: '#2E7D5E22' },
+  editProgress: { color: '#2E7D5E', fontSize: 10, fontWeight: '600' },
 
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   priorityBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
