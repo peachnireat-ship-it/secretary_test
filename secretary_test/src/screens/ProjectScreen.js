@@ -535,7 +535,7 @@ export default function ProjectScreen({ navigation, route }) {
                   </View>
                   <View style={s.progressRow}>
                     <Text style={s.progressLabel}>{item.progress}% 완료</Text>
-                    <TouchableOpacity onPress={() => setQuickSlider({ id: item.id, value: item.progress })}>
+                    <TouchableOpacity style={s.editProgressChip} onPress={() => setQuickSlider({ id: item.id, value: item.progress })}>
                       <Text style={s.editProgress}>수정</Text>
                     </TouchableOpacity>
                   </View>
@@ -1211,7 +1211,8 @@ const s = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 2 },
   progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   progressLabel: { color: C.textDim, fontSize: 11 },
-  editProgress: { color: C.accentBlue, fontSize: 11 },
+  editProgressChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: C.accentBlue + '66', backgroundColor: C.accentBlue + '18' },
+  editProgress: { color: C.accentBlue, fontSize: 10, fontWeight: '600' },
 
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   priorityBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
