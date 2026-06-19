@@ -1,3 +1,4 @@
+import * as FileSystem from 'expo-file-system';
 import { getApiKey, getPyannoteUrl } from './storage';
 import { askClaude } from './claude';
 
@@ -55,15 +56,54 @@ export async function diarizeSegments(segments) {
     [{ role: 'user', content: input }],
     `[언어 규칙] 반드시 한국어로만 응답하세요.
 
-다음은 회의 음성을 타임스탬프별로 변환한 텍스트입니다. 대화 흐름, 질문/답변 패턴, 내용의 연속성을 분석하여 화자를 구분하세요.
+다음은 회의 음성을 타임스탬프별로 변환한 텍스트입니다. 아래 4가지 작업을 순서대로 수행하세요.
 
-연속된 같은 화자의 발화는 합쳐서 "[화자 N] 내용" 형식으로 출력하세요.
-타임스탬프는 제거하고, 다른 설명 없이 화자 구분된 대화문만 출력하세요.`
+1. 화자 구분: 대화 흐름, 질문/답변 패턴, 내용의 연속성을 분석하여 화자를 구분하세요.
+2. 오타 수정: 음성 인식 과정에서 발생한 오타(잘못 인식된 단어, 붙여쓰기 오류 등)를 교정하세요.
+3. 조사 수정: 문맥에 맞지 않는 조사(을/를, 이/가, 은/는, 에/에서 등)를 올바르게 교정하세요.
+4. 업무 용어 정규화: 동일한 의미의 업무 용어가 다양한 표기로 혼용된 경우 가장 일반적인 표준 표기로 통일하세요(예: 미팅→회의, 컨펌→확인, 피드백→의견).
+
+출력 형식:
+- 연속된 같은 화자의 발화는 합쳐서 "[화자 N] 내용" 형식으로 출력하세요.
+- 타임스탬프는 제거하고, 다른 설명 없이 화자 구분된 대화문만 출력하세요.`
   );
 }
 
 // pyannote 세그먼트(음성 기반)와 Whisper 세그먼트(텍스트 기반)를 병합해 [화자 N] 포맷으로 반환.
 // pyannote 서버 URL이 설정되지 않았거나 호출 실패 시 null을 반환 → 호출부에서 LLM fallback.
+export async function convertToMonoViaServer(fileUri, mimeType) {
+  const baseUrl = await getPyannoteUrl();
+  if (!baseUrl) return null;
+
+  try {
+    const ext = (mimeType || 'audio/m4a').split('/')[1] || 'm4a';
+    const formData = new FormData();
+    formData.append('file', { uri: fileUri, type: mimeType, name: `audio.${ext}` });
+
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/mono`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) return null;
+
+    const blob = await res.blob();
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    const outputUri = `${FileSystem.cacheDirectory}mono_${Date.now()}.wav`;
+    await FileSystem.writeAsStringAsync(outputUri, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return outputUri;
+  } catch {
+    return null;
+  }
+}
+
 export async function diarizeWithPyannote(fileUri, mimeType, whisperSegments) {
   if (!whisperSegments?.length) return null;
 
@@ -84,10 +124,28 @@ export async function diarizeWithPyannote(fileUri, mimeType, whisperSegments) {
     const { segments: pySegs } = await res.json();
     if (!pySegs?.length) return null;
 
-    return buildTranscript(whisperSegments, pySegs);
+    const raw = buildTranscript(whisperSegments, pySegs);
+    return polishTranscript(raw);
   } catch {
     return null;
   }
+}
+
+async function polishTranscript(text) {
+  return askClaude(
+    [{ role: 'user', content: text }],
+    `[언어 규칙] 반드시 한국어로만 응답하세요.
+
+다음은 화자가 이미 구분된 회의 텍스트입니다. 아래 3가지 교정 작업을 수행하세요.
+
+1. 오타 수정: 음성 인식 과정에서 발생한 오타(잘못 인식된 단어, 붙여쓰기 오류 등)를 교정하세요.
+2. 조사 수정: 문맥에 맞지 않는 조사(을/를, 이/가, 은/는, 에/에서 등)를 올바르게 교정하세요.
+3. 업무 용어 정규화: 동일한 의미의 업무 용어가 다양한 표기로 혼용된 경우 가장 일반적인 표준 표기로 통일하세요(예: 미팅→회의, 컨펌→확인, 피드백→의견).
+
+출력 형식:
+- "[화자 N] 내용" 형식과 화자 구분은 그대로 유지하세요.
+- 다른 설명 없이 교정된 대화문만 출력하세요.`
+  );
 }
 
 function buildTranscript(whisperSegments, pyannoteSegments) {
