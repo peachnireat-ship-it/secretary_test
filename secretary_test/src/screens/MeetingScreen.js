@@ -372,7 +372,8 @@ export default function MeetingScreen({ navigation }) {
     try {
       const raw = await askClaude(
         [{ role: 'user', content: text }],
-        buildTaskExtractionSystem()
+        buildTaskExtractionSystem(),
+        { raw: true }
       );
       const jsonStr = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(jsonStr);

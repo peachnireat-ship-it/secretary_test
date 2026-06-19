@@ -64,7 +64,7 @@ function stripNonKorean(text) {
   return text.replace(/[^\p{Script=Hangul}\s0-9.?!,\[\]]/gu, '');
 }
 
-export async function askClaude(messages, systemPrompt) {
+export async function askClaude(messages, systemPrompt, { raw = false } = {}) {
   const provider = await getAiProvider();
   let result;
   if (provider === 'grok') {
@@ -76,7 +76,7 @@ export async function askClaude(messages, systemPrompt) {
     if (!apiKey) throw new Error('API_KEY_MISSING');
     result = await callGroq(messages, systemPrompt, apiKey);
   }
-  return stripNonKorean(result);
+  return raw ? result : stripNonKorean(result);
 }
 
 export function buildScheduleSystem(schedules) {
