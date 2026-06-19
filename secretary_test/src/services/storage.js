@@ -225,6 +225,16 @@ export async function addMessage(message) {
   return updated;
 }
 
+export async function addMessageForUser(userId, message) {
+  const key = `${KEYS.messages}_${userId}`;
+  const raw = await AsyncStorage.getItem(key);
+  const list = raw ? JSON.parse(raw) : getSampleMessages();
+  if (!raw) await AsyncStorage.setItem(key, JSON.stringify(list));
+  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...message }, ...list];
+  await AsyncStorage.setItem(key, JSON.stringify(updated));
+  return updated;
+}
+
 export async function updateMessage(id, changes) {
   const list = await getMessages();
   const updated = list.map((m) => (m.id === id ? { ...m, ...changes, updatedAt: Date.now() } : m));

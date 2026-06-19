@@ -2,9 +2,9 @@ import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Alert,
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl } from '../services/storage';
+import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getTestAccounts, switchAccount } from '../services/storage';
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ user, onUserChange }) {
   const insets = useSafeAreaInsets();
   const [provider, setProviderState] = useState('groq');
   const [apiKey, setApiKeyState] = useState('');
@@ -263,6 +263,63 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* ── 계정 ── */}
+      {user && (
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>계정</Text>
+          {/* 현재 로그인 계정 */}
+          <View style={[s.card, { marginBottom: 10 }]}>
+            <View style={s.cardHeader}>
+              <View style={s.accountAvatar}>
+                <Text style={s.accountAvatarText}>{user.name[0]}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.accountName}>{user.name}</Text>
+                <Text style={s.accountEmail}>{user.email}</Text>
+                {user.team && <Text style={s.accountTeam}>{user.team}</Text>}
+              </View>
+              <View style={s.activeBadge}><Text style={s.activeBadgeText}>현재</Text></View>
+            </View>
+          </View>
+          {/* 다른 계정 목록 */}
+          {getTestAccounts()
+            .filter((a) => a.id !== user.id)
+            .map((account) => (
+              <TouchableOpacity
+                key={account.id}
+                style={[s.card, s.switchCard]}
+                activeOpacity={0.75}
+                onPress={() => Alert.alert('계정 전환', `${account.name}(${account.email}) 계정으로 전환하시겠습니까?`, [
+                  { text: '취소', style: 'cancel' },
+                  { text: '전환', onPress: async () => { const u = await switchAccount(account.id); onUserChange?.(u); } },
+                ])}
+              >
+                <View style={s.cardHeader}>
+                  <View style={[s.accountAvatar, { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '44' }]}>
+                    <Text style={[s.accountAvatarText, { color: C.accentTeal }]}>{account.name[0]}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.accountName}>{account.name}</Text>
+                    <Text style={s.accountEmail}>{account.email}</Text>
+                  </View>
+                  <Text style={s.switchArrow}>전환 →</Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          }
+          <TouchableOpacity
+            style={[s.logoutBtn, { marginTop: 10 }]}
+            onPress={() => Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
+              { text: '취소', style: 'cancel' },
+              { text: '로그아웃', style: 'destructive', onPress: async () => { await logout(); onUserChange?.(null); } },
+            ])}
+            activeOpacity={0.8}
+          >
+            <Text style={s.logoutBtnText}>로그아웃</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* ── AI 기능 안내 ── */}
       <View style={s.section}>
         <Text style={s.sectionLabel}>AI 기능 안내</Text>
@@ -305,6 +362,17 @@ const s = StyleSheet.create({
   providerBtnTextActiveGrok: { color: C.accentPurple },
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 20, gap: 14 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  accountAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.accentBlue + '33', alignItems: 'center', justifyContent: 'center' },
+  accountAvatarText: { color: C.accentBlue, fontSize: 16, fontWeight: '600' },
+  accountName: { color: C.textPrimary, fontSize: 15, fontWeight: '400' },
+  accountEmail: { color: C.textDim, fontSize: 12, marginTop: 2 },
+  accountTeam: { color: C.accentBlue, fontSize: 11, marginTop: 3, letterSpacing: 0.5 },
+  activeBadge: { backgroundColor: C.accentBlue + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  activeBadgeText: { color: C.accentBlue, fontSize: 11, fontWeight: '600' },
+  switchCard: { borderColor: C.border, marginBottom: 8 },
+  switchArrow: { color: C.accentTeal, fontSize: 12, fontWeight: '500' },
+  logoutBtn: { paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: C.red + '55', alignItems: 'center' },
+  logoutBtnText: { color: C.red, fontSize: 14, fontWeight: '500' },
   aiGlyph: { color: C.gold, fontSize: 16 },
   cardTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '400' },
   cardDesc: { color: C.textSecondary, fontSize: 12, lineHeight: 19 },

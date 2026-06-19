@@ -1,8 +1,9 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { Text } from 'react-native';
+import { Text, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState, useEffect } from 'react';
 import { C } from './src/theme';
 import HomeScreen from './src/screens/HomeScreen';
 import ScheduleScreen from './src/screens/ScheduleScreen';
@@ -11,6 +12,8 @@ import ProjectScreen from './src/screens/ProjectScreen';
 import MessageScreen from './src/screens/MessageScreen';
 import MeetingScreen from './src/screens/MeetingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import { getCurrentUser } from './src/services/storage';
 
 const Tab = createBottomTabNavigator();
 
@@ -24,7 +27,7 @@ const ICONS = {
   설정: { active: '◎', inactive: '◎' },
 };
 
-function TabNavigator() {
+function TabNavigator({ user, onUserChange }) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -47,23 +50,48 @@ function TabNavigator() {
         ),
       })}
     >
-      <Tab.Screen name="홈" component={HomeScreen} />
+      <Tab.Screen name="홈">{(props) => <HomeScreen {...props} user={user} />}</Tab.Screen>
       <Tab.Screen name="일정" component={ScheduleScreen} />
       <Tab.Screen name="거래처" component={ClientScreen} />
       <Tab.Screen name="프로젝트" component={ProjectScreen} />
-      <Tab.Screen name="메세지" component={MessageScreen} />
+      <Tab.Screen name="메세지">{(props) => <MessageScreen {...props} user={user} />}</Tab.Screen>
       <Tab.Screen name="회의록" component={MeetingScreen} />
-      <Tab.Screen name="설정" component={SettingsScreen} />
+      <Tab.Screen name="설정">{(props) => <SettingsScreen {...props} user={user} onUserChange={onUserChange} />}</Tab.Screen>
     </Tab.Navigator>
   );
 }
 
 export default function App() {
+  const [user, setUser] = useState(undefined);
+
+  useEffect(() => {
+    getCurrentUser().then((u) => setUser(u || null));
+  }, []);
+
+  if (user === undefined) {
+    return (
+      <SafeAreaProvider>
+        <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={C.accentBlue} />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (!user) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        <LoginScreen onLogin={(u) => setUser(u)} />
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>
         <StatusBar style="light" />
-        <TabNavigator />
+        <TabNavigator key={user?.id} user={user} onUserChange={(u) => setUser(u)} />
       </NavigationContainer>
     </SafeAreaProvider>
   );

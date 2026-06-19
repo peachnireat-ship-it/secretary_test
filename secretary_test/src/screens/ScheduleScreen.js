@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getSchedules, addSchedule, deleteSchedule, getProjects } from '../services/storage';
+import { getSchedules, addSchedule, deleteSchedule, getProjects, getClients, getMeetingRecords } from '../services/storage';
 import { askClaude, buildScheduleSystem } from '../services/claude';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
@@ -45,6 +45,8 @@ export default function ScheduleScreen() {
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth() + 1);
 
+  const [clients, setClients] = useState([]);
+  const [meetingRecords, setMeetingRecords] = useState([]);
   const [showProjectView, setShowProjectView] = useState(false);
   const [viewProject, setViewProject] = useState(null);
 
@@ -67,9 +69,11 @@ export default function ScheduleScreen() {
   useFocusEffect(useCallback(() => { load(); }, []));
 
   async function load() {
-    const [allSchedules, allProjects] = await Promise.all([getSchedules(), getProjects()]);
+    const [allSchedules, allProjects, allClients, allRecords] = await Promise.all([getSchedules(), getProjects(), getClients(), getMeetingRecords()]);
     setSchedules(allSchedules);
     setProjects(allProjects);
+    setClients(allClients);
+    setMeetingRecords(allRecords);
   }
 
   const daySchedules = schedules
@@ -357,6 +361,12 @@ export default function ScheduleScreen() {
             <View style={s.modalHandle} />
             {viewProject && (() => {
               const days = daysUntil(viewProject.deadline);
+              const linkedMeetings = viewProject.meetingRecordIds?.length > 0
+                ? meetingRecords.filter((r) => viewProject.meetingRecordIds.includes(r.id))
+                : [];
+              const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
+              const allRelatedClientIds = [...new Set([...(viewProject.clientIds || []), ...meetingClientIds])];
+              const relatedPeople = allRelatedClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
               return (
                 <ScrollView showsVerticalScrollIndicator={false}>
                   <View style={s.modalTitleRow}>
@@ -392,6 +402,25 @@ export default function ScheduleScreen() {
                       <Text style={s.viewText}>{viewProject.notes}</Text>
                     </>
                   ) : null}
+
+                  {relatedPeople.length > 0 && (
+                    <>
+                      <Text style={s.viewLabel}>관련 인물</Text>
+                      <View style={s.viewPeopleList}>
+                        {relatedPeople.map((c) => (
+                          <View key={c.id} style={s.viewPersonRow}>
+                            <View style={s.viewPersonAvatar}>
+                              <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={s.viewPersonName}>{c.name}</Text>
+                              {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  )}
 
                   <View style={{ height: 16 }} />
                 </ScrollView>
@@ -475,6 +504,12 @@ const s = StyleSheet.create({
   viewProgressFill: { height: 4, borderRadius: 2 },
   viewProgressText: { color: C.textDim, fontSize: 11, marginBottom: 16 },
   viewText: { color: C.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  viewPeopleList: { gap: 8, marginBottom: 16 },
+  viewPersonRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  viewPersonAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.accentBlue + '33', alignItems: 'center', justifyContent: 'center' },
+  viewPersonAvatarText: { color: C.accentBlue, fontSize: 13, fontWeight: '600' },
+  viewPersonName: { color: C.textPrimary, fontSize: 13, fontWeight: '400' },
+  viewPersonSub: { color: C.textDim, fontSize: 11 },
   projectDeadlineLabel: { color: C.gold, fontSize: 11, fontWeight: '600', width: 44, textAlign: 'center' },
   scheduleTime: { color: C.textSecondary, fontSize: 13, fontWeight: '500', width: 44 },
   scheduleDivider: { width: 1, height: 32, backgroundColor: C.borderHigh },

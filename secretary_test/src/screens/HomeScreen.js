@@ -28,7 +28,7 @@ function todayStr() {
   return new Date().toISOString().split('T')[0];
 }
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, user }) {
   const insets = useSafeAreaInsets();
   const now = useNow();
   const hh = String(now.getHours()).padStart(2, '0');
@@ -77,13 +77,20 @@ export default function HomeScreen({ navigation }) {
     >
       {/* ── 헤더 ── */}
       <View style={s.header}>
-        <View style={s.badge}>
-          <View style={s.badgeDot} />
-          <Text style={s.badgeText}>PRIVATE</Text>
+        <View style={s.badgeRow}>
+          <View style={s.badge}>
+            <View style={s.badgeDot} />
+            <Text style={s.badgeText}>PRIVATE</Text>
+          </View>
+          {user?.team && (
+            <View style={s.teamBadge}>
+              <Text style={s.teamBadgeText}>{user.team}</Text>
+            </View>
+          )}
         </View>
         <Text style={s.clockText}>{hh}:{mm}</Text>
         <Text style={s.dateText}>{dateLabel}</Text>
-        <Text style={s.greetingText}>{greeting(now.getHours())}</Text>
+        <Text style={s.greetingText}>{user?.name ? `${user.name} · ` : ''}{greeting(now.getHours())}</Text>
       </View>
 
       <View style={s.rule} />
@@ -194,9 +201,12 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   scroll: { paddingTop: 60, paddingHorizontal: 24 },
   header: { marginBottom: 32 },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 28 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   badgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.gold },
   badgeText: { color: C.goldDim, fontSize: 10, letterSpacing: 3, fontWeight: '600' },
+  teamBadge: { backgroundColor: C.accentBlue + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  teamBadgeText: { color: C.accentBlue, fontSize: 10, letterSpacing: 1, fontWeight: '600' },
   clockText: { color: C.textPrimary, fontSize: 64, fontWeight: '200', letterSpacing: -2, lineHeight: 68 },
   dateText: { color: C.textSecondary, fontSize: 13, marginTop: 6, letterSpacing: 0.5 },
   greetingText: { color: C.textDim, fontSize: 12, marginTop: 4, letterSpacing: 1 },

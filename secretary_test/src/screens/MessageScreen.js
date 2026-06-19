@@ -5,11 +5,15 @@ import {
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { getMessages, addMessage, updateMessage, deleteMessage } from '../services/storage';
+import { getMessages, addMessage, addMessageForUser, updateMessage, deleteMessage, getTestAccounts, getClients } from '../services/storage';
 
 const PRIORITIES = ['긴급', '일반', '낮음'];
 const STATUSES = ['미확인', '확인', '처리중', '완료'];
 const FILTERS = ['전체', '미확인', '처리중', '완료'];
+const BOXES = [
+  { key: 'received', label: '받은 메세지함' },
+  { key: 'sent', label: '보낸 메세지함' },
+];
 
 function priorityColor(p) {
   return { 긴급: C.red, 일반: C.accentBlue, 낮음: C.textDim }[p] || C.textDim;
@@ -29,9 +33,10 @@ function timeAgo(ts) {
   return `${Math.floor(h / 24)}일 전`;
 }
 
-export default function MessageScreen() {
+export default function MessageScreen({ user }) {
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState([]);
+  const [box, setBox] = useState('received');
   const [filter, setFilter] = useState('전체');
 
   const [showAdd, setShowAdd] = useState(false);
@@ -41,6 +46,10 @@ export default function MessageScreen() {
   const [newContent, setNewContent] = useState('');
   const [newPriority, setNewPriority] = useState('일반');
   const [newStatus, setNewStatus] = useState('미확인');
+  const [newDirection, setNewDirection] = useState('sent');
+  const [newToId, setNewToId] = useState(null);
+  const [clients, setClients] = useState([]);
+  const internalAccounts = getTestAccounts().filter((a) => a.id !== user?.id);
 
   const [showDetail, setShowDetail] = useState(false);
   const [detailMsg, setDetailMsg] = useState(null);
@@ -51,8 +60,11 @@ export default function MessageScreen() {
   const [editContent, setEditContent] = useState('');
   const [editPriority, setEditPriority] = useState('일반');
   const [editStatus, setEditStatus] = useState('미확인');
+  const [replyMode, setReplyMode] = useState(false);
+  const [replySubject, setReplySubject] = useState('');
+  const [replyContent, setReplyContent] = useState('');
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); getClients().then(setClients); }, []);
 
   async function load() {
     setMessages(await getMessages());
@@ -61,7 +73,13 @@ export default function MessageScreen() {
   const STATUS_ORDER = { 미확인: 0, 처리중: 1, 확인: 2, 완료: 3 };
   const PRIORITY_ORDER = { 긴급: 0, 일반: 1, 낮음: 2 };
   const filtered = messages
-    .filter((m) => filter === '전체' || m.status === filter)
+    .filter((m) => {
+      if ((m.direction || 'received') !== box) return false;
+      if (filter !== '전체' && m.status !== filter) return false;
+      if (box === 'received' && m.toId !== user?.id) return false;
+      if (box === 'sent' && m.fromId && m.fromId !== user?.id) return false;
+      return true;
+    })
     .sort((a, b) => {
       if (STATUS_ORDER[a.status] !== STATUS_ORDER[b.status])
         return STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
@@ -69,26 +87,53 @@ export default function MessageScreen() {
         return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
       return (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt);
     });
-  const unreadCount = messages.filter((m) => m.status === '미확인').length;
+  const unreadCount = messages.filter((m) =>
+    (m.direction || 'received') === 'received' &&
+    m.status === '미확인' &&
+    m.toId === user?.id
+  ).length;
 
   async function handleAdd() {
     if (!newSender.trim() || !newSubject.trim()) return;
-    setMessages(await addMessage({
+    const base = {
+      direction: newDirection,
       sender: newSender.trim(),
       company: newCompany.trim(),
       subject: newSubject.trim(),
       content: newContent.trim(),
       priority: newPriority,
       status: newStatus,
-    }));
+      fromId: user?.id,
+      toId: newDirection === 'received' ? user?.id : (newToId || undefined),
+    };
+    await addMessage(base);
+    // 내부 계정으로 보낸 경우 수신자 inbox에 received 복사본 생성
+    if (newDirection === 'sent' && newToId) {
+      await addMessageForUser(newToId, {
+        direction: 'received',
+        sender: user?.name || newSender.trim(),
+        company: '내부',
+        subject: newSubject.trim(),
+        content: newContent.trim(),
+        priority: newPriority,
+        status: '미확인',
+        fromId: user?.id,
+        toId: newToId,
+      });
+    }
+    setMessages(await getMessages());
     setShowAdd(false);
+    setBox(newDirection);
+    setFilter('전체');
     setNewSender(''); setNewCompany(''); setNewSubject('');
     setNewContent(''); setNewPriority('일반'); setNewStatus('미확인');
+    setNewDirection('sent'); setNewToId(null);
   }
 
   function openDetail(msg) {
     setDetailMsg(msg);
     setEditMode(false);
+    setReplyMode(false);
     setShowDetail(true);
     if (msg.status === '미확인') {
       updateMessage(msg.id, { status: '확인' }).then((updated) => {
@@ -123,6 +168,44 @@ export default function MessageScreen() {
     setEditMode(false);
   }
 
+  function startReply(msg) {
+    setReplySubject(`Re: ${msg.subject}`);
+    setReplyContent('');
+    setReplyMode(true);
+  }
+
+  async function handleReply() {
+    if (!replyContent.trim()) return;
+    const toId = detailMsg.fromId;
+    await addMessage({
+      direction: 'sent',
+      sender: detailMsg.sender,
+      company: detailMsg.company || '',
+      subject: replySubject.trim(),
+      content: replyContent.trim(),
+      priority: '일반',
+      status: '미확인',
+      fromId: user?.id,
+      toId: toId || undefined,
+    });
+    if (toId) {
+      await addMessageForUser(toId, {
+        direction: 'received',
+        sender: user?.name || '',
+        company: clients.find((c) => c.name === user?.name)?.company || '',
+        subject: replySubject.trim(),
+        content: replyContent.trim(),
+        priority: '일반',
+        status: '미확인',
+        fromId: user?.id,
+        toId,
+      });
+    }
+    setMessages(await getMessages());
+    setReplyMode(false);
+    setShowDetail(false);
+  }
+
   async function handleStatusChange(id, status) {
     const updated = await updateMessage(id, { status });
     setMessages(updated);
@@ -137,6 +220,22 @@ export default function MessageScreen() {
           <Text style={s.headerTitle}>메세지</Text>
           {unreadCount > 0 && <Text style={s.headerSub}>{unreadCount}건 미확인</Text>}
         </View>
+      </View>
+
+      {/* 받은/보낸 박스 탭 */}
+      <View style={s.boxRow}>
+        {BOXES.map((b) => (
+          <TouchableOpacity
+            key={b.key}
+            style={[s.boxTab, box === b.key && s.boxTabActive]}
+            onPress={() => { setBox(b.key); setFilter('전체'); }}
+          >
+            <Text style={[s.boxText, box === b.key && s.boxTextActive]}>{b.label}</Text>
+            {b.key === 'received' && unreadCount > 0 && (
+              <View style={s.badge}><Text style={s.badgeText}>{unreadCount}</Text></View>
+            )}
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* 필터 탭 */}
@@ -201,7 +300,7 @@ export default function MessageScreen() {
       </TouchableOpacity>
 
       {/* 상세 모달 */}
-      <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => { setShowDetail(false); setEditMode(false); }}>
+      <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => { setShowDetail(false); setEditMode(false); setReplyMode(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.overlay}>
           <View style={[s.sheet, { maxHeight: '90%' }]}>
             <View style={s.handle} />
@@ -212,7 +311,7 @@ export default function MessageScreen() {
                   <View style={{ flex: 1 }}>
                     {editMode ? (
                       <>
-                        <Text style={s.inputLabel}>발신자</Text>
+                        <Text style={s.inputLabel}>{detailMsg.direction === 'sent' ? '수신자' : '발신자'}</Text>
                         <TextInput style={s.input} value={editSender} onChangeText={setEditSender} placeholderTextColor={C.textDim} />
                         <Text style={s.inputLabel}>회사</Text>
                         <TextInput style={s.input} value={editCompany} onChangeText={setEditCompany} placeholderTextColor={C.textDim} placeholder="선택" />
@@ -224,7 +323,7 @@ export default function MessageScreen() {
                       </>
                     )}
                   </View>
-                  <TouchableOpacity onPress={() => { setShowDetail(false); setEditMode(false); }}>
+                  <TouchableOpacity onPress={() => { setShowDetail(false); setEditMode(false); setReplyMode(false); }}>
                     <Text style={s.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -283,7 +382,7 @@ export default function MessageScreen() {
                 </View>
 
                 {/* 빠른 상태 변경 (보기 모드) */}
-                {!editMode && (
+                {!editMode && !replyMode && (
                   <View style={s.detailSection}>
                     <Text style={s.sectionLabel}>처리상태 변경</Text>
                     <View style={s.optionRow}>
@@ -300,9 +399,32 @@ export default function MessageScreen() {
                   </View>
                 )}
 
+                {/* 답장 폼 */}
+                {replyMode && (
+                  <>
+                    <View style={s.detailSection}>
+                      <Text style={s.sectionLabel}>답장 제목</Text>
+                      <TextInput style={s.input} value={replySubject} onChangeText={setReplySubject} placeholderTextColor={C.textDim} />
+                    </View>
+                    <View style={s.detailSection}>
+                      <Text style={s.sectionLabel}>답장 내용</Text>
+                      <TextInput style={[s.input, { height: 120 }]} value={replyContent} onChangeText={setReplyContent} multiline placeholderTextColor={C.textDim} placeholder="답장 내용을 입력하세요" />
+                    </View>
+                  </>
+                )}
+
                 {/* 버튼 */}
                 <View style={s.modalBtns}>
-                  {!editMode ? (
+                  {replyMode ? (
+                    <>
+                      <TouchableOpacity style={s.cancelBtn} onPress={() => setReplyMode(false)}>
+                        <Text style={s.cancelText}>취소</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.confirmBtn} onPress={handleReply}>
+                        <Text style={s.confirmText}>전송</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : !editMode ? (
                     <>
                       <TouchableOpacity style={s.cancelBtn} onPress={() => Alert.alert('삭제', `"${detailMsg.subject}" 메세지를 삭제할까요?`, [
                         { text: '취소', style: 'cancel' },
@@ -310,9 +432,16 @@ export default function MessageScreen() {
                       ])}>
                         <Text style={[s.cancelText, { color: C.red }]}>삭제</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={s.confirmBtn} onPress={() => startEdit(detailMsg)}>
-                        <Text style={s.confirmText}>수정</Text>
-                      </TouchableOpacity>
+                      {detailMsg.direction === 'received' && (
+                        <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.accentTeal }]} onPress={() => startReply(detailMsg)}>
+                          <Text style={s.confirmText}>답장</Text>
+                        </TouchableOpacity>
+                      )}
+                      {detailMsg.direction === 'sent' && (
+                        <TouchableOpacity style={s.confirmBtn} onPress={() => startEdit(detailMsg)}>
+                          <Text style={s.confirmText}>수정</Text>
+                        </TouchableOpacity>
+                      )}
                     </>
                   ) : (
                     <>
@@ -339,7 +468,46 @@ export default function MessageScreen() {
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={s.modalTitle}>메세지 추가</Text>
 
-              <Text style={s.inputLabel}>발신자 *</Text>
+              <View style={s.directionRow}>
+                {BOXES.map((b) => (
+                  <TouchableOpacity
+                    key={b.key}
+                    style={[s.directionBtn, newDirection === b.key && s.directionBtnActive]}
+                    onPress={() => setNewDirection(b.key)}
+                  >
+                    <Text style={[s.directionText, newDirection === b.key && s.directionTextActive]}>{b.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {newDirection === 'sent' && internalAccounts.length > 0 && (
+                <>
+                  <Text style={s.inputLabel}>내부 수신자 (선택)</Text>
+                  <View style={s.optionRow}>
+                    <TouchableOpacity
+                      style={[s.optionBtn, !newToId && { borderColor: C.accentPurple + '88', backgroundColor: C.accentPurple + '18' }]}
+                      onPress={() => { setNewToId(null); setNewSender(''); setNewCompany(''); }}
+                    >
+                      <Text style={[s.optionText, !newToId && { color: C.accentPurple }]}>외부</Text>
+                    </TouchableOpacity>
+                    {internalAccounts.map((a) => (
+                      <TouchableOpacity
+                        key={a.id}
+                        style={[s.optionBtn, newToId === a.id && { borderColor: C.accentPurple + '88', backgroundColor: C.accentPurple + '18' }]}
+                        onPress={() => {
+                          const client = clients.find((c) => c.name === a.name);
+                          setNewToId(a.id);
+                          setNewSender(a.name);
+                          setNewCompany(client?.company || a.team || '내부');
+                        }}
+                      >
+                        <Text style={[s.optionText, newToId === a.id && { color: C.accentPurple }]}>{a.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+              <Text style={s.inputLabel}>{newDirection === 'sent' ? '수신자 *' : '발신자 *'}</Text>
               <TextInput style={s.input} value={newSender} onChangeText={setNewSender} placeholder="이름" placeholderTextColor={C.textDim} />
 
               <Text style={s.inputLabel}>회사 (선택)</Text>
@@ -391,6 +559,12 @@ const s = StyleSheet.create({
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   headerSub: { color: C.gold, fontSize: 11, marginTop: 2 },
 
+  boxRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: C.border, marginHorizontal: 20 },
+  boxTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  boxTabActive: { borderBottomColor: C.accentPurple },
+  boxText: { color: C.textDim, fontSize: 13, fontWeight: '500' },
+  boxTextActive: { color: C.accentPurple, fontWeight: '600' },
+
   filterWrap: { maxHeight: 44 },
   filterRow: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
   filterTab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: C.border },
@@ -428,7 +602,13 @@ const s = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
   handle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
+  modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 12 },
+
+  directionRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  directionBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: C.border, alignItems: 'center', backgroundColor: C.surface },
+  directionBtnActive: { borderColor: C.accentPurple + '88', backgroundColor: C.accentPurple + '18' },
+  directionText: { color: C.textDim, fontSize: 13 },
+  directionTextActive: { color: C.accentPurple, fontWeight: '600' },
 
   detailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
   detailSender: { color: C.textPrimary, fontSize: 15, fontWeight: '500' },
