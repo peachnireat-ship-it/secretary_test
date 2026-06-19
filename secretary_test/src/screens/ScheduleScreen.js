@@ -36,7 +36,7 @@ function buildMonthGrid(year, month) {
   return cells;
 }
 
-export default function ScheduleScreen() {
+export default function ScheduleScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState(dateStr(today));
@@ -213,7 +213,7 @@ export default function ScheduleScreen() {
         ) : (
           <>
             {dayProjects.map((proj) => (
-              <View key={proj.id} style={s.projectCard}>
+              <TouchableOpacity key={proj.id} style={s.projectCard} activeOpacity={0.7} onPress={() => navigation.navigate('프로젝트', { openProjectId: proj.id })}>
                 <Text style={s.projectDeadlineLabel}>마감</Text>
                 <View style={s.scheduleDivider} />
                 <View style={s.scheduleBody}>
@@ -224,7 +224,7 @@ export default function ScheduleScreen() {
                     </View>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
             {daySchedules.map((item) => (
               <TouchableOpacity

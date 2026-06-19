@@ -209,6 +209,16 @@ export default function ProjectScreen({ navigation, route }) {
     navigation.setParams({ addTask: undefined, meetingRecordId: undefined });
   }, [route?.params?.addTask]);
 
+  useEffect(() => {
+    const openProjectId = route?.params?.openProjectId;
+    if (!openProjectId || projects.length === 0) return;
+    const target = projects.find((p) => p.id === openProjectId);
+    if (target) {
+      openDetail(target);
+      navigation.setParams({ openProjectId: undefined });
+    }
+  }, [route?.params?.openProjectId, projects]);
+
   async function load() {
     const [all, records, clientList, histList] = await Promise.all([getProjects(), getMeetingRecords(), getClients(), getHistories()]);
     setProjects(all);
