@@ -89,6 +89,20 @@ function parseTranscriptSegments(text) {
   return segments;
 }
 
+function mergeConsecutiveSegments(segments) {
+  if (segments.length === 0) return [];
+  const merged = [{ ...segments[0] }];
+  for (let i = 1; i < segments.length; i++) {
+    const last = merged[merged.length - 1];
+    if (last.speaker === segments[i].speaker) {
+      last.text = last.text + '\n' + segments[i].text;
+    } else {
+      merged.push({ ...segments[i] });
+    }
+  }
+  return merged;
+}
+
 function buildTranscriptFromSegments(segments) {
   return segments.map((s) => `[${s.speaker}]\n${s.text}`).join('\n\n');
 }
@@ -132,6 +146,8 @@ export default function MeetingScreen({ navigation }) {
   const [segmentEditRecordId, setSegmentEditRecordId] = useState(null);
   const [editableSegments, setEditableSegments] = useState([]);
   const [segmentPickerIdx, setSegmentPickerIdx] = useState(null);
+  const [segTextEditIdx, setSegTextEditIdx] = useState(null);
+  const [segTextEditValue, setSegTextEditValue] = useState('');
   const [speakerClientEditMap, setSpeakerClientEditMap] = useState({});
 
   const [contentEditRecordId, setContentEditRecordId] = useState(null);
@@ -581,12 +597,36 @@ export default function MeetingScreen({ navigation }) {
     setEditableSegments(segments);
     setSegmentEditRecordId(item.id);
     setSegmentPickerIdx(null);
+    setSegTextEditIdx(null);
+    setSegTextEditValue('');
+  }
+
+  function openSegTextEdit(idx) {
+    setSegmentPickerIdx(null);
+    setSegTextEditIdx(idx);
+    setSegTextEditValue(editableSegments[idx].text);
+  }
+
+  function confirmSegTextEdit() {
+    const idx = segTextEditIdx;
+    setSegTextEditIdx(null);
+    const lines = segTextEditValue.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length <= 1) {
+      setEditableSegments((prev) => prev.map((s, i) => i === idx ? { ...s, text: segTextEditValue.trim() } : s));
+    } else {
+      const speaker = editableSegments[idx].speaker;
+      const newSegs = lines.map((line) => ({ speaker, text: line }));
+      setEditableSegments((prev) => [...prev.slice(0, idx), ...newSegs, ...prev.slice(idx + 1)]);
+    }
+    setSegTextEditValue('');
   }
 
   async function confirmSegmentEdit() {
     const record = meetingRecords.find((r) => r.id === segmentEditRecordId);
     if (!record) return;
     setSegmentEditRecordId(null);
+    setSegTextEditIdx(null);
+    setSegTextEditValue('');
     const updatedTranscript = buildTranscriptFromSegments(editableSegments);
     const updated = await updateMeetingRecord(segmentEditRecordId, { transcript: updatedTranscript });
     setMeetingRecords(updated);
@@ -899,17 +939,52 @@ export default function MeetingScreen({ navigation }) {
                 const allSpeakers = [...new Set(editableSegments.map((s) => s.speaker))];
                 return editableSegments.map((seg, idx) => {
                   const isPicking = segmentPickerIdx === idx;
+                  const isTextEditing = segTextEditIdx === idx;
                   const color = SPEAKER_COLORS[allSpeakers.indexOf(seg.speaker) % SPEAKER_COLORS.length];
                   return (
                     <View key={idx} style={s.segRow}>
                       <TouchableOpacity
                         style={[s.segSpeakerBadge, { backgroundColor: color + '22', borderColor: color + '55' }, isPicking && { backgroundColor: color + '44', borderColor: color }]}
-                        onPress={() => setSegmentPickerIdx(isPicking ? null : idx)}
+                        onPress={() => {
+                          if (isTextEditing) { setSegTextEditIdx(null); setSegTextEditValue(''); }
+                          setSegmentPickerIdx(isPicking ? null : idx);
+                        }}
                         activeOpacity={0.7}
                       >
                         <Text style={[s.segSpeakerText, { color }]}>{seg.speaker}</Text>
                       </TouchableOpacity>
-                      <Text style={s.segContent} numberOfLines={isPicking ? undefined : 3}>{seg.text}</Text>
+                      {isTextEditing ? (
+                        <View style={{ flex: 1 }}>
+                          <TextInput
+                            style={s.segTextInput}
+                            value={segTextEditValue}
+                            onChangeText={setSegTextEditValue}
+                            multiline
+                            autoFocus
+                            textAlignVertical="top"
+                          />
+                          <Text style={s.segTextEditHint}>엔터로 줄바꾸면 화자를 분리할 수 있습니다</Text>
+                          <View style={s.segTextEditBtns}>
+                            <TouchableOpacity style={s.segTextCancelBtn} onPress={() => { setSegTextEditIdx(null); setSegTextEditValue(''); }} activeOpacity={0.7}>
+                              <Text style={s.segTextCancelBtnText}>취소</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={s.segTextConfirmBtn} onPress={confirmSegTextEdit} activeOpacity={0.8}>
+                              <Text style={s.segTextConfirmBtnText}>확인</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={{ flex: 1 }}
+                          onPress={() => {
+                            setSegmentPickerIdx(null);
+                            openSegTextEdit(idx);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={s.segContent} numberOfLines={isPicking ? undefined : 3}>{seg.text}</Text>
+                        </TouchableOpacity>
+                      )}
                       {isPicking && (
                         <View style={s.segPickerBox}>
                           {allSpeakers.map((sp) => {
@@ -1547,7 +1622,7 @@ export default function MeetingScreen({ navigation }) {
                           </TouchableOpacity>
                         </View>
                         {(() => {
-                          const segs = parseTranscriptSegments(item.transcript);
+                          const segs = mergeConsecutiveSegments(parseTranscriptSegments(item.transcript));
                           if (segs.length === 0) return <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>;
                           const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
                           return (
@@ -2050,6 +2125,17 @@ const s = StyleSheet.create({
   segPickerChipActive: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '66' },
   segPickerChipText: { color: C.textSecondary, fontSize: 13 },
   segPickerChipTextActive: { color: C.accentTeal, fontWeight: '600' },
+  segTextInput: {
+    backgroundColor: C.bg, borderWidth: 1, borderColor: C.accentBlue + '66',
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8,
+    color: C.textPrimary, fontSize: 13, lineHeight: 20, minHeight: 72,
+  },
+  segTextEditHint: { color: C.textDim, fontSize: 11, marginTop: 4, letterSpacing: 0.2 },
+  segTextEditBtns: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  segTextCancelBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 8 },
+  segTextCancelBtnText: { color: C.textSecondary, fontSize: 13 },
+  segTextConfirmBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '66', borderRadius: 8 },
+  segTextConfirmBtnText: { color: C.accentBlue, fontSize: 13, fontWeight: '600' },
   fixForeignBtn: {
     borderWidth: 1, borderColor: '#5AAF7A55', borderRadius: 8,
     paddingVertical: 7, paddingHorizontal: 8,
