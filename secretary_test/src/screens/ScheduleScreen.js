@@ -2,10 +2,11 @@ import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getSchedules, addSchedule, deleteSchedule } from '../services/storage';
+import { getSchedules, addSchedule, deleteSchedule, getProjects } from '../services/storage';
 import { askClaude, buildScheduleSystem } from '../services/claude';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
@@ -20,20 +21,29 @@ function formatDateKo(str) {
   return `${y}년 ${parseInt(m)}월 ${parseInt(d)}일`;
 }
 
-function buildDateStrip() {
-  const today = new Date();
-  return Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i - 2);
-    return { str: dateStr(d), day: DAYS[d.getDay()], date: d.getDate(), isToday: i === 2 };
-  });
+const TODAY_STR = dateStr(new Date());
+
+function buildMonthGrid(year, month) {
+  // month: 1-based
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = new Date(year, month - 1, d);
+    cells.push({ str: dateStr(dt), date: d, day: DAYS[dt.getDay()] });
+  }
+  return cells;
 }
 
 export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
-  const [selectedDate, setSelectedDate] = useState(dateStr(new Date()));
+  const today = new Date();
+  const [selectedDate, setSelectedDate] = useState(dateStr(today));
   const [schedules, setSchedules] = useState([]);
-  const [strip] = useState(buildDateStrip());
+  const [projects, setProjects] = useState([]);
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth() + 1);
 
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -49,18 +59,28 @@ export default function ScheduleScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, []));
 
   async function load() {
-    const all = await getSchedules();
-    setSchedules(all);
+    const [allSchedules, allProjects] = await Promise.all([getSchedules(), getProjects()]);
+    setSchedules(allSchedules);
+    setProjects(allProjects);
   }
 
   const daySchedules = schedules
     .filter((s) => s.date === selectedDate)
     .sort((a, b) => a.time.localeCompare(b.time));
+
+  const dayProjects = projects.filter((p) => p.deadline === selectedDate);
+
+  function moveMonth(dir) {
+    let m = calMonth + dir, y = calYear;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    setCalYear(y); setCalMonth(m);
+  }
 
   async function handleAdd() {
     if (!newTitle.trim()) return;
@@ -131,57 +151,105 @@ export default function ScheduleScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── 날짜 스트립 ── */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.stripWrap} contentContainerStyle={s.strip}>
-        {strip.map((d) => (
-          <TouchableOpacity
-            key={d.str}
-            style={[s.dayCell, selectedDate === d.str && s.dayCellActive]}
-            onPress={() => setSelectedDate(d.str)}
-          >
-            <Text style={[s.dayLabel, selectedDate === d.str && s.dayLabelActive]}>{d.day}</Text>
-            <Text style={[s.dayNum, selectedDate === d.str && s.dayNumActive, d.isToday && s.dayNumToday]}>{d.date}</Text>
-          </TouchableOpacity>
+      {/* ── 월 네비게이션 ── */}
+      <View style={s.monthNav}>
+        <TouchableOpacity onPress={() => moveMonth(-1)} style={s.monthArrow}>
+          <Text style={s.monthArrowText}>‹</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => { setCalYear(today.getFullYear()); setCalMonth(today.getMonth() + 1); setSelectedDate(TODAY_STR); }}>
+          <Text style={s.monthLabel}>{calYear}년 {calMonth}월</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => moveMonth(1)} style={s.monthArrow}>
+          <Text style={s.monthArrowText}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── 요일 헤더 ── */}
+      <View style={s.weekHeader}>
+        {DAYS.map((d) => (
+          <Text key={d} style={[s.weekDay, d === '일' && { color: '#C45B5B' }, d === '토' && { color: C.accentBlue }]}>{d}</Text>
         ))}
-      </ScrollView>
+      </View>
+
+      {/* ── 캘린더 그리드 ── */}
+      <View style={s.grid}>
+        {buildMonthGrid(calYear, calMonth).map((cell, i) => {
+          if (!cell) return <View key={`e-${i}`} style={s.gridCell} />;
+          const isSelected = selectedDate === cell.str;
+          const isToday = cell.str === TODAY_STR;
+          const hasSched = schedules.some((sc) => sc.date === cell.str) || projects.some((p) => p.deadline === cell.str);
+          const isSun = i % 7 === 0;
+          const isSat = i % 7 === 6;
+          return (
+            <TouchableOpacity key={cell.str} style={s.gridCell} onPress={() => setSelectedDate(cell.str)}>
+              <View style={[s.gridNumWrap, isSelected && s.gridNumWrapActive]}>
+                <Text style={[
+                  s.gridNum,
+                  isSelected && s.gridNumActive,
+                  isToday && !isSelected && s.gridNumToday,
+                  isSun && !isSelected && { color: '#C45B5B' },
+                  isSat && !isSelected && { color: C.accentBlue },
+                ]}>{cell.date}</Text>
+              </View>
+              {hasSched && <View style={[s.dot, isSelected && s.dotActive]} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {/* ── 선택 날짜 ── */}
       <View style={s.dateHeader}>
         <Text style={s.dateLabel}>{formatDateKo(selectedDate)}</Text>
-        <Text style={s.dateCount}>{daySchedules.length}건</Text>
+        <Text style={s.dateCount}>{daySchedules.length + dayProjects.length}건</Text>
       </View>
 
       {/* ── 일정 목록 ── */}
       <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
-        {daySchedules.length === 0 ? (
+        {daySchedules.length === 0 && dayProjects.length === 0 ? (
           <View style={s.emptyWrap}>
             <Text style={s.emptyText}>이 날의 일정이 없습니다</Text>
             <Text style={s.emptyHint}>하단 + 버튼으로 추가하거나 AI에게 부탁해보세요</Text>
           </View>
         ) : (
-          daySchedules.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={s.scheduleCard}
-              activeOpacity={0.7}
-              onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
-                { text: '취소', style: 'cancel' },
-                { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
-              ])}
-            >
-              <Text style={s.scheduleTime}>{item.time}</Text>
-              <View style={s.scheduleDivider} />
-              <View style={s.scheduleBody}>
-                <View style={s.scheduleTitleRow}>
-                  <Text style={s.scheduleTitle}>{item.title}</Text>
-                  <View style={[s.tagBadge, { backgroundColor: tagColor(item.tag) + '22', borderColor: tagColor(item.tag) + '55' }]}>
-                    <Text style={[s.tagText, { color: tagColor(item.tag) }]}>{item.tag}</Text>
+          <>
+            {dayProjects.map((proj) => (
+              <View key={proj.id} style={s.projectCard}>
+                <Text style={s.projectDeadlineLabel}>마감</Text>
+                <View style={s.scheduleDivider} />
+                <View style={s.scheduleBody}>
+                  <View style={s.scheduleTitleRow}>
+                    <Text style={s.scheduleTitle}>{proj.title}</Text>
+                    <View style={[s.tagBadge, { backgroundColor: statusColor(proj.status) + '22', borderColor: statusColor(proj.status) + '55' }]}>
+                      <Text style={[s.tagText, { color: statusColor(proj.status) }]}>{proj.status}</Text>
+                    </View>
                   </View>
                 </View>
-                {item.notes ? <Text style={s.scheduleNotes}>{item.notes}</Text> : null}
               </View>
-            </TouchableOpacity>
-          ))
+            ))}
+            {daySchedules.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={s.scheduleCard}
+                activeOpacity={0.7}
+                onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
+                  { text: '취소', style: 'cancel' },
+                  { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
+                ])}
+              >
+                <Text style={s.scheduleTime}>{item.time}</Text>
+                <View style={s.scheduleDivider} />
+                <View style={s.scheduleBody}>
+                  <View style={s.scheduleTitleRow}>
+                    <Text style={s.scheduleTitle}>{item.title}</Text>
+                    <View style={[s.tagBadge, { backgroundColor: tagColor(item.tag) + '22', borderColor: tagColor(item.tag) + '55' }]}>
+                      <Text style={[s.tagText, { color: tagColor(item.tag) }]}>{item.tag}</Text>
+                    </View>
+                  </View>
+                  {item.notes ? <Text style={s.scheduleNotes}>{item.notes}</Text> : null}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </>
         )}
       </ScrollView>
 
@@ -287,21 +355,32 @@ function tagColor(tag) {
   return map[tag] || C.textSecondary;
 }
 
+function statusColor(status) {
+  const map = { 진행중: C.accentBlue, 위험: '#C45B5B', 지연: C.gold, 완료: C.accentTeal, 취소: C.textSecondary };
+  return map[status] || C.textSecondary;
+}
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16 },
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   aiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 20 },
   aiBtnText: { color: C.accentBlue, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
-  stripWrap: { maxHeight: 72 },
-  strip: { paddingHorizontal: 20, gap: 6 },
-  dayCell: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10, minWidth: 44 },
-  dayCellActive: { backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55' },
-  dayLabel: { color: C.textDim, fontSize: 10, marginBottom: 4, letterSpacing: 0.5 },
-  dayLabelActive: { color: C.accentBlue },
-  dayNum: { color: C.textSecondary, fontSize: 16, fontWeight: '300' },
-  dayNumActive: { color: C.accentBlue, fontWeight: '500' },
-  dayNumToday: { color: C.gold },
+  monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 8 },
+  monthArrow: { padding: 8 },
+  monthArrowText: { color: C.textSecondary, fontSize: 24, lineHeight: 28 },
+  monthLabel: { color: C.textPrimary, fontSize: 15, fontWeight: '400' },
+  weekHeader: { flexDirection: 'row', paddingHorizontal: 12, marginBottom: 4 },
+  weekDay: { flex: 1, textAlign: 'center', color: C.textDim, fontSize: 10, letterSpacing: 0.5 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginBottom: 8 },
+  gridCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
+  gridNumWrap: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  gridNumWrapActive: { backgroundColor: C.accentBlue, borderRadius: 15 },
+  gridNum: { color: C.textSecondary, fontSize: 13, fontWeight: '300' },
+  gridNumActive: { color: '#fff', fontWeight: '600' },
+  gridNumToday: { color: C.gold, fontWeight: '600' },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.accentBlue, marginTop: 2 },
+  dotActive: { backgroundColor: '#fff' },
   dateHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 12 },
   dateLabel: { color: C.textSecondary, fontSize: 13 },
   dateCount: { color: C.textDim, fontSize: 12 },
@@ -311,6 +390,8 @@ const s = StyleSheet.create({
   emptyText: { color: C.textDim, fontSize: 14 },
   emptyHint: { color: C.textDim, fontSize: 11, textAlign: 'center' },
   scheduleCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  projectCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.gold + '55', borderRadius: 12, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  projectDeadlineLabel: { color: C.gold, fontSize: 11, fontWeight: '600', width: 44, textAlign: 'center' },
   scheduleTime: { color: C.textSecondary, fontSize: 13, fontWeight: '500', width: 44 },
   scheduleDivider: { width: 1, height: 32, backgroundColor: C.borderHigh },
   scheduleBody: { flex: 1, gap: 4 },
