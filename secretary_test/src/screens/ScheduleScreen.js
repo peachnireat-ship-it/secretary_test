@@ -36,7 +36,7 @@ function buildMonthGrid(year, month) {
   return cells;
 }
 
-export default function ScheduleScreen({ navigation }) {
+export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState(dateStr(today));
@@ -44,6 +44,9 @@ export default function ScheduleScreen({ navigation }) {
   const [projects, setProjects] = useState([]);
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth() + 1);
+
+  const [showProjectView, setShowProjectView] = useState(false);
+  const [viewProject, setViewProject] = useState(null);
 
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -213,7 +216,7 @@ export default function ScheduleScreen({ navigation }) {
         ) : (
           <>
             {dayProjects.map((proj) => (
-              <TouchableOpacity key={proj.id} style={s.projectCard} activeOpacity={0.7} onPress={() => navigation.navigate('프로젝트', { openProjectId: proj.id })}>
+              <TouchableOpacity key={proj.id} style={s.projectCard} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
                 <Text style={s.projectDeadlineLabel}>마감</Text>
                 <View style={s.scheduleDivider} />
                 <View style={s.scheduleBody}>
@@ -346,8 +349,75 @@ export default function ScheduleScreen({ navigation }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* ── 프로젝트 보기 모달 ── */}
+      <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '80%' }]}>
+            <View style={s.modalHandle} />
+            {viewProject && (() => {
+              const days = daysUntil(viewProject.deadline);
+              return (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View style={s.modalTitleRow}>
+                    <Text style={[s.modalTitle, { flex: 1 }]} numberOfLines={2}>{viewProject.title}</Text>
+                    <TouchableOpacity onPress={() => setShowProjectView(false)} style={{ marginLeft: 12 }}>
+                      <Text style={s.closeBtn}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={s.viewBadgeRow}>
+                    <View style={[s.viewBadge, { borderColor: statusColor(viewProject.status) + '66', backgroundColor: statusColor(viewProject.status) + '18' }]}>
+                      <Text style={[s.viewBadgeText, { color: statusColor(viewProject.status) }]}>{viewProject.status}</Text>
+                    </View>
+                    <View style={[s.viewBadge, { borderColor: priorityColor(viewProject.priority) + '55' }]}>
+                      <Text style={[s.viewBadgeText, { color: priorityColor(viewProject.priority) }]}>{viewProject.priority}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={s.viewLabel}>진행률</Text>
+                  <View style={s.viewProgressTrack}>
+                    <View style={[s.viewProgressFill, { width: `${viewProject.progress}%`, backgroundColor: statusColor(viewProject.status) }]} />
+                  </View>
+                  <Text style={s.viewProgressText}>{viewProject.progress}% 완료</Text>
+
+                  <Text style={s.viewLabel}>마감일</Text>
+                  <Text style={[s.viewText, days < 0 && { color: '#C45B5B' }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                    {viewProject.deadline}  ·  {daysLabel(days)}
+                  </Text>
+
+                  {viewProject.notes ? (
+                    <>
+                      <Text style={s.viewLabel}>메모</Text>
+                      <Text style={s.viewText}>{viewProject.notes}</Text>
+                    </>
+                  ) : null}
+
+                  <View style={{ height: 16 }} />
+                </ScrollView>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
+}
+
+function daysUntil(deadlineStr) {
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  return Math.round((new Date(deadlineStr) - t) / 86400000);
+}
+
+function daysLabel(days) {
+  if (days > 0) return `${days}일 후 마감`;
+  if (days === 0) return '오늘 마감';
+  return `${Math.abs(days)}일 초과`;
+}
+
+function priorityColor(priority) {
+  return { 높음: '#C45B5B', 보통: C.gold, 낮음: C.accentTeal }[priority] || C.textDim;
 }
 
 function tagColor(tag) {
@@ -391,6 +461,20 @@ const s = StyleSheet.create({
   emptyHint: { color: C.textDim, fontSize: 11, textAlign: 'center' },
   scheduleCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
   projectCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.gold + '55', borderRadius: 12, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 32 },
+  modalHandle: { width: 36, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
+  modalTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+  modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400' },
+  closeBtn: { color: C.textDim, fontSize: 18, padding: 4 },
+  viewBadgeRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  viewBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
+  viewBadgeText: { fontSize: 12, fontWeight: '500' },
+  viewLabel: { color: C.textDim, fontSize: 11, fontWeight: '500', letterSpacing: 0.5, marginBottom: 6 },
+  viewProgressTrack: { height: 4, backgroundColor: C.border, borderRadius: 2, marginBottom: 4 },
+  viewProgressFill: { height: 4, borderRadius: 2 },
+  viewProgressText: { color: C.textDim, fontSize: 11, marginBottom: 16 },
+  viewText: { color: C.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 16 },
   projectDeadlineLabel: { color: C.gold, fontSize: 11, fontWeight: '600', width: 44, textAlign: 'center' },
   scheduleTime: { color: C.textSecondary, fontSize: 13, fontWeight: '500', width: 44 },
   scheduleDivider: { width: 1, height: 32, backgroundColor: C.borderHigh },
