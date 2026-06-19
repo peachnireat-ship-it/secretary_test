@@ -5,14 +5,53 @@ const KEYS = {
   clients: 'clients_v1',
   histories: 'histories_v1',
   projects: 'projects_v1',
-  messages: 'messages_v1',
+  messages: 'messages_v3',
   apiKey: 'claude_api_key',
   grokApiKey: 'grok_api_key',
   aiProvider: 'ai_provider',
   meetingRecords: 'meeting_records_v1',
   workTopics: 'work_topics_v1',
   pyannoteUrl: 'pyannote_url',
+  currentUser: 'current_user_v1',
 };
+
+const TEST_ACCOUNTS = [
+  { id: 'test', email: 'test@secretary.app', password: 'test1234', name: '테스트 계정', role: 'tester', team: '개발팀' },
+  { id: 'admin', email: 'admin@secretary.app', password: 'admin1234', name: '관리자', role: 'admin', team: '운영팀' },
+  { id: 'kmj', email: 'kmj@secretary.app', password: 'test1234', name: '김민준', role: '구매팀장', team: '삼성물산' },
+  { id: 'lsy', email: 'lsy@secretary.app', password: 'test1234', name: '이서연', role: '기획팀 과장', team: '현대건설' },
+  { id: 'pjh', email: 'pjh@secretary.app', password: 'test1234', name: '박지훈', role: '영업이사', team: 'LG전자' },
+  { id: 'csa', email: 'csa@secretary.app', password: 'test1234', name: '최수아', role: '마케팅 팀장', team: 'SK텔레콤' },
+];
+
+export async function login(email, password) {
+  const account = TEST_ACCOUNTS.find((a) => a.email === email && a.password === password);
+  if (!account) throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
+  const user = { id: account.id, email: account.email, name: account.name, role: account.role, team: account.team };
+  await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify(user));
+  return user;
+}
+
+export async function logout() {
+  await AsyncStorage.removeItem(KEYS.currentUser);
+}
+
+export function getTestAccounts() {
+  return TEST_ACCOUNTS.map(({ id, email, name, role, team }) => ({ id, email, name, role, team }));
+}
+
+export async function switchAccount(accountId) {
+  const account = TEST_ACCOUNTS.find((a) => a.id === accountId);
+  if (!account) throw new Error('계정을 찾을 수 없습니다.');
+  const user = { id: account.id, email: account.email, name: account.name, role: account.role, team: account.team };
+  await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify(user));
+  return user;
+}
+
+export async function getCurrentUser() {
+  const raw = await AsyncStorage.getItem(KEYS.currentUser);
+  return raw ? JSON.parse(raw) : null;
+}
 
 // ── Groq API Key ──────────────────────────────────────────
 export async function getApiKey() {
@@ -44,17 +83,25 @@ export async function setAiProvider(provider) {
   return AsyncStorage.setItem(KEYS.aiProvider, provider);
 }
 
+// ── Per-user key helper ──────────────────────────────────
+async function userKey(base) {
+  const user = await getCurrentUser();
+  return user ? `${base}_${user.id}` : base;
+}
+
 // ── Schedules ────────────────────────────────────────────
 export async function getSchedules() {
-  const raw = await AsyncStorage.getItem(KEYS.schedules);
+  const key = await userKey(KEYS.schedules);
+  const raw = await AsyncStorage.getItem(key);
   if (raw) return JSON.parse(raw);
   const sample = getSampleSchedules();
-  await AsyncStorage.setItem(KEYS.schedules, JSON.stringify(sample));
+  await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
 }
 
 export async function saveSchedules(schedules) {
-  await AsyncStorage.setItem(KEYS.schedules, JSON.stringify(schedules));
+  const key = await userKey(KEYS.schedules);
+  await AsyncStorage.setItem(key, JSON.stringify(schedules));
 }
 
 export async function addSchedule(schedule) {
@@ -73,15 +120,17 @@ export async function deleteSchedule(id) {
 
 // ── Clients ───────────────────────────────────────────────
 export async function getClients() {
-  const raw = await AsyncStorage.getItem(KEYS.clients);
+  const key = await userKey(KEYS.clients);
+  const raw = await AsyncStorage.getItem(key);
   if (raw) return JSON.parse(raw);
   const sample = getSampleClients();
-  await AsyncStorage.setItem(KEYS.clients, JSON.stringify(sample));
+  await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
 }
 
 export async function saveClients(clients) {
-  await AsyncStorage.setItem(KEYS.clients, JSON.stringify(clients));
+  const key = await userKey(KEYS.clients);
+  await AsyncStorage.setItem(key, JSON.stringify(clients));
 }
 
 export async function addClient(client) {
@@ -93,15 +142,17 @@ export async function addClient(client) {
 
 // ── Histories ─────────────────────────────────────────────
 export async function getHistories() {
-  const raw = await AsyncStorage.getItem(KEYS.histories);
+  const key = await userKey(KEYS.histories);
+  const raw = await AsyncStorage.getItem(key);
   if (raw) return JSON.parse(raw);
   const sample = getSampleHistories();
-  await AsyncStorage.setItem(KEYS.histories, JSON.stringify(sample));
+  await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
 }
 
 export async function saveHistories(histories) {
-  await AsyncStorage.setItem(KEYS.histories, JSON.stringify(histories));
+  const key = await userKey(KEYS.histories);
+  await AsyncStorage.setItem(key, JSON.stringify(histories));
 }
 
 export async function addHistory(history) {
@@ -118,15 +169,17 @@ export async function getHistoriesByClient(clientId) {
 
 // ── Projects ──────────────────────────────────────────────
 export async function getProjects() {
-  const raw = await AsyncStorage.getItem(KEYS.projects);
+  const key = await userKey(KEYS.projects);
+  const raw = await AsyncStorage.getItem(key);
   if (raw) return JSON.parse(raw);
   const sample = getSampleProjects();
-  await AsyncStorage.setItem(KEYS.projects, JSON.stringify(sample));
+  await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
 }
 
 export async function saveProjects(projects) {
-  await AsyncStorage.setItem(KEYS.projects, JSON.stringify(projects));
+  const key = await userKey(KEYS.projects);
+  await AsyncStorage.setItem(key, JSON.stringify(projects));
 }
 
 export async function addProject(project) {
@@ -152,15 +205,17 @@ export async function deleteProject(id) {
 
 // ── Messages ──────────────────────────────────────────────
 export async function getMessages() {
-  const raw = await AsyncStorage.getItem(KEYS.messages);
+  const key = await userKey(KEYS.messages);
+  const raw = await AsyncStorage.getItem(key);
   if (raw) return JSON.parse(raw);
   const sample = getSampleMessages();
-  await AsyncStorage.setItem(KEYS.messages, JSON.stringify(sample));
+  await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
 }
 
 export async function saveMessages(messages) {
-  await AsyncStorage.setItem(KEYS.messages, JSON.stringify(messages));
+  const key = await userKey(KEYS.messages);
+  await AsyncStorage.setItem(key, JSON.stringify(messages));
 }
 
 export async function addMessage(message) {
@@ -186,12 +241,14 @@ export async function deleteMessage(id) {
 
 // ── Meeting Records ───────────────────────────────────────
 export async function getMeetingRecords() {
-  const raw = await AsyncStorage.getItem(KEYS.meetingRecords);
+  const key = await userKey(KEYS.meetingRecords);
+  const raw = await AsyncStorage.getItem(key);
   return raw ? JSON.parse(raw) : [];
 }
 
 export async function saveMeetingRecords(records) {
-  await AsyncStorage.setItem(KEYS.meetingRecords, JSON.stringify(records));
+  const key = await userKey(KEYS.meetingRecords);
+  await AsyncStorage.setItem(key, JSON.stringify(records));
 }
 
 export async function addMeetingRecord(record) {
@@ -273,11 +330,13 @@ function getSampleProjects() {
 function getSampleMessages() {
   const base = Date.now();
   return [
-    { id: 'm1', sender: '김민준', company: '삼성물산', subject: 'Q3 납품 일정 조율 요청', content: '안녕하세요. Q3 납품 일정을 이번 주 내로 확정해 주실 수 있을까요? 내부 생산 계획 수립에 필요합니다.', priority: '긴급', status: '미확인', createdAt: base - 3600000 * 2 },
-    { id: 'm2', sender: '이서연', company: '현대건설', subject: '제안서 검토 완료', content: '보내주신 제안서 검토가 완료되었습니다. 몇 가지 수정 사항이 있어 회신 드립니다. 다음 주 미팅 일정도 조율 부탁드립니다.', priority: '일반', status: '확인', createdAt: base - 3600000 * 5 },
-    { id: 'm3', sender: '박지훈', company: 'LG전자', subject: '계약서 보증 기간 관련 문의', content: '계약서 상의 보증 기간을 2년에서 3년으로 연장 가능한지 검토 부탁드립니다. 법무팀과 협의 후 회신 주세요.', priority: '일반', status: '처리중', createdAt: base - 86400000 * 1 },
-    { id: 'm4', sender: '최수아', company: 'SK텔레콤', subject: 'PoC 일정 확인', content: 'PoC 진행 일정을 다음 달 초로 확정하고 싶습니다. 담당자 배정 및 환경 준비 현황 공유 부탁드립니다.', priority: '긴급', status: '미확인', createdAt: base - 86400000 * 2 },
-    { id: 'm5', sender: '정우성', company: '내부', subject: '주간 보고서 제출 안내', content: '이번 주 금요일까지 주간 업무 보고서를 팀 공유 폴더에 업로드해 주세요.', priority: '낮음', status: '완료', createdAt: base - 86400000 * 3 },
+    { id: 'm1', direction: 'received', fromId: 'kmj', toId: 'test', sender: '김민준', company: '삼성물산', subject: 'Q3 납품 일정 조율 요청', content: '안녕하세요. Q3 납품 일정을 이번 주 내로 확정해 주실 수 있을까요? 내부 생산 계획 수립에 필요합니다.', priority: '긴급', status: '미확인', createdAt: base - 3600000 * 2 },
+    { id: 'm2', direction: 'received', fromId: 'lsy', toId: 'test', sender: '이서연', company: '현대건설', subject: '제안서 검토 완료', content: '보내주신 제안서 검토가 완료되었습니다. 몇 가지 수정 사항이 있어 회신 드립니다. 다음 주 미팅 일정도 조율 부탁드립니다.', priority: '일반', status: '확인', createdAt: base - 3600000 * 5 },
+    { id: 'm3', direction: 'received', fromId: 'pjh', toId: 'test', sender: '박지훈', company: 'LG전자', subject: '계약서 보증 기간 관련 문의', content: '계약서 상의 보증 기간을 2년에서 3년으로 연장 가능한지 검토 부탁드립니다. 법무팀과 협의 후 회신 주세요.', priority: '일반', status: '처리중', createdAt: base - 86400000 * 1 },
+    { id: 'm4', direction: 'received', fromId: 'csa', toId: 'test', sender: '최수아', company: 'SK텔레콤', subject: 'PoC 일정 확인', content: 'PoC 진행 일정을 다음 달 초로 확정하고 싶습니다. 담당자 배정 및 환경 준비 현황 공유 부탁드립니다.', priority: '긴급', status: '미확인', createdAt: base - 86400000 * 2 },
+    { id: 'm5', direction: 'received', fromId: 'admin', toId: 'test', sender: '정우성', company: '내부', subject: '주간 보고서 제출 안내', content: '이번 주 금요일까지 주간 업무 보고서를 팀 공유 폴더에 업로드해 주세요.', priority: '낮음', status: '완료', createdAt: base - 86400000 * 3 },
+    { id: 'm6', direction: 'sent', fromId: 'test', toId: 'kmj', sender: '삼성물산 구매팀', company: '삼성물산', subject: 'Q3 납품 일정 확정 회신', content: '안녕하세요. Q3 납품 일정을 7월 15일로 확정하겠습니다. 세부 사항은 첨부 파일을 참고해 주세요.', priority: '긴급', status: '완료', createdAt: base - 3600000 * 1 },
+    { id: 'm7', direction: 'sent', fromId: 'test', toId: 'lsy', sender: '현대건설 이서연 과장', company: '현대건설', subject: '제안서 수정본 전달', content: '제안서 수정 요청 사항을 반영하여 수정본을 전달드립니다. 미팅 일정은 다음 주 화요일 오전 10시를 제안드립니다.', priority: '일반', status: '처리중', createdAt: base - 3600000 * 3 },
   ];
 }
 
