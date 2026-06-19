@@ -5,7 +5,7 @@ import {
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { getMessages, addMessage, addMessageForUser, updateMessage, deleteMessage, getTestAccounts, getClients } from '../services/storage';
+import { getMessages, addMessage, addMessageForUser, updateMessage, updateMessageForUser, deleteMessage, getTestAccounts, getClients } from '../services/storage';
 
 const PRIORITIES = ['긴급', '일반', '낮음'];
 const STATUSES = ['미확인', '확인', '처리중', '완료'];
@@ -95,7 +95,11 @@ export default function MessageScreen({ user }) {
 
   async function handleAdd() {
     if (!newSender.trim() || !newSubject.trim()) return;
+    const ts = Date.now();
+    const sentMsgId = String(ts);
+    const receivedMsgId = (newDirection === 'sent' && newToId) ? String(ts + 1) : undefined;
     const base = {
+      id: sentMsgId,
       direction: newDirection,
       sender: newSender.trim(),
       company: newCompany.trim(),
@@ -105,11 +109,12 @@ export default function MessageScreen({ user }) {
       status: newStatus,
       fromId: user?.id,
       toId: newDirection === 'received' ? user?.id : (newToId || undefined),
+      linkedReceivedId: receivedMsgId,
     };
     await addMessage(base);
-    // 내부 계정으로 보낸 경우 수신자 inbox에 received 복사본 생성
-    if (newDirection === 'sent' && newToId) {
+    if (newDirection === 'sent' && newToId && receivedMsgId) {
       await addMessageForUser(newToId, {
+        id: receivedMsgId,
         direction: 'received',
         sender: user?.name || newSender.trim(),
         company: '내부',
@@ -155,14 +160,28 @@ export default function MessageScreen({ user }) {
 
   async function handleEditSave() {
     if (!editSender.trim() || !editSubject.trim()) return;
-    const updated = await updateMessage(detailMsg.id, {
+    const historyEntry = {
+      subject: detailMsg.subject,
+      content: detailMsg.content,
+      editedAt: Date.now(),
+    };
+    const changes = {
       sender: editSender.trim(),
       company: editCompany.trim(),
       subject: editSubject.trim(),
       content: editContent.trim(),
       priority: editPriority,
       status: editStatus,
-    });
+      editHistory: [...(detailMsg.editHistory || []), historyEntry],
+    };
+    const updated = await updateMessage(detailMsg.id, changes);
+    if (detailMsg.linkedReceivedId && detailMsg.toId) {
+      await updateMessageForUser(detailMsg.toId, detailMsg.linkedReceivedId, {
+        subject: editSubject.trim(),
+        content: editContent.trim(),
+        editHistory: [...(detailMsg.editHistory || []), historyEntry],
+      });
+    }
     setMessages(updated);
     setDetailMsg(updated.find((m) => m.id === detailMsg.id));
     setEditMode(false);
@@ -380,6 +399,22 @@ export default function MessageScreen({ user }) {
                     : <Text style={s.detailContent}>{detailMsg.content || '내용 없음'}</Text>
                   }
                 </View>
+
+                {/* 수정 이력 */}
+                {!editMode && !replyMode && detailMsg.editHistory?.length > 0 && (
+                  <View style={s.detailSection}>
+                    <Text style={s.sectionLabel}>수정 이력 ({detailMsg.editHistory.length})</Text>
+                    {[...detailMsg.editHistory].reverse().map((h, i) => (
+                      <View key={i} style={s.historyEntry}>
+                        <Text style={s.historyMeta}>수정 전 · {timeAgo(h.editedAt)}</Text>
+                        {h.subject !== detailMsg.subject && (
+                          <Text style={s.historySubject}>{h.subject}</Text>
+                        )}
+                        <Text style={s.historyContent}>{h.content || '내용 없음'}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 {/* 빠른 상태 변경 (보기 모드) */}
                 {!editMode && !replyMode && (
@@ -631,4 +666,9 @@ const s = StyleSheet.create({
   confirmText: { color: '#ECEAF5', fontSize: 14, fontWeight: '600' },
 
   closeBtn: { color: C.textSecondary, fontSize: 18, padding: 4 },
+
+  historyEntry: { backgroundColor: C.surface, borderLeftWidth: 2, borderLeftColor: C.borderHigh, paddingLeft: 12, paddingVertical: 8, marginBottom: 8, borderRadius: 6 },
+  historyMeta: { color: C.textDim, fontSize: 10, letterSpacing: 0.5, marginBottom: 4 },
+  historySubject: { color: C.textSecondary, fontSize: 13, fontWeight: '400', marginBottom: 4 },
+  historyContent: { color: C.textDim, fontSize: 13, lineHeight: 20 },
 });

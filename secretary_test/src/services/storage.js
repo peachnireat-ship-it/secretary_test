@@ -242,6 +242,15 @@ export async function updateMessage(id, changes) {
   return updated;
 }
 
+export async function updateMessageForUser(userId, id, changes) {
+  const key = `${KEYS.messages}_${userId}`;
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return;
+  const list = JSON.parse(raw);
+  const updated = list.map((m) => (m.id === id ? { ...m, ...changes, updatedAt: Date.now() } : m));
+  await AsyncStorage.setItem(key, JSON.stringify(updated));
+}
+
 export async function deleteMessage(id) {
   const list = await getMessages();
   const updated = list.filter((m) => m.id !== id);
