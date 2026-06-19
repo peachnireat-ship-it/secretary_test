@@ -155,6 +155,8 @@ export default function ProjectScreen({ navigation, route }) {
 
   const [showDetail, setShowDetail] = useState(false);
   const [detailProject, setDetailProject] = useState(null);
+  const [showProjectView, setShowProjectView] = useState(false);
+  const [viewProject, setViewProject] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
   const [editStatus, setEditStatus] = useState('진행중');
@@ -214,7 +216,8 @@ export default function ProjectScreen({ navigation, route }) {
     if (!openProjectId || projects.length === 0) return;
     const target = projects.find((p) => p.id === openProjectId);
     if (target) {
-      openDetail(target);
+      setViewProject(target);
+      setShowProjectView(true);
       navigation.setParams({ openProjectId: undefined });
     }
   }, [route?.params?.openProjectId, projects]);
@@ -1332,6 +1335,87 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* ── 프로젝트 보기 모달 (읽기 전용) ── */}
+      <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '80%' }]}>
+            <View style={s.modalHandle} />
+            {viewProject && (() => {
+              const days = daysUntil(viewProject.deadline);
+              const linkedMeetings = viewProject.meetingRecordIds?.length
+                ? meetingRecords.filter((r) => viewProject.meetingRecordIds.includes(r.id))
+                : [];
+              const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
+              const allClientIds = [...new Set([...(viewProject.clientIds || []), ...meetingClientIds])];
+              const people = allClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+              return (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View style={s.detailHeader}>
+                    <Text style={[s.modalTitle, { flex: 1 }]} numberOfLines={2}>{viewProject.title}</Text>
+                    <TouchableOpacity onPress={() => setShowProjectView(false)} style={{ marginLeft: 12 }}>
+                      <Text style={s.closeBtn}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={s.viewBadgeRow}>
+                    <View style={[s.statusBadge, { borderColor: statusColor(viewProject.status) + '66', backgroundColor: statusColor(viewProject.status) + '18' }]}>
+                      <Text style={[s.statusText, { color: statusColor(viewProject.status) }]}>{viewProject.status}</Text>
+                    </View>
+                    <View style={[s.priorityBadge, { borderColor: priorityColor(viewProject.priority) + '55' }]}>
+                      <Text style={[s.priorityText, { color: priorityColor(viewProject.priority) }]}>{viewProject.priority}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={s.inputLabel}>진행률</Text>
+                  <View style={s.progressTrack}>
+                    <View style={[s.progressFill, { width: `${viewProject.progress}%`, backgroundColor: statusColor(viewProject.status) }]} />
+                  </View>
+                  <Text style={[s.progressLabel, { marginTop: 4, marginBottom: 12 }]}>{viewProject.progress}% 완료</Text>
+
+                  <Text style={s.inputLabel}>마감일</Text>
+                  <Text style={[s.viewText, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                    {viewProject.deadline}  ·  {daysLabel(days)}
+                  </Text>
+
+                  {viewProject.notes ? (
+                    <>
+                      <Text style={s.inputLabel}>메모</Text>
+                      <Text style={s.viewText}>{viewProject.notes}</Text>
+                    </>
+                  ) : null}
+
+                  {people.length > 0 && (
+                    <>
+                      <Text style={s.inputLabel}>관련 인물</Text>
+                      <View style={s.relatedPeopleRow}>
+                        {people.map((c) => (
+                          <View key={c.id} style={s.relatedPersonChip}>
+                            <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }]}>
+                              <View style={s.relatedPersonAvatar}>
+                                <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={s.relatedPersonName}>{c.name}</Text>
+                                {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                              </View>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  )}
+
+                  <TouchableOpacity style={[s.modalConfirm, { marginTop: 16, marginHorizontal: 0, marginBottom: 8 }]} onPress={() => { setShowProjectView(false); openDetail(viewProject); }}>
+                    <Text style={s.modalConfirmText}>수정하기</Text>
+                  </TouchableOpacity>
+                  <View style={{ height: 8 }} />
+                </ScrollView>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
       {/* ── 진행률 슬라이더 모달 ── */}
       {quickSlider && (
         <Modal visible animationType="fade" transparent onRequestClose={() => setQuickSlider(null)}>
@@ -1407,6 +1491,8 @@ const s = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 2 },
   progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   progressLabel: { color: C.textDim, fontSize: 11 },
+  viewText: { color: C.textSecondary, fontSize: 14, paddingHorizontal: 4, marginBottom: 12, lineHeight: 20 },
+  viewBadgeRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 4, marginBottom: 16 },
   editProgressChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#2E7D5E99', backgroundColor: '#2E7D5E22', alignItems: 'center', justifyContent: 'center' },
   editProgress: { color: '#2E7D5E', fontSize: 10, fontWeight: '600', textAlign: 'center' },
 
