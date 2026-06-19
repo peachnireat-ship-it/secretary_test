@@ -63,6 +63,29 @@ function parseTranscriptSegments(text) {
   while ((m = regex.exec(text)) !== null) {
     segments.push({ speaker: m[1], text: m[2].trim() });
   }
+  if (segments.length > 0) return segments;
+
+  // 대괄호 없는 "화자 N" 형식 폴백 (stripNonKorean 버그로 저장된 데이터 대응)
+  const lines = text.split('\n');
+  let currentSpeaker = null;
+  let currentLines = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const sm = trimmed.match(/^(화자\s*\d+)\s*(.*)/);
+    if (sm) {
+      if (currentSpeaker !== null && currentLines.length > 0) {
+        segments.push({ speaker: currentSpeaker, text: currentLines.join(' ').trim() });
+      }
+      currentSpeaker = sm[1];
+      currentLines = sm[2] ? [sm[2]] : [];
+    } else if (currentSpeaker !== null) {
+      currentLines.push(trimmed);
+    }
+  }
+  if (currentSpeaker !== null && currentLines.length > 0) {
+    segments.push({ speaker: currentSpeaker, text: currentLines.join(' ').trim() });
+  }
   return segments;
 }
 
