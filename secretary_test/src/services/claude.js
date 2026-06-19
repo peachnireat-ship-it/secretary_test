@@ -61,7 +61,7 @@ export function josa과와(word) {
 
 // 한국어, 공백(\s), 숫자(0-9), 기본 문장부호(.?!,)를 제외한 모든 것을 제거
 function stripNonKorean(text) {
-  return text.replace(/[^\p{Script=Hangul}\s0-9.?!,]/gu, '');
+  return text.replace(/[^\p{Script=Hangul}\s0-9.?!,\[\]]/gu, '');
 }
 
 export async function askClaude(messages, systemPrompt) {
@@ -160,6 +160,30 @@ export function buildTaskExtractionSystem() {
 ]
 
 태스크가 없으면 빈 배열 []을 출력하세요.`;
+}
+
+export async function fixForeignWordsInText(text) {
+  const provider = await getAiProvider();
+  const systemPrompt = `[언어 규칙] 반드시 한국어로만 응답하세요.
+
+주어진 텍스트에서 문맥에 맞지 않는 외국어(영어, 일본어, 한자 등)를 자연스러운 한국어로 수정하세요.
+
+규칙:
+- [화자 N] 형식의 화자 표시, ## 제목, 줄바꿈 등 텍스트 구조는 절대 변경하지 마세요
+- 고유명사(사람 이름, 회사명, 제품명, 기술명)는 변경하지 마세요
+- 문맥상 자연스러운 외래어(인터넷, 컴퓨터, 이메일 등)는 그대로 두세요
+- 수정이 필요 없으면 원문을 그대로 반환하세요
+- 수정된 전체 텍스트만 출력하세요. 설명이나 추가 텍스트는 쓰지 마세요`;
+
+  if (provider === 'grok') {
+    const apiKey = await getGrokApiKey();
+    if (!apiKey) throw new Error('API_KEY_MISSING');
+    return (await callGrok([{ role: 'user', content: text }], systemPrompt, apiKey)).trim();
+  } else {
+    const apiKey = await getApiKey();
+    if (!apiKey) throw new Error('API_KEY_MISSING');
+    return (await callGroq([{ role: 'user', content: text }], systemPrompt, apiKey)).trim();
+  }
 }
 
 export function buildClientSystem(clients, histories) {
