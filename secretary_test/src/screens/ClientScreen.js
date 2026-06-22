@@ -62,8 +62,6 @@ export default function ClientScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
-  useFocusEffect(useCallback(() => { load(); }, []));
-
   async function load() {
     const [c, h, m, p] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects()]);
     setClients(c);
@@ -71,6 +69,8 @@ export default function ClientScreen() {
     setMeetingRecords(m);
     setProjects(p);
   }
+
+  useFocusEffect(useCallback(() => { load(); }, []));
 
   const filteredClients = clients.filter((c) =>
     !search || c.name.includes(search) || c.company.includes(search)

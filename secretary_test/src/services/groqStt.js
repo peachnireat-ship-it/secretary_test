@@ -94,8 +94,10 @@ export async function convertToMonoViaServer(fileUri, mimeType) {
       reader.readAsDataURL(blob);
     });
 
+    // eslint-disable-next-line import/namespace
     const outputUri = `${FileSystem.cacheDirectory}mono_${Date.now()}.wav`;
     await FileSystem.writeAsStringAsync(outputUri, base64, {
+      // eslint-disable-next-line import/namespace
       encoding: FileSystem.EncodingType.Base64,
     });
     return outputUri;

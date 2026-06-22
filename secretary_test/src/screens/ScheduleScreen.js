@@ -64,10 +64,6 @@ export default function ScheduleScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
-  useEffect(() => { load(); }, []);
-
-  useFocusEffect(useCallback(() => { load(); }, []));
-
   async function load() {
     const [allSchedules, allProjects, allClients, allRecords] = await Promise.all([getSchedules(), getProjects(), getClients(), getMeetingRecords()]);
     setSchedules(allSchedules);
@@ -75,6 +71,11 @@ export default function ScheduleScreen() {
     setClients(allClients);
     setMeetingRecords(allRecords);
   }
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(); }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, []));
 
   const daySchedules = schedules
     .filter((s) => s.date === selectedDate)
@@ -490,12 +491,7 @@ const s = StyleSheet.create({
   emptyHint: { color: C.textDim, fontSize: 11, textAlign: 'center' },
   scheduleCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
   projectCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.gold + '55', borderRadius: 12, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 32 },
-  modalHandle: { width: 36, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
   modalTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400' },
-  closeBtn: { color: C.textDim, fontSize: 18, padding: 4 },
   viewBadgeRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   viewBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
   viewBadgeText: { fontSize: 12, fontWeight: '500' },

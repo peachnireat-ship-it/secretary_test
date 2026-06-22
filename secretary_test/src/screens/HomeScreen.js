@@ -116,7 +116,7 @@ export default function HomeScreen({ navigation, user }) {
 
       {/* ── 오늘 일정 ── */}
       <View style={s.section}>
-        <Text style={s.sectionLabel}>TODAY'S AGENDA</Text>
+        <Text style={s.sectionLabel}>{"TODAY'S AGENDA"}</Text>
         <View style={s.card}>
           {todaySchedules.length === 0 ? (
             <View style={s.agendaEmpty}>

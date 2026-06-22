@@ -64,11 +64,12 @@ export default function MessageScreen({ user }) {
   const [replySubject, setReplySubject] = useState('');
   const [replyContent, setReplyContent] = useState('');
 
-  useEffect(() => { load(); getClients().then(setClients); }, []);
-
   async function load() {
     setMessages(await getMessages());
   }
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(); getClients().then(setClients); }, []);
 
   const STATUS_ORDER = { 미확인: 0, 처리중: 1, 확인: 2, 완료: 3 };
   const PRIORITY_ORDER = { 긴급: 0, 일반: 1, 낮음: 2 };

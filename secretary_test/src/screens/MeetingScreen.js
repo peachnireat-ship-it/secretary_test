@@ -194,6 +194,7 @@ export default function MeetingScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeTab === 'history') loadRecords();
   }, [activeTab, loadRecords]);
 
@@ -1068,7 +1069,7 @@ export default function MeetingScreen({ navigation }) {
             </ScrollView>
             {!!clientPickerSearch.trim() && clientPickerContext !== 'addPerson' && (
               <TouchableOpacity style={s.clientAddBtn} onPress={addAndSelectClient} activeOpacity={0.8}>
-                <Text style={s.clientAddBtnText}>'{clientPickerSearch.trim()}' 새로 추가</Text>
+                <Text style={s.clientAddBtnText}>{`'${clientPickerSearch.trim()}' 새로 추가`}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -1553,7 +1554,7 @@ export default function MeetingScreen({ navigation }) {
           ListEmptyComponent={
             <View style={s.emptyBox}>
               <Text style={s.emptyText}>저장된 회의록이 없습니다</Text>
-              <Text style={s.emptyHint}>녹음 후 "기록 저장" 버튼을 눌러 저장하세요</Text>
+              <Text style={s.emptyHint}>{'녹음 후 "기록 저장" 버튼을 눌러 저장하세요'}</Text>
             </View>
           }
           renderItem={({ item }) => {

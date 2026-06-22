@@ -195,11 +195,10 @@ export default function ProjectScreen({ navigation, route }) {
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
-  useFocusEffect(useCallback(() => { load(); }, []));
-
   useEffect(() => {
     const addTask = route?.params?.addTask;
     if (!addTask) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setNewTitle(addTask.title || '');
     setNewDeadline(addTask.deadline || '');
     setNewPriority(addTask.priority || '보통');
@@ -208,6 +207,7 @@ export default function ProjectScreen({ navigation, route }) {
     setNewProgress('0');
     setPendingMeetingRecordId(route?.params?.meetingRecordId || null);
     setShowAdd(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
     navigation.setParams({ addTask: undefined, meetingRecordId: undefined });
   }, [route?.params?.addTask]);
 
@@ -216,7 +216,9 @@ export default function ProjectScreen({ navigation, route }) {
     if (!openProjectId || projects.length === 0) return;
     const target = projects.find((p) => p.id === openProjectId);
     if (target) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setViewProject(target);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowProjectView(true);
       navigation.setParams({ openProjectId: undefined });
     }
@@ -229,6 +231,8 @@ export default function ProjectScreen({ navigation, route }) {
     setClients(clientList);
     setHistories(histList);
   }
+
+  useFocusEffect(useCallback(() => { load(); }, []));
 
   const filtered = projects.filter((p) => filter === '전체' || p.status === filter);
 
@@ -1188,7 +1192,7 @@ export default function ProjectScreen({ navigation, route }) {
             </ScrollView>
             {!!clientPickerSearch.trim() && (
               <TouchableOpacity style={s.clientAddBtn} onPress={addAndSelectClient} activeOpacity={0.8}>
-                <Text style={s.clientAddBtnText}>'{clientPickerSearch.trim()}' 새로 추가</Text>
+                <Text style={s.clientAddBtnText}>{`'${clientPickerSearch.trim()}' 새로 추가`}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={s.speakerCancelBtn} onPress={() => setClientPickerSpeaker(null)} activeOpacity={0.7}>

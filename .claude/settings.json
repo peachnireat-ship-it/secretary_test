@@ -23,6 +23,18 @@
             "command": "bash C:/Users/user/.claude/hooks/permission-guard.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": "bash C:/Users/user/.claude/hooks/pre-commit-lint.sh",
+            "timeout": 60,
+            "statusMessage": "린트 검사 중..."
+          }
+        ]
       }
     ],
     "PostToolUse": [
