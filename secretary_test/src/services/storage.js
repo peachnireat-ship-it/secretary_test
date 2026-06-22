@@ -13,6 +13,7 @@ const KEYS = {
   workTopics: 'work_topics_v1',
   pyannoteUrl: 'pyannote_url',
   currentUser: 'current_user_v1',
+  clientFavorites: 'client_favorites_v1',
 };
 
 const TEST_ACCOUNTS = [
@@ -297,6 +298,23 @@ export async function getWorkTopics() {
 
 export async function saveWorkTopics(text) {
   await AsyncStorage.setItem(KEYS.workTopics, text);
+}
+
+// ── Client Favorites ──────────────────────────────────────
+export async function getClientFavorites() {
+  const key = await userKey(KEYS.clientFavorites);
+  const raw = await AsyncStorage.getItem(key);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export async function toggleClientFavorite(clientId) {
+  const key = await userKey(KEYS.clientFavorites);
+  const current = await getClientFavorites();
+  const updated = current.includes(clientId)
+    ? current.filter((id) => id !== clientId)
+    : [...current, clientId];
+  await AsyncStorage.setItem(key, JSON.stringify(updated));
+  return updated;
 }
 
 // ── Pyannote Server URL ───────────────────────────────────

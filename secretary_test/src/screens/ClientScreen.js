@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
-import { getClients, addClient, saveClients, getHistories, addHistory, getMeetingRecords, getProjects } from '../services/storage';
+import { getClients, addClient, saveClients, getHistories, addHistory, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와 } from '../services/claude';
 
 const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
@@ -32,6 +32,8 @@ export default function ClientScreen() {
   const [meetingRecords, setMeetingRecords] = useState([]);
   const [projects, setProjects] = useState([]);
   const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
+  const [favorites, setFavorites] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
 
   const [showAddClient, setShowAddClient] = useState(false);
@@ -63,18 +65,26 @@ export default function ClientScreen() {
   const chatScrollRef = useRef(null);
 
   async function load() {
-    const [c, h, m, p] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects()]);
+    const [c, h, m, p, favs] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects(), getClientFavorites()]);
     setClients(c);
     setHistories(h);
     setMeetingRecords(m);
     setProjects(p);
+    setFavorites(favs);
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  const filteredClients = clients.filter((c) =>
-    !search || c.name.includes(search) || c.company.includes(search)
-  );
+  const filteredClients = clients.filter((c) => {
+    const matchesSearch = !search || c.name.includes(search) || c.company.includes(search);
+    const matchesTab = activeTab === 'all' || favorites.includes(c.id);
+    return matchesSearch && matchesTab;
+  });
+
+  async function handleToggleFavorite(clientId) {
+    const updated = await toggleClientFavorite(clientId);
+    setFavorites(updated);
+  }
 
   const filteredContactList = contactList.filter((c) =>
     !contactSearch || c.name?.includes(contactSearch)
@@ -212,13 +222,28 @@ export default function ClientScreen() {
         <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="거래처 또는 담당자 검색" placeholderTextColor={C.textDim} />
       </View>
 
+      {/* ── 탭 ── */}
+      <View style={s.tabRow}>
+        <TouchableOpacity style={[s.tab, activeTab === 'all' && s.tabActive]} onPress={() => setActiveTab('all')}>
+          <Text style={[s.tabText, activeTab === 'all' && s.tabTextActive]}>전체</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.tab, activeTab === 'favorites' && s.tabActive]} onPress={() => setActiveTab('favorites')}>
+          <Text style={[s.tabText, activeTab === 'favorites' && s.tabTextActive]}>★ 즐겨찾기</Text>
+          {favorites.length > 0 && (
+            <View style={s.tabBadge}>
+              <Text style={s.tabBadgeText}>{favorites.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* ── 거래처 목록 ── */}
       <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
         {filteredClients.map((client) => {
           const lastH = histories.filter((h) => h.clientId === client.id).sort((a, b) => b.createdAt - a.createdAt)[0];
           const hCount = histories.filter((h) => h.clientId === client.id).length;
           return (
-            <TouchableOpacity key={client.id} style={s.clientCard} activeOpacity={0.7} onPress={() => openClient(client)}>
+            <TouchableOpacity key={client.id} style={[s.clientCard, favorites.includes(client.id) && s.clientCardFav]} activeOpacity={0.7} onPress={() => openClient(client)}>
               <View style={s.clientAvatar}>
                 <Text style={s.clientAvatarText}>{client.name[0]}</Text>
               </View>
@@ -233,7 +258,11 @@ export default function ClientScreen() {
                   {lastH && <Text style={s.clientMetaText}>마지막 연락: {lastH.date}</Text>}
                 </View>
               </View>
-              <Text style={s.chevron}>›</Text>
+              <TouchableOpacity style={s.starBtn} onPress={() => handleToggleFavorite(client.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={[s.starIcon, favorites.includes(client.id) && s.starIconActive]}>
+                  {favorites.includes(client.id) ? '★' : '☆'}
+                </Text>
+              </TouchableOpacity>
             </TouchableOpacity>
           );
         })}
@@ -314,7 +343,14 @@ export default function ClientScreen() {
                 <Text style={s.detailAvatarText}>{selectedClient?.name?.[0]}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.detailName}>{selectedClient?.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={s.detailName}>{selectedClient?.name}</Text>
+                  <TouchableOpacity onPress={() => selectedClient && handleToggleFavorite(selectedClient.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={[s.detailStarIcon, selectedClient && favorites.includes(selectedClient.id) && s.starIconActive]}>
+                      {selectedClient && favorites.includes(selectedClient.id) ? '★' : '☆'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 <Text style={s.detailCompany}>{selectedClient?.company} · {selectedClient?.role}</Text>
                 <Text style={s.detailContact}>{selectedClient?.contact}</Text>
               </View>
@@ -632,6 +668,18 @@ const s = StyleSheet.create({
   clientMeta: { flexDirection: 'row', gap: 12, marginTop: 2 },
   clientMetaText: { color: C.textDim, fontSize: 10 },
   chevron: { color: C.textDim, fontSize: 18 },
+  clientCardFav: { borderColor: C.gold + '55', backgroundColor: C.gold + '08' },
+  starBtn: { padding: 4 },
+  starIcon: { color: C.textDim, fontSize: 18 },
+  starIconActive: { color: C.gold },
+  detailStarIcon: { color: C.textDim, fontSize: 18 },
+  tabRow: { flexDirection: 'row', paddingHorizontal: 24, gap: 8, marginBottom: 8 },
+  tab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  tabActive: { borderColor: C.gold + '88', backgroundColor: C.gold + '18' },
+  tabText: { color: C.textDim, fontSize: 12 },
+  tabTextActive: { color: C.gold, fontWeight: '600' },
+  tabBadge: { width: 16, height: 16, borderRadius: 8, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
+  tabBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
   fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal, alignItems: 'center', justifyContent: 'center' },
   fabText: { color: '#fff', fontSize: 26, lineHeight: 30 },
   sourceSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
