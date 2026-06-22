@@ -35,6 +35,8 @@ export default function ClientScreen() {
   const [activeTab, setActiveTab] = useState('all');
   const [favorites, setFavorites] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [sortOrder, setSortOrder] = useState('asc');
+  const [selectedProject, setSelectedProject] = useState(null);
 
   const [showAddClient, setShowAddClient] = useState(false);
   const [newName, setNewName] = useState('');
@@ -80,8 +82,17 @@ export default function ClientScreen() {
     const matchesTab = activeTab === 'all' || favorites.includes(c.id);
     return matchesSearch && matchesTab;
   }).sort((a, b) => {
-    const cmp = a.name.localeCompare(b.name, 'ko');
-    return cmp !== 0 ? cmp : a.company.localeCompare(b.company, 'ko');
+    const aKo = /^[가-힣]/.test(a.name);
+    const bKo = /^[가-힣]/.test(b.name);
+    let result;
+    if (aKo && !bKo) result = -1;
+    else if (!aKo && bKo) result = 1;
+    else {
+      const locale = aKo ? 'ko' : 'en';
+      const cmp = a.name.localeCompare(b.name, locale);
+      result = cmp !== 0 ? cmp : a.company.localeCompare(b.company, locale);
+    }
+    return sortOrder === 'asc' ? result : -result;
   });
 
   async function handleToggleFavorite(clientId) {
@@ -238,6 +249,13 @@ export default function ClientScreen() {
             </View>
           )}
         </TouchableOpacity>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity style={[s.sortBtn, sortOrder === 'asc' && s.sortBtnActive]} onPress={() => setSortOrder('asc')}>
+          <Text style={[s.sortBtnText, sortOrder === 'asc' && s.sortBtnTextActive]}>가↑</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.sortBtn, sortOrder === 'desc' && s.sortBtnActive]} onPress={() => setSortOrder('desc')}>
+          <Text style={[s.sortBtnText, sortOrder === 'desc' && s.sortBtnTextActive]}>가↓</Text>
+        </TouchableOpacity>
       </View>
 
       {/* ── 거래처 목록 ── */}
@@ -383,10 +401,10 @@ export default function ClientScreen() {
                   <Text style={s.linkedSectionLabel}>연결된 프로젝트</Text>
                   <View style={s.linkedChipRow}>
                     {linked.map((p) => (
-                      <View key={p.id} style={[s.projectChip, { borderColor: projectStatusColor(p.status) + '55', backgroundColor: projectStatusColor(p.status) + '15' }]}>
+                      <TouchableOpacity key={p.id} style={[s.projectChip, { borderColor: projectStatusColor(p.status) + '55', backgroundColor: projectStatusColor(p.status) + '15' }]} activeOpacity={0.7} onPress={() => setSelectedProject(p)}>
                         <View style={[s.projectChipDot, { backgroundColor: projectStatusColor(p.status) }]} />
                         <Text style={[s.projectChipText, { color: projectStatusColor(p.status) }]} numberOfLines={1}>{p.title}</Text>
-                      </View>
+                      </TouchableOpacity>
                     ))}
                   </View>
                 </View>
@@ -566,6 +584,99 @@ export default function ClientScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      {/* ── 프로젝트 상세 모달 ── */}
+      <Modal visible={!!selectedProject} animationType="slide" transparent onRequestClose={() => setSelectedProject(null)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '85%' }]}>
+            <View style={s.modalHandle} />
+            {selectedProject && (
+              <>
+                <View style={s.projDetailHeader}>
+                  <View style={{ flex: 1 }}>
+                    <View style={s.projDetailBadgeRow}>
+                      <View style={[s.projStatusBadge, { borderColor: projectStatusColor(selectedProject.status) + '66', backgroundColor: projectStatusColor(selectedProject.status) + '18' }]}>
+                        <Text style={[s.projStatusText, { color: projectStatusColor(selectedProject.status) }]}>{selectedProject.status}</Text>
+                      </View>
+                      {selectedProject.priority ? (
+                        <View style={[s.projPriorityBadge, { borderColor: priorityColorClient(selectedProject.priority) + '55' }]}>
+                          <Text style={[s.projPriorityText, { color: priorityColorClient(selectedProject.priority) }]}>{selectedProject.priority}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={s.projDetailTitle}>{selectedProject.title}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setSelectedProject(null)} style={{ marginLeft: 8 }}>
+                    <Text style={s.closeBtn}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={s.projProgressWrap}>
+                  <View style={s.projProgressTrack}>
+                    <View style={[s.projProgressFill, { width: `${selectedProject.progress ?? 0}%`, backgroundColor: projectStatusColor(selectedProject.status) }]} />
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                    <Text style={s.projDeadlineText}>마감일 {selectedProject.deadline}{selectedProject.deadline && selectedProject.deadline !== '미정' ? (() => { const d = projDaysUntil(selectedProject.deadline); return d > 0 ? `  ·  ${d}일 후` : d === 0 ? '  ·  오늘 마감' : `  ·  ${Math.abs(d)}일 초과`; })() : ''}</Text>
+                    <Text style={s.projProgressLabel}>{selectedProject.progress ?? 0}%</Text>
+                  </View>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {selectedProject.notes ? (
+                    <View style={s.projSection}>
+                      <Text style={s.linkedSectionLabel}>메모</Text>
+                      <View style={s.projSectionBox}>
+                        <Text style={s.meetingDetailText}>{selectedProject.notes}</Text>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {(() => {
+                    const people = (selectedProject.clientIds || []).map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+                    if (!people.length) return null;
+                    return (
+                      <View style={s.projSection}>
+                        <Text style={s.linkedSectionLabel}>관련 인물 {people.length}명</Text>
+                        {people.map((c, idx) => (
+                          <View key={c.id} style={[s.projPersonRow, idx < people.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}>
+                            <View style={s.clientAvatar}>
+                              <Text style={s.clientAvatarText}>{c.name[0]}</Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={s.clientName}>{c.name}</Text>
+                              {c.company ? <Text style={s.clientRole}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    );
+                  })()}
+
+                  {(() => {
+                    const linked = (selectedProject.meetingRecordIds || []).map((id) => meetingRecords.find((r) => r.id === id)).filter(Boolean);
+                    if (!linked.length) return null;
+                    return (
+                      <View style={s.projSection}>
+                        <Text style={s.linkedSectionLabel}>연결된 회의록 {linked.length}건</Text>
+                        {linked.map((r) => (
+                          <TouchableOpacity key={r.id} style={s.meetingRecordItem} activeOpacity={0.7} onPress={() => setSelectedMeetingRecord(r)}>
+                            <View style={s.meetingRecordItemHeader}>
+                              <Text style={s.meetingRecordItemTitle} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
+                              <Text style={s.meetingRecordItemDate}>{formatDate(r.createdAt)}</Text>
+                            </View>
+                            {r.summary ? <Text style={s.meetingRecordItemSummary} numberOfLines={2}>{r.summary}</Text> : null}
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    );
+                  })()}
+                  <View style={{ height: 20 }} />
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* ── 회의록 상세 모달 ── */}
       <Modal visible={!!selectedMeetingRecord} animationType="slide" transparent onRequestClose={() => setSelectedMeetingRecord(null)}>
         <View style={s.modalOverlay}>
@@ -640,6 +751,17 @@ function typeColor(type) {
   return map[type] || C.textSecondary;
 }
 
+function priorityColorClient(priority) {
+  return { 높음: C.red, 보통: C.gold, 낮음: C.accentTeal }[priority] || C.textDim;
+}
+
+function projDaysUntil(deadlineStr) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(deadlineStr);
+  return Math.round((d - today) / 86400000);
+}
+
 function projectStatusColor(status) {
   const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
   return map[status] || C.textDim;
@@ -683,6 +805,10 @@ const s = StyleSheet.create({
   tabTextActive: { color: C.gold, fontWeight: '600' },
   tabBadge: { width: 16, height: 16, borderRadius: 8, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
   tabBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
+  sortBtn: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  sortBtnActive: { borderColor: C.accentTeal + '88', backgroundColor: C.accentTeal + '22' },
+  sortBtnText: { color: C.textDim, fontSize: 12 },
+  sortBtnTextActive: { color: C.accentTeal, fontWeight: '600' },
   fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal, alignItems: 'center', justifyContent: 'center' },
   fabText: { color: '#fff', fontSize: 26, lineHeight: 30 },
   sourceSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
@@ -741,6 +867,23 @@ const s = StyleSheet.create({
   resultRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
   resultLabel: { color: C.gold, fontSize: 10, fontWeight: '600', marginTop: 1 },
   resultText: { color: C.textDim, fontSize: 12, flex: 1 },
+
+  // Project detail modal
+  projDetailHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+  projDetailBadgeRow: { flexDirection: 'row', gap: 6, marginBottom: 6 },
+  projDetailTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400' },
+  projStatusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  projStatusText: { fontSize: 11, fontWeight: '500' },
+  projPriorityBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  projPriorityText: { fontSize: 11, fontWeight: '500' },
+  projProgressWrap: { marginBottom: 14 },
+  projProgressTrack: { height: 6, backgroundColor: C.border, borderRadius: 3 },
+  projProgressFill: { height: 6, borderRadius: 3 },
+  projProgressLabel: { color: C.textDim, fontSize: 11 },
+  projDeadlineText: { color: C.textSecondary, fontSize: 12 },
+  projSection: { marginBottom: 14 },
+  projSectionBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12 },
+  projPersonRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
 
   // Add modals
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
