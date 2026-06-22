@@ -224,6 +224,13 @@ export default function ProjectScreen({ navigation, route }) {
     }
   }, [route?.params?.openProjectId, projects]);
 
+  useEffect(() => {
+    if (!route?.params?.openAI) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowAI(true);
+    navigation.setParams({ openAI: undefined });
+  }, [route?.params?.openAI]);
+
   async function load() {
     const [all, records, clientList, histList] = await Promise.all([getProjects(), getMeetingRecords(), getClients(), getHistories()]);
     setProjects(all);

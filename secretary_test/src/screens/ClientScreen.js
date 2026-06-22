@@ -25,7 +25,7 @@ function parseTranscriptSegments(text) {
   return segments;
 }
 
-export default function ClientScreen() {
+export default function ClientScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const [clients, setClients] = useState([]);
   const [histories, setHistories] = useState([]);
@@ -197,6 +197,10 @@ export default function ClientScreen() {
   const [clientSummary, setClientSummary] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
 
+  const [showHistoryAI, setShowHistoryAI] = useState(false);
+  const [historySummary, setHistorySummary] = useState('');
+  const [historySummaryLoading, setHistorySummaryLoading] = useState(false);
+
   async function fetchClientSummary(client, histList) {
     setClientSummary('');
     setSummaryLoading(true);
@@ -220,6 +224,36 @@ export default function ClientScreen() {
     setClientSummary('');
     fetchClientSummary(client);
   }
+
+  async function fetchHistorySummary() {
+    setHistorySummary('');
+    setHistorySummaryLoading(true);
+    try {
+      const [clientList, histList] = await Promise.all([getClients(), getHistories()]);
+      const systemPrompt = buildClientSystem(clientList, histList);
+      const reply = await askClaude(
+        [{ role: 'user', content: `등록된 모든 거래처 인원의 관계 히스토리를 종합해서 보고서 형식으로 작성해줘. 각 거래처별로 현재 관계 상태, 마지막 연락 시점, 주요 히스토리 요약, 다음에 필요한 액션을 포함해줘. 히스토리가 없는 거래처는 간략히 언급만 해줘. 반드시 한국어로만 작성해줘.` }],
+        systemPrompt
+      );
+      setHistorySummary(reply);
+    } catch (e) {
+      setHistorySummary(e.message === 'API_KEY_MISSING' ? '설정 탭에서 API 키를 입력하면 AI 요약을 볼 수 있습니다.' : `오류: ${e.message}`);
+    } finally {
+      setHistorySummaryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!route?.params?.openHistoryAI) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowHistoryAI(true);
+    navigation.setParams({ openHistoryAI: undefined });
+  }, [route?.params?.openHistoryAI]);
+
+  useEffect(() => {
+    if (!showHistoryAI || historySummary || historySummaryLoading) return;
+    fetchHistorySummary();
+  }, [showHistoryAI]);
 
   return (
     <View style={s.root}>
@@ -545,6 +579,40 @@ export default function ClientScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── AI 거래처 히스토리 종합 모달 ── */}
+      <Modal visible={showHistoryAI} animationType="slide" transparent onRequestClose={() => setShowHistoryAI(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.modalSheet, { height: '85%' }]}>
+            <View style={s.modalHandle} />
+            <View style={s.chatHeader}>
+              <View style={s.chatHeaderLeft}>
+                <Text style={[s.aiGlyph, { color: C.accentTeal }]}>✦</Text>
+                <Text style={s.modalTitle}>AI 거래처 히스토리</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowHistoryAI(false)}>
+                <Text style={s.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+              {historySummaryLoading ? (
+                <View style={s.historyAILoading}>
+                  <ActivityIndicator size="small" color={C.accentTeal} />
+                  <Text style={s.historyAILoadingText}>거래처 히스토리를 분석하는 중...</Text>
+                </View>
+              ) : (
+                <View style={s.summaryBox}>
+                  <View style={s.summaryLabelRow}>
+                    <Text style={s.aiGlyph}>✦</Text>
+                    <Text style={s.summaryLabel}>관계 히스토리 종합 보고서</Text>
+                  </View>
+                  <Text style={s.summaryText}>{historySummary || '데이터를 불러오는 중...'}</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
 
       {/* ── AI 채팅 모달 ── */}
@@ -904,6 +972,8 @@ const s = StyleSheet.create({
   modalConfirmText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 
   // AI Chat
+  historyAILoading: { alignItems: 'center', gap: 12, paddingVertical: 40 },
+  historyAILoadingText: { color: C.textDim, fontSize: 13 },
   chatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   chatHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   chatLog: { flex: 1 },

@@ -36,7 +36,7 @@ function buildMonthGrid(year, month) {
   return cells;
 }
 
-export default function ScheduleScreen() {
+export default function ScheduleScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState(dateStr(today));
@@ -74,6 +74,13 @@ export default function ScheduleScreen() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!route?.params?.openAI) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowAI(true);
+    navigation.setParams({ openAI: undefined });
+  }, [route?.params?.openAI]);
 
   useFocusEffect(useCallback(() => { load(); }, []));
 

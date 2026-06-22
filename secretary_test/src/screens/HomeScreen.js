@@ -18,9 +18,9 @@ function useNow() {
 }
 
 function greeting(h) {
-  if (h < 6) return '늦은 밤입니다';
-  if (h < 12) return '좋은 아침입니다';
-  if (h < 18) return '좋은 오후입니다';
+  if (h < 6) return '늦은 밤입니다 🌃';
+  if (h < 12) return '좋은 아침입니다 🌄';
+  if (h < 18) return '좋은 오후입니다 🏙️';
   return '좋은 저녁입니다';
 }
 
@@ -88,9 +88,8 @@ export default function HomeScreen({ navigation, user }) {
             </View>
           )}
         </View>
-        <Text style={s.clockText}>{hh}:{mm}</Text>
-        <Text style={s.dateText}>{dateLabel}</Text>
-        <Text style={s.greetingText}>{user?.name ? `${user.name} · ` : ''}{greeting(now.getHours())}</Text>
+        <Text style={s.greetingText}>{user?.name ? `${user.name}님 ` : ''}{greeting(now.getHours())}</Text>
+		<Text style={s.dateText}>{dateLabel} {hh}:{mm}</Text>
       </View>
 
       <View style={s.rule} />
@@ -170,27 +169,39 @@ export default function HomeScreen({ navigation, user }) {
       <View style={[s.section, { marginBottom: 48 }]}>
         <Text style={s.sectionLabel}>AI FEATURES</Text>
         <View style={s.aiCard}>
-          <View style={s.aiRow}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={s.aiRow}
+            onPress={() => navigation.navigate('일정', { openAI: true })}
+          >
             <View style={[s.aiDot, { backgroundColor: C.accentBlue }]} />
             <View style={{ flex: 1 }}>
               <Text style={s.aiTitle}>AI 일정 관리</Text>
               <Text style={s.aiDesc}>자연어로 일정 추가 · 일정 충돌 감지 · AI 질문 응답</Text>
             </View>
-          </View>
-          <View style={[s.aiRow, { borderTopWidth: 1, borderTopColor: C.border }]}>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={[s.aiRow, { borderTopWidth: 1, borderTopColor: C.border }]}
+            onPress={() => navigation.navigate('거래처', { openHistoryAI: true })}
+          >
             <View style={[s.aiDot, { backgroundColor: C.accentTeal }]} />
             <View style={{ flex: 1 }}>
               <Text style={s.aiTitle}>AI 거래처 히스토리</Text>
               <Text style={s.aiDesc}>관계 요약 · 히스토리 분석 · 후속 조치 제안</Text>
             </View>
-          </View>
-          <View style={[s.aiRow, { borderTopWidth: 1, borderTopColor: C.border }]}>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={[s.aiRow, { borderTopWidth: 1, borderTopColor: C.border }]}
+            onPress={() => navigation.navigate('프로젝트', { openAI: true })}
+          >
             <View style={[s.aiDot, { backgroundColor: C.red }]} />
             <View style={{ flex: 1 }}>
               <Text style={s.aiTitle}>AI 프로젝트 지연 분석</Text>
               <Text style={s.aiDesc}>지연 원인 패턴 분석 · 위험 프로젝트 식별 · 개선 액션 플랜</Text>
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>
@@ -207,9 +218,9 @@ const s = StyleSheet.create({
   badgeText: { color: C.goldDim, fontSize: 10, letterSpacing: 3, fontWeight: '600' },
   teamBadge: { backgroundColor: C.accentBlue + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   teamBadgeText: { color: C.accentBlue, fontSize: 10, letterSpacing: 1, fontWeight: '600' },
-  clockText: { color: C.textPrimary, fontSize: 64, fontWeight: '200', letterSpacing: -2, lineHeight: 68 },
-  dateText: { color: C.textSecondary, fontSize: 13, marginTop: 6, letterSpacing: 0.5 },
-  greetingText: { color: C.textDim, fontSize: 12, marginTop: 4, letterSpacing: 1 },
+  clockText: { color: C.textPrimary, fontSize: 20, fontWeight: '200', letterSpacing: -2, lineHeight: 68 },
+  dateText: { color: C.textDim, fontSize: 17, marginTop: 6, letterSpacing: 0.5 },
+  greetingText: { color: C.textSecondary, fontSize: 20, marginTop: 4, letterSpacing: 1 },
   rule: { height: 1, backgroundColor: C.border, marginBottom: 32 },
   section: { marginBottom: 32 },
   sectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2.5, fontWeight: '600', marginBottom: 14 },
