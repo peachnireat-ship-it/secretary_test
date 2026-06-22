@@ -79,6 +79,9 @@ export default function ClientScreen() {
     const matchesSearch = !search || c.name.includes(search) || c.company.includes(search);
     const matchesTab = activeTab === 'all' || favorites.includes(c.id);
     return matchesSearch && matchesTab;
+  }).sort((a, b) => {
+    const cmp = a.name.localeCompare(b.name, 'ko');
+    return cmp !== 0 ? cmp : a.company.localeCompare(b.company, 'ko');
   });
 
   async function handleToggleFavorite(clientId) {
