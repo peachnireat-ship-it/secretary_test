@@ -1,4 +1,4 @@
-import { Text, View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text, View, ScrollView, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,8 +24,14 @@ function greeting(h) {
   return '좋은 저녁입니다';
 }
 
+function tagColor(tag) {
+  const map = { 회의: C.accentBlue, 업무: C.gold, 영업: C.accentTeal, 개인: C.accentPurple, 기타: C.textSecondary };
+  return map[tag] || C.textSecondary;
+}
+
 function todayStr() {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().split('T')[0];
 }
 
 export default function HomeScreen({ navigation, user }) {
@@ -37,6 +43,7 @@ export default function HomeScreen({ navigation, user }) {
 
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [clientCount, setClientCount] = useState(0);
+  const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [activeProjectCount, setActiveProjectCount] = useState(0);
   const [delayedProjectCount, setDelayedProjectCount] = useState(0);
 
@@ -70,6 +77,7 @@ export default function HomeScreen({ navigation, user }) {
   ];
 
   return (
+    <>
     <ScrollView
       style={s.root}
       contentContainerStyle={[s.scroll, { paddingTop: insets.top + 16 }]}
@@ -123,7 +131,12 @@ export default function HomeScreen({ navigation, user }) {
             </View>
           ) : (
             todaySchedules.slice(0, 4).map((item, i) => (
-              <View key={item.id} style={[s.agendaRow, i < Math.min(todaySchedules.length, 4) - 1 && s.agendaRowBorder]}>
+              <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.7}
+                style={[s.agendaRow, i < Math.min(todaySchedules.length, 4) - 1 && s.agendaRowBorder]}
+                onPress={() => setSelectedSchedule(item)}
+              >
                 <Text style={s.agendaTime}>{item.time}</Text>
                 <View style={s.agendaMiddle}>
                   <View style={s.agendaLine} />
@@ -132,7 +145,7 @@ export default function HomeScreen({ navigation, user }) {
                   <Text style={s.agendaTitle} numberOfLines={1}>{item.title}</Text>
                   <Text style={s.agendaTag}>{item.tag}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           )}
           {todaySchedules.length > 4 && (
@@ -205,6 +218,42 @@ export default function HomeScreen({ navigation, user }) {
         </View>
       </View>
     </ScrollView>
+
+      {/* ── 일정 상세 모달 ── */}
+      <Modal visible={!!selectedSchedule} animationType="slide" transparent onRequestClose={() => setSelectedSchedule(null)}>
+        <TouchableOpacity style={s.detailOverlay} activeOpacity={1} onPress={() => setSelectedSchedule(null)}>
+          <TouchableOpacity activeOpacity={1} style={s.detailSheet}>
+            <View style={s.detailHandle} />
+            {selectedSchedule && (
+              <>
+                <View style={s.detailHeader}>
+                  <View style={[s.detailTagBadge, { backgroundColor: tagColor(selectedSchedule.tag) + '22', borderColor: tagColor(selectedSchedule.tag) + '55' }]}>
+                    <Text style={[s.detailTagText, { color: tagColor(selectedSchedule.tag) }]}>{selectedSchedule.tag}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setSelectedSchedule(null)}>
+                    <Text style={s.detailClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={s.detailTime}>{selectedSchedule.time}</Text>
+                <Text style={s.detailTitle}>{selectedSchedule.title}</Text>
+                {selectedSchedule.notes ? (
+                  <View style={s.detailNotesBox}>
+                    <Text style={s.detailNotesLabel}>메모</Text>
+                    <Text style={s.detailNotesText}>{selectedSchedule.notes}</Text>
+                  </View>
+                ) : null}
+                <TouchableOpacity
+                  style={s.detailNavBtn}
+                  onPress={() => { setSelectedSchedule(null); navigation.navigate('일정'); }}
+                >
+                  <Text style={s.detailNavBtnText}>일정 탭에서 보기</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 }
 
@@ -246,6 +295,20 @@ const s = StyleSheet.create({
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, backgroundColor: C.surface, borderWidth: 1, borderRadius: 10 },
   actionDot: { width: 5, height: 5, borderRadius: 2.5 },
   actionText: { fontSize: 11, fontWeight: '500', letterSpacing: 0.3 },
+  detailOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  detailSheet: { backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 },
+  detailHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: 'center', marginBottom: 20 },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  detailTagBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  detailTagText: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5 },
+  detailClose: { color: C.textDim, fontSize: 18, paddingLeft: 12 },
+  detailTime: { color: C.accentBlue, fontSize: 28, fontWeight: '200', letterSpacing: -0.5, marginBottom: 6 },
+  detailTitle: { color: C.textPrimary, fontSize: 20, fontWeight: '400', lineHeight: 28, marginBottom: 20 },
+  detailNotesBox: { backgroundColor: C.bg, borderRadius: 10, padding: 14, marginBottom: 20 },
+  detailNotesLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 6 },
+  detailNotesText: { color: C.textSecondary, fontSize: 14, lineHeight: 20 },
+  detailNavBtn: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
+  detailNavBtnText: { color: C.textSecondary, fontSize: 13 },
   aiCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, overflow: 'hidden' },
   aiRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
   aiDot: { width: 8, height: 8, borderRadius: 4 },
