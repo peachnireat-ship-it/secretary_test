@@ -1,0 +1,39 @@
+{
+  "theme": "dark",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NonInteractive -File C:\\Users\\user\\.claude\\hooks\\session-autopull.ps1"
+          },
+          {
+            "type": "command",
+            "command": "bash C:/Users/user/.claude/hooks/session-init.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash C:/Users/user/.claude/hooks/permission-guard.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash C:/Users/user/.claude/hooks/bellows-log.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

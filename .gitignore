@@ -30,6 +30,9 @@ Videos/
 # Claude config (may contain sensitive data)
 .claude.json
 .claude/
+!.claude/settings.json
+!.claude/hooks/
+!.claude/hooks/**
 
 # Node
 node_modules/
