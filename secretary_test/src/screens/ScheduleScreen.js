@@ -13,7 +13,7 @@ const TAGS = ['회의', '업무', '영업', '개인', '기타'];
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 function dateStr(d) {
-  return d.toISOString().split('T')[0];
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatDateKo(str) {
@@ -88,7 +88,11 @@ export default function ScheduleScreen({ navigation, route }) {
     .filter((s) => s.date === selectedDate)
     .sort((a, b) => a.time.localeCompare(b.time));
 
-  const dayProjects = projects.filter((p) => p.deadline === selectedDate);
+  const dayProjects = projects.filter((p) =>
+    p.startDate
+      ? p.startDate <= selectedDate && p.deadline >= selectedDate
+      : p.deadline === selectedDate
+  );
 
   function moveMonth(dir) {
     let m = calMonth + dir, y = calYear;
@@ -192,9 +196,15 @@ export default function ScheduleScreen({ navigation, route }) {
           if (!cell) return <View key={`e-${i}`} style={s.gridCell} />;
           const isSelected = selectedDate === cell.str;
           const isToday = cell.str === TODAY_STR;
-          const hasSched = schedules.some((sc) => sc.date === cell.str) || projects.some((p) => p.deadline === cell.str);
           const isSun = i % 7 === 0;
           const isSat = i % 7 === 6;
+          const rangeProj = projects.find((p) => p.startDate && p.startDate <= cell.str && p.deadline >= cell.str);
+          const cellSchedules = schedules.filter((sc) => sc.date === cell.str);
+          const deadlineProjs = projects.filter((p) => !p.startDate && p.deadline === cell.str);
+          const cellDots = [
+            ...cellSchedules.map((sc) => tagColor(sc.tag)),
+            ...deadlineProjs.map(() => C.gold),
+          ];
           return (
             <TouchableOpacity key={cell.str} style={s.gridCell} onPress={() => setSelectedDate(cell.str)}>
               <View style={[s.gridNumWrap, isSelected && s.gridNumWrapActive]}>
@@ -206,7 +216,26 @@ export default function ScheduleScreen({ navigation, route }) {
                   isSat && !isSelected && { color: C.accentBlue },
                 ]}>{cell.date}</Text>
               </View>
-              {hasSched && <View style={[s.dot, isSelected && s.dotActive]} />}
+              {rangeProj ? (
+                <View style={[
+                  s.projBar,
+                  {
+                    marginLeft: cell.str === rangeProj.startDate ? 4 : 0,
+                    marginRight: cell.str === rangeProj.deadline ? 4 : 0,
+                    backgroundColor: statusColor(rangeProj.status) + 'CC',
+                    borderTopLeftRadius: cell.str === rangeProj.startDate ? 4 : 0,
+                    borderBottomLeftRadius: cell.str === rangeProj.startDate ? 4 : 0,
+                    borderTopRightRadius: cell.str === rangeProj.deadline ? 4 : 0,
+                    borderBottomRightRadius: cell.str === rangeProj.deadline ? 4 : 0,
+                  },
+                ]} />
+              ) : cellDots.length > 0 ? (
+                <View style={s.dotRow}>
+                  {cellDots.map((color, di) => (
+                    <View key={di} style={[s.dot, { backgroundColor: isSelected ? '#fff' : color }]} />
+                  ))}
+                </View>
+              ) : null}
             </TouchableOpacity>
           );
         })}
@@ -227,20 +256,26 @@ export default function ScheduleScreen({ navigation, route }) {
           </View>
         ) : (
           <>
-            {dayProjects.map((proj) => (
-              <TouchableOpacity key={proj.id} style={s.projectCard} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
-                <Text style={s.projectDeadlineLabel}>마감</Text>
-                <View style={s.scheduleDivider} />
-                <View style={s.scheduleBody}>
-                  <View style={s.scheduleTitleRow}>
-                    <Text style={s.scheduleTitle}>{proj.title}</Text>
-                    <View style={[s.tagBadge, { backgroundColor: statusColor(proj.status) + '22', borderColor: statusColor(proj.status) + '55' }]}>
-                      <Text style={[s.tagText, { color: statusColor(proj.status) }]}>{proj.status}</Text>
+            {dayProjects.map((proj) => {
+              const dayLabel = projDayLabel(proj, selectedDate);
+              return (
+                <TouchableOpacity key={proj.id} style={[s.projectCard, { borderColor: dayLabel.color + '55' }]} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
+                  <Text style={[s.projectDeadlineLabel, { color: dayLabel.color }]}>{dayLabel.text}</Text>
+                  <View style={s.scheduleDivider} />
+                  <View style={s.scheduleBody}>
+                    <View style={s.scheduleTitleRow}>
+                      <Text style={s.scheduleTitle}>{proj.title}</Text>
+                      <View style={[s.tagBadge, { backgroundColor: statusColor(proj.status) + '22', borderColor: statusColor(proj.status) + '55' }]}>
+                        <Text style={[s.tagText, { color: statusColor(proj.status) }]}>{proj.status}</Text>
+                      </View>
                     </View>
+                    {proj.startDate && (
+                      <Text style={s.scheduleNotes}>{proj.startDate} ~ {proj.deadline}</Text>
+                    )}
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
             {daySchedules.map((item) => (
               <TouchableOpacity
                 key={item.id}
@@ -441,6 +476,13 @@ export default function ScheduleScreen({ navigation, route }) {
   );
 }
 
+function projDayLabel(proj, date) {
+  if (proj.startDate === date) return { text: '시작', color: C.accentTeal };
+  if (proj.deadline === date) return { text: '마감', color: C.gold };
+  const days = daysUntil(proj.deadline);
+  return { text: `D-${days}`, color: C.accentBlue };
+}
+
 function daysUntil(deadlineStr) {
   const t = new Date();
   t.setHours(0, 0, 0, 0);
@@ -480,7 +522,7 @@ const s = StyleSheet.create({
   weekHeader: { flexDirection: 'row', paddingHorizontal: 12, marginBottom: 4 },
   weekDay: { flex: 1, textAlign: 'center', color: C.textDim, fontSize: 10, letterSpacing: 0.5 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginBottom: 8 },
-  gridCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
+  gridCell: { width: '14.28%', minHeight: 52, alignItems: 'center', justifyContent: 'flex-start', paddingVertical: 4 },
   gridNumWrap: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   gridNumWrapActive: { backgroundColor: C.accentBlue, borderRadius: 15 },
   gridNum: { color: C.textSecondary, fontSize: 13, fontWeight: '300' },
@@ -488,6 +530,8 @@ const s = StyleSheet.create({
   gridNumToday: { color: C.gold, fontWeight: '600' },
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.accentBlue, marginTop: 2 },
   dotActive: { backgroundColor: '#fff' },
+  projBar: { width: '100%', height: 5, marginTop: 3 },
+  dotRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, marginTop: 2, justifyContent: 'center', maxWidth: '90%' },
   dateHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 12 },
   dateLabel: { color: C.textSecondary, fontSize: 13 },
   dateCount: { color: C.textDim, fontSize: 12 },
