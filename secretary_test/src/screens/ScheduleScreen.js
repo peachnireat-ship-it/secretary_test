@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, getClients, getMeetingRecords, getCurrentUser, addClient } from '../services/storage';
-import { askClaude, buildScheduleSystem } from '../services/claude';
+import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/claude';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -107,9 +107,17 @@ export default function ScheduleScreen({ navigation, route }) {
   const [newNotes, setNewNotes] = useState('');
   const [newClientIds, setNewClientIds] = useState([]);
   const [newStartDate, setNewStartDate] = useState('');
+  const [newStartTime, setNewStartTime] = useState('09:00');
+  const [newStartAmPm, setNewStartAmPm] = useState('오전');
   const [newEndDate, setNewEndDate] = useState('');
+  const [newEndTime, setNewEndTime] = useState('06:00');
+  const [newEndAmPm, setNewEndAmPm] = useState('오후');
   const [newAmPm, setNewAmPm] = useState('오전');
   const [editAmPm, setEditAmPm] = useState('오전');
+  const [editStartTime, setEditStartTime] = useState('09:00');
+  const [editStartAmPm, setEditStartAmPm] = useState('오전');
+  const [editEndTime, setEditEndTime] = useState('06:00');
+  const [editEndAmPm, setEditEndAmPm] = useState('오후');
 
   const [showAI, setShowAI] = useState(false);
   const [chatMessages, setChatMessages] = useState([
@@ -177,31 +185,47 @@ export default function ScheduleScreen({ navigation, route }) {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  const daySchedules = schedules
-    .filter((s) => s.date === selectedDate)
-    .sort((a, b) => a.time.localeCompare(b.time));
+  const monthPrefix = `${calYear}-${String(calMonth).padStart(2, '0')}`;
+  const daySchedules = selectedDate
+    ? schedules.filter((s) => s.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time))
+    : schedules.filter((s) => s.date.startsWith(monthPrefix)).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
-  const dayProjects = projects.filter((p) =>
-    p.startDate
-      ? p.startDate <= selectedDate && p.deadline >= selectedDate
-      : p.deadline === selectedDate
-  );
+  const monthEnd = `${monthPrefix}-${String(new Date(calYear, calMonth, 0).getDate()).padStart(2, '0')}`;
+  const dayProjects = selectedDate
+    ? projects.filter((p) => {
+        const sd = (p.startDate || '').split(' ')[0];
+        const dl = (p.deadline || '').split(' ')[0];
+        return sd ? sd <= selectedDate && dl >= selectedDate : dl === selectedDate;
+      })
+    : projects.filter((p) => {
+        const sd = (p.startDate || '').split(' ')[0];
+        const dl = (p.deadline || '').split(' ')[0];
+        return sd ? sd <= monthEnd && dl >= `${monthPrefix}-01` : dl >= `${monthPrefix}-01` && dl <= monthEnd;
+      });
 
   function moveMonth(dir) {
     let m = calMonth + dir, y = calYear;
     if (m < 1) { m = 12; y -= 1; }
     if (m > 12) { m = 1; y += 1; }
     setCalYear(y); setCalMonth(m);
+    if (selectedDate) {
+      const [sy, sm] = selectedDate.split('-').map(Number);
+      if (sy !== y || sm !== m) setSelectedDate(null);
+    }
   }
   moveMonthRef.current = moveMonth;
 
   async function handleAdd() {
     if (!newTitle.trim()) return;
     const scheduleDate = newStartDate.trim().length === 10 ? newStartDate.trim() : selectedDate;
-    const updated = await addSchedule({ date: scheduleDate, time: to24h(newAmPm, newTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: newStartDate.trim(), endDate: newEndDate.trim() });
+    const startDateStr = newStartDate.trim() ? `${newStartDate.trim()} ${to24h(newStartAmPm, newStartTime)}` : '';
+    const endDateStr = newEndDate.trim() ? `${newEndDate.trim()} ${to24h(newEndAmPm, newEndTime)}` : '';
+    const updated = await addSchedule({ date: scheduleDate, time: to24h(newAmPm, newTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: startDateStr, endDate: endDateStr });
     setSchedules(updated);
     setShowAdd(false);
-    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]); setNewStartDate(''); setNewEndDate(''); setNewAmPm('오전');
+    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]);
+    setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전');
+    setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전');
   }
 
   function openClientPicker(currentIds, onConfirm) {
@@ -238,6 +262,8 @@ export default function ScheduleScreen({ navigation, route }) {
     if (!editTitle.trim()) return;
     const scheduleDate = editStartDate.trim().length === 10 ? editStartDate.trim() : viewSchedule.date;
     const saved24h = to24h(editAmPm, editTime);
+    const startDateStr = editStartDate.trim() ? `${editStartDate.trim()} ${to24h(editStartAmPm, editStartTime)}` : '';
+    const endDateStr = editEndDate.trim() ? `${editEndDate.trim()} ${to24h(editEndAmPm, editEndTime)}` : '';
     const updated = await updateSchedule(viewSchedule.id, {
       date: scheduleDate,
       title: editTitle.trim(),
@@ -245,11 +271,11 @@ export default function ScheduleScreen({ navigation, route }) {
       tag: editTag,
       notes: editNotes.trim(),
       clientIds: editClientIds,
-      startDate: editStartDate.trim(),
-      endDate: editEndDate.trim(),
+      startDate: startDateStr,
+      endDate: endDateStr,
     });
     setSchedules(updated);
-    setViewSchedule((prev) => ({ ...prev, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, startDate: editStartDate.trim(), endDate: editEndDate.trim() }));
+    setViewSchedule((prev) => ({ ...prev, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, startDate: startDateStr, endDate: endDateStr }));
     setEditMode(false);
   }
 
@@ -269,7 +295,7 @@ export default function ScheduleScreen({ navigation, route }) {
         .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
 
       const systemPrompt = buildScheduleSystem(schedules);
-      const reply = await askClaude(apiMessages, systemPrompt);
+      const reply = await askClaude(apiMessages, systemPrompt, { raw: true });
 
       // Check if AI wants to create a schedule
       const jsonMatch = reply.match(/\{[\s\S]*"action"\s*:\s*"create_schedule"[\s\S]*\}/);
@@ -277,6 +303,10 @@ export default function ScheduleScreen({ navigation, route }) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
           if (parsed.action === 'create_schedule' && parsed.data) {
+            if (parsed.data.title) parsed.data.title = stripNonKorean(parsed.data.title).trim();
+            if (parsed.data.notes) parsed.data.notes = stripNonKorean(parsed.data.notes).trim();
+            if (!parsed.data.startDate && parsed.data.date) parsed.data.startDate = parsed.data.date;
+            if (!parsed.data.endDate && parsed.data.date) parsed.data.endDate = parsed.data.date;
             const updated = await addSchedule(parsed.data);
             setSchedules(updated);
             const confirmText = `일정을 추가했습니다.\n📅 ${parsed.data.date} ${parsed.data.time} — ${parsed.data.title} (${parsed.data.tag})`;
@@ -314,7 +344,7 @@ export default function ScheduleScreen({ navigation, route }) {
         <TouchableOpacity onPress={() => moveMonth(-1)} style={s.monthArrow}>
           <Text style={s.monthArrowText}>‹</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => { setCalYear(today.getFullYear()); setCalMonth(today.getMonth() + 1); setSelectedDate(TODAY_STR); }}>
+        <TouchableOpacity onPress={() => setSelectedDate(null)}>
           <Text style={s.monthLabel}>{calYear}년 {calMonth}월</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => moveMonth(1)} style={s.monthArrow}>
@@ -338,9 +368,16 @@ export default function ScheduleScreen({ navigation, route }) {
           const isToday = cell.str === TODAY_STR;
           const isSun = i % 7 === 0;
           const isSat = i % 7 === 6;
-          const rangeProjs = projects.filter((p) => p.startDate && p.startDate <= cell.str && p.deadline >= cell.str);
+          const rangeProjs = projects.filter((p) => {
+            const sd = (p.startDate || '').split(' ')[0];
+            const dl = (p.deadline || '').split(' ')[0];
+            return sd && sd <= cell.str && dl >= cell.str;
+          });
           const cellSchedules = schedules.filter((sc) => sc.date === cell.str);
-          const deadlineProjs = projects.filter((p) => !p.startDate && p.deadline === cell.str);
+          const deadlineProjs = projects.filter((p) => {
+            const dl = (p.deadline || '').split(' ')[0];
+            return !p.startDate && dl === cell.str;
+          });
           const cellDots = [
             ...cellSchedules.map((sc) => tagColor(sc.tag)),
             ...deadlineProjs.map(() => C.gold),
@@ -356,20 +393,24 @@ export default function ScheduleScreen({ navigation, route }) {
                   isSat && !isSelected && { color: C.accentBlue },
                 ]}>{cell.date}</Text>
               </View>
-              {rangeProjs.map((proj) => (
-                <View key={proj.id} style={[
-                  s.projBar,
-                  {
-                    marginLeft: cell.str === proj.startDate ? 4 : 0,
-                    marginRight: cell.str === proj.deadline ? 4 : 0,
-                    backgroundColor: statusColor(proj.status) + 'CC',
-                    borderTopLeftRadius: cell.str === proj.startDate ? 4 : 0,
-                    borderBottomLeftRadius: cell.str === proj.startDate ? 4 : 0,
-                    borderTopRightRadius: cell.str === proj.deadline ? 4 : 0,
-                    borderBottomRightRadius: cell.str === proj.deadline ? 4 : 0,
-                  },
-                ]} />
-              ))}
+              {rangeProjs.map((proj) => {
+                const sd = (proj.startDate || '').split(' ')[0];
+                const dl = (proj.deadline || '').split(' ')[0];
+                return (
+                  <View key={proj.id} style={[
+                    s.projBar,
+                    {
+                      marginLeft: cell.str === sd ? 4 : 0,
+                      marginRight: cell.str === dl ? 4 : 0,
+                      backgroundColor: statusColor(proj.status) + 'CC',
+                      borderTopLeftRadius: cell.str === sd ? 4 : 0,
+                      borderBottomLeftRadius: cell.str === sd ? 4 : 0,
+                      borderTopRightRadius: cell.str === dl ? 4 : 0,
+                      borderBottomRightRadius: cell.str === dl ? 4 : 0,
+                    },
+                  ]} />
+                );
+              })}
               {cellDots.length > 0 && (
                 <View style={s.dotRow}>
                   {cellDots.map((color, di) => (
@@ -385,7 +426,7 @@ export default function ScheduleScreen({ navigation, route }) {
 
       {/* ── 선택 날짜 ── */}
       <View style={s.dateHeader}>
-        <Text style={s.dateLabel}>{formatDateKo(selectedDate)}</Text>
+        <Text style={s.dateLabel}>{selectedDate ? formatDateKo(selectedDate) : `${calYear}년 ${calMonth}월 전체`}</Text>
         <Text style={s.dateCount}>{daySchedules.length + dayProjects.length}건</Text>
       </View>
 
@@ -393,10 +434,10 @@ export default function ScheduleScreen({ navigation, route }) {
       <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
         {daySchedules.length === 0 && dayProjects.length === 0 ? (
           <View style={s.emptyWrap}>
-            <Text style={s.emptyText}>이 날의 일정이 없습니다</Text>
+            <Text style={s.emptyText}>{selectedDate ? '이 날의 일정이 없습니다' : '이 달의 일정이 없습니다'}</Text>
             <Text style={s.emptyHint}>하단 + 버튼으로 추가하거나 AI에게 부탁해보세요</Text>
           </View>
-        ) : (
+        ) : selectedDate ? (
           <>
             {dayProjects.map((proj) => {
               const dayLabel = projDayLabel(proj, selectedDate);
@@ -429,7 +470,9 @@ export default function ScheduleScreen({ navigation, route }) {
                   { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
                 ])}
               >
-                <Text style={s.scheduleTime}>{displayTime(item.time)}</Text>
+                <View>
+                  <Text style={s.scheduleTime}>{displayTime(item.time)}</Text>
+                </View>
                 <View style={s.scheduleDivider} />
                 <View style={s.scheduleBody}>
                   <View style={s.scheduleTitleRow}>
@@ -443,11 +486,71 @@ export default function ScheduleScreen({ navigation, route }) {
               </TouchableOpacity>
             ))}
           </>
+        ) : (
+          [
+            ...dayProjects.map((p) => ({ _type: 'project', _date: p.startDate || p.deadline, _time: '00:00', ...p })),
+            ...daySchedules.map((sc) => ({ _type: 'schedule', _date: sc.date, _time: sc.time, ...sc })),
+          ]
+            .sort((a, b) => a._date.localeCompare(b._date) || a._time.localeCompare(b._time))
+            .map((item) => {
+              if (item._type === 'project') {
+                const dayLabel = { text: item.deadline.slice(5).replace('-', '/'), color: C.gold };
+                return (
+                  <TouchableOpacity key={`p-${item.id}`} style={[s.projectCard, { borderColor: dayLabel.color + '55' }]} activeOpacity={0.7} onPress={() => { setViewProject(item); setShowProjectView(true); }}>
+                    <Text style={[s.projectDeadlineLabel, { color: dayLabel.color }]}>{dayLabel.text}</Text>
+                    <View style={s.scheduleDivider} />
+                    <View style={s.scheduleBody}>
+                      <View style={s.scheduleTitleRow}>
+                        <Text style={s.scheduleTitle}>{item.title}</Text>
+                        <View style={[s.tagBadge, { backgroundColor: statusColor(item.status) + '22', borderColor: statusColor(item.status) + '55' }]}>
+                          <Text style={[s.tagText, { color: statusColor(item.status) }]}>{item.status}</Text>
+                        </View>
+                      </View>
+                      {item.startDate && (
+                        <Text style={s.scheduleNotes}>{item.startDate} ~ {item.deadline}</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              }
+              return (
+                <TouchableOpacity
+                  key={`s-${item.id}`}
+                  style={s.scheduleCard}
+                  activeOpacity={0.7}
+                  onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
+                  onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
+                    { text: '취소', style: 'cancel' },
+                    { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
+                  ])}
+                >
+                  <View>
+                    <Text style={s.scheduleDateSmall}>{item.date.slice(5).replace('-', '/')}</Text>
+                    <Text style={s.scheduleTime}>{displayTime(item.time)}</Text>
+                  </View>
+                  <View style={s.scheduleDivider} />
+                  <View style={s.scheduleBody}>
+                    <View style={s.scheduleTitleRow}>
+                      <Text style={s.scheduleTitle}>{item.title}</Text>
+                      <View style={[s.tagBadge, { backgroundColor: tagColor(item.tag) + '22', borderColor: tagColor(item.tag) + '55' }]}>
+                        <Text style={[s.tagText, { color: tagColor(item.tag) }]}>{item.tag}</Text>
+                      </View>
+                    </View>
+                    {item.notes ? <Text style={s.scheduleNotes}>{item.notes}</Text> : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
         )}
       </ScrollView>
 
       {/* ── 추가 버튼 ── */}
-      <TouchableOpacity style={s.fab} onPress={() => { setNewStartDate(selectedDate); setNewEndDate(''); setShowAdd(true); }}>
+      <TouchableOpacity style={s.fab} onPress={() => {
+        const defaultDate = selectedDate || (calYear === today.getFullYear() && calMonth === today.getMonth() + 1
+          ? TODAY_STR
+          : `${calYear}-${String(calMonth).padStart(2, '0')}-01`);
+        setNewStartDate(defaultDate); setNewEndDate(''); setShowAdd(true);
+      }}>
         <Text style={s.fabText}>+</Text>
       </TouchableOpacity>
 
@@ -460,26 +563,33 @@ export default function ScheduleScreen({ navigation, route }) {
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Text style={s.modalTitle}>일정 추가</Text>
-              <Text style={s.modalDateLabel}>{formatDateKo(selectedDate)}</Text>
+              <Text style={s.modalDateLabel}>{selectedDate ? formatDateKo(selectedDate) : `${calYear}년 ${calMonth}월`}</Text>
 
               <Text style={s.inputLabel}>제목</Text>
               <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
 
-              <Text style={s.inputLabel}>시작일</Text>
-              <TextInput style={s.input} value={newStartDate} onChangeText={(t) => setNewStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-
-              <Text style={s.inputLabel}>마감일 (선택)</Text>
-              <TextInput style={s.input} value={newEndDate} onChangeText={(t) => setNewEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-
-              <Text style={s.inputLabel}>시간</Text>
+              <Text style={s.inputLabel}>시작일시</Text>
+              <TextInput style={[s.input, { marginBottom: 8 }]} value={newStartDate} onChangeText={(t) => setNewStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
               <View style={s.timeRow}>
-                <TouchableOpacity style={[s.ampmBtn, newAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewAmPm('오전')}>
-                  <Text style={[s.ampmBtnText, newAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오전')}>
+                  <Text style={[s.ampmBtnText, newStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.ampmBtn, newAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewAmPm('오후')}>
-                  <Text style={[s.ampmBtnText, newAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오후')}>
+                  <Text style={[s.ampmBtnText, newStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                 </TouchableOpacity>
-                <TextInput style={[s.input, { flex: 1 }]} value={newTime} onChangeText={(t) => setNewTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                <TextInput style={[s.input, { flex: 1 }]} value={newStartTime} onChangeText={(t) => setNewStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+              </View>
+
+              <Text style={s.inputLabel}>마감일시 (선택)</Text>
+              <TextInput style={[s.input, { marginBottom: 8 }]} value={newEndDate} onChangeText={(t) => setNewEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+              <View style={s.timeRow}>
+                <TouchableOpacity style={[s.ampmBtn, newEndAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewEndAmPm('오전')}>
+                  <Text style={[s.ampmBtnText, newEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.ampmBtn, newEndAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewEndAmPm('오후')}>
+                  <Text style={[s.ampmBtnText, newEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                </TouchableOpacity>
+                <TextInput style={[s.input, { flex: 1 }]} value={newEndTime} onChangeText={(t) => setNewEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
               </View>
 
               <Text style={s.inputLabel}>분류</Text>
@@ -517,7 +627,7 @@ export default function ScheduleScreen({ navigation, route }) {
               <TextInput style={[s.input, { height: 72 }]} value={newNotes} onChangeText={setNewNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
 
               <View style={s.modalBtns}>
-                <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setNewStartDate(''); setNewEndDate(''); setNewAmPm('오전'); }}>
+                <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전'); setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전'); }}>
                   <Text style={s.modalCancelText}>취소</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.modalConfirm} onPress={handleAdd}>
@@ -685,7 +795,18 @@ export default function ScheduleScreen({ navigation, route }) {
                   <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                     {!editMode && (
                       <>
-                        <TouchableOpacity onPress={() => { const { ampm, time12 } = from24h(viewSchedule.time); setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm); setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []); setEditStartDate(viewSchedule.startDate || ''); setEditEndDate(viewSchedule.endDate || ''); setEditMode(true); }}>
+                        <TouchableOpacity onPress={() => {
+                          const { ampm, time12 } = from24h(viewSchedule.time);
+                          setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm);
+                          setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []);
+                          const sp = (viewSchedule.startDate || '').split(' ');
+                          setEditStartDate(sp[0] || '');
+                          if (sp[1]) { const r = from24h(sp[1]); setEditStartAmPm(r.ampm); setEditStartTime(r.time12); } else { setEditStartAmPm('오전'); setEditStartTime('09:00'); }
+                          const ep = (viewSchedule.endDate || '').split(' ');
+                          setEditEndDate(ep[0] || '');
+                          if (ep[1]) { const r = from24h(ep[1]); setEditEndAmPm(r.ampm); setEditEndTime(r.time12); } else { setEditEndAmPm('오후'); setEditEndTime('06:00'); }
+                          setEditMode(true);
+                        }}>
                           <Text style={s.editBtn}>수정</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => Alert.alert('삭제', `"${viewSchedule.title}" 일정을 삭제할까요?`, [
@@ -707,21 +828,28 @@ export default function ScheduleScreen({ navigation, route }) {
                     <Text style={s.inputLabel}>제목</Text>
                     <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
 
-                    <Text style={s.inputLabel}>시작일</Text>
-                    <TextInput style={s.input} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-
-                    <Text style={s.inputLabel}>마감일 (선택)</Text>
-                    <TextInput style={s.input} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-
-                    <Text style={s.inputLabel}>시간</Text>
+                    <Text style={s.inputLabel}>시작일시</Text>
+                    <TextInput style={[s.input, { marginBottom: 8 }]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
                     <View style={s.timeRow}>
-                      <TouchableOpacity style={[s.ampmBtn, editAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditAmPm('오전')}>
-                        <Text style={[s.ampmBtnText, editAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오전')}>
+                        <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={[s.ampmBtn, editAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditAmPm('오후')}>
-                        <Text style={[s.ampmBtnText, editAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오후')}>
+                        <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                       </TouchableOpacity>
-                      <TextInput style={[s.input, { flex: 1 }]} value={editTime} onChangeText={(t) => setEditTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                      <TextInput style={[s.input, { flex: 1 }]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                    </View>
+
+                    <Text style={s.inputLabel}>마감일시 (선택)</Text>
+                    <TextInput style={[s.input, { marginBottom: 8 }]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+                    <View style={s.timeRow}>
+                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditEndAmPm('오전')}>
+                        <Text style={[s.ampmBtnText, editEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditEndAmPm('오후')}>
+                        <Text style={[s.ampmBtnText, editEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                      </TouchableOpacity>
+                      <TextInput style={[s.input, { flex: 1 }]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
                     </View>
 
                     <Text style={s.inputLabel}>분류</Text>
@@ -1039,8 +1167,10 @@ function fmtTime(text) {
 }
 
 function projDayLabel(proj, date) {
-  if (proj.startDate === date) return { text: '시작', color: C.accentTeal };
-  if (proj.deadline === date) return { text: '마감', color: C.gold };
+  const sd = (proj.startDate || '').split(' ')[0];
+  const dl = (proj.deadline || '').split(' ')[0];
+  if (sd === date) return { text: '시작', color: C.accentTeal };
+  if (dl === date) return { text: '마감', color: C.gold };
   const days = daysUntil(proj.deadline);
   return { text: `D-${days}`, color: C.accentBlue };
 }
@@ -1048,7 +1178,8 @@ function projDayLabel(proj, date) {
 function daysUntil(deadlineStr) {
   const t = new Date();
   t.setHours(0, 0, 0, 0);
-  return Math.round((new Date(deadlineStr) - t) / 86400000);
+  const datePart = (deadlineStr || '').split(' ')[0];
+  return Math.round((new Date(datePart) - t) / 86400000);
 }
 
 function daysLabel(days) {
@@ -1129,6 +1260,7 @@ const s = StyleSheet.create({
   contactLink: { color: C.accentBlue, textDecorationLine: 'underline' },
   projectDeadlineLabel: { color: C.gold, fontSize: 11, fontWeight: '600', width: 44, textAlign: 'center' },
   scheduleTime: { color: C.textSecondary, fontSize: 12, fontWeight: '500', width: 64 },
+  scheduleDateSmall: { color: C.textDim, fontSize: 9, fontWeight: '500', marginBottom: 2 },
   scheduleDivider: { width: 1, height: 32, backgroundColor: C.borderHigh },
   scheduleBody: { flex: 1, gap: 4 },
   scheduleTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

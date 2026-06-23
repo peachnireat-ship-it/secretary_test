@@ -1,6 +1,7 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  Animated, PanResponder,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -9,6 +10,30 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
+
+function useSwipeClose(onClose) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 2,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) translateY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 80 || (gs.vy > 0.8 && gs.dy > 10)) {
+          Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }).start(() => {
+            translateY.setValue(0);
+            onClose();
+          });
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+        }
+      },
+    })
+  ).current;
+  return { panHandlers: panResponder.panHandlers, animStyle: { transform: [{ translateY }] } };
+}
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
 
@@ -100,10 +125,40 @@ function normalizeDeadline(str) {
   return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
 }
 
+function fmtTime12(text) {
+  const d = text.replace(/\D/g, '').slice(0, 4);
+  if (d.length <= 1) return d;
+  const hRaw = parseInt(d.slice(0, 2), 10);
+  const h = Math.min(Math.max(hRaw, 1), 12);
+  const hStr = String(h).padStart(2, '0');
+  if (d.length === 2) return hStr;
+  const mStr = d.slice(2);
+  if (d.length === 3) return `${hStr}:${mStr}`;
+  const mRaw = parseInt(mStr, 10);
+  return `${hStr}:${String(Math.min(mRaw, 59)).padStart(2, '0')}`;
+}
+function to24h(ampm, time12) {
+  const parts = time12.split(':');
+  let h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  if (ampm === '오후' && h !== 12) h += 12;
+  if (ampm === '오전' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+function from24h(time24) {
+  const parts = (time24 || '09:00').split(':');
+  const h = parseInt(parts[0], 10) || 0;
+  const mStr = parts[1] || '00';
+  const ampm = h < 12 ? '오전' : '오후';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return { ampm, time12: `${String(h12).padStart(2, '0')}:${mStr}` };
+}
+
 function daysUntil(deadlineStr) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const d = new Date(deadlineStr);
+  const datePart = (deadlineStr || '').split(' ')[0];
+  const d = new Date(datePart);
   return Math.round((d - today) / 86400000);
 }
 
@@ -148,7 +203,11 @@ export default function ProjectScreen({ navigation, route }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newStartDate, setNewStartDate] = useState('');
+  const [newStartTime, setNewStartTime] = useState('09:00');
+  const [newStartAmPm, setNewStartAmPm] = useState('오전');
   const [newDeadline, setNewDeadline] = useState('');
+  const [newDeadlineTime, setNewDeadlineTime] = useState('06:00');
+  const [newDeadlineAmPm, setNewDeadlineAmPm] = useState('오후');
   const [newStatus, setNewStatus] = useState('진행중');
   const [newProgress, setNewProgress] = useState('0');
   const [newPriority, setNewPriority] = useState('보통');
@@ -160,7 +219,11 @@ export default function ProjectScreen({ navigation, route }) {
   const [viewProject, setViewProject] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [editStartDate, setEditStartDate] = useState('');
+  const [editStartTime, setEditStartTime] = useState('09:00');
+  const [editStartAmPm, setEditStartAmPm] = useState('오전');
   const [editDeadline, setEditDeadline] = useState('');
+  const [editDeadlineTime, setEditDeadlineTime] = useState('06:00');
+  const [editDeadlineAmPm, setEditDeadlineAmPm] = useState('오후');
   const [editStatus, setEditStatus] = useState('진행중');
   const [editProgress, setEditProgress] = useState(0);
   const [quickSlider, setQuickSlider] = useState(null);
@@ -196,6 +259,12 @@ export default function ProjectScreen({ navigation, route }) {
   const [chatInput, setChatInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
+
+  const swipeDetail = useSwipeClose(() => setShowDetail(false));
+  const swipeAdd = useSwipeClose(() => setShowAdd(false));
+  const swipeProjectView = useSwipeClose(() => setShowProjectView(false));
+  const swipeMeetingDetail = useSwipeClose(() => setShowMeetingDetail(false));
+  const swipePersonDetail = useSwipeClose(() => setShowPersonDetail(false));
 
   useEffect(() => {
     const addTask = route?.params?.addTask;
@@ -254,10 +323,13 @@ export default function ProjectScreen({ navigation, route }) {
       return;
     }
     const meetingRecord = pendingMeetingRecordId ? meetingRecords.find((r) => r.id === pendingMeetingRecordId) : null;
+    const startDateNorm = normalizeDeadline(newStartDate.trim());
+    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(newStartAmPm, newStartTime)}` : '';
+    const deadlineStr = `${normalizeDeadline(newDeadline.trim())} ${to24h(newDeadlineAmPm, newDeadlineTime)}`;
     const updated = await addProject({
       title: newTitle.trim(),
-      startDate: normalizeDeadline(newStartDate.trim()) || '',
-      deadline: normalizeDeadline(newDeadline.trim()),
+      startDate: startDateStr,
+      deadline: deadlineStr,
       status: newStatus,
       progress: parseInt(newProgress) || 0,
       priority: newPriority,
@@ -267,8 +339,9 @@ export default function ProjectScreen({ navigation, route }) {
     });
     setProjects(updated);
     setShowAdd(false);
-    setNewTitle(''); setNewStartDate(''); setNewDeadline(''); setNewStatus('진행중');
-    setNewProgress('0'); setNewPriority('보통'); setNewNotes('');
+    setNewTitle(''); setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전');
+    setNewDeadline(''); setNewDeadlineTime('06:00'); setNewDeadlineAmPm('오후');
+    setNewStatus('진행중'); setNewProgress('0'); setNewPriority('보통'); setNewNotes('');
     setPendingMeetingRecordId(null);
   }
 
@@ -282,8 +355,29 @@ export default function ProjectScreen({ navigation, route }) {
   function openDetail(project) {
     setDetailProject(project);
     setEditTitle(project.title);
-    setEditStartDate(project.startDate || '');
-    setEditDeadline(project.deadline);
+
+    const startParts = (project.startDate || '').split(' ');
+    setEditStartDate(startParts[0] || '');
+    if (startParts[1]) {
+      const { ampm, time12 } = from24h(startParts[1]);
+      setEditStartAmPm(ampm);
+      setEditStartTime(time12);
+    } else {
+      setEditStartAmPm('오전');
+      setEditStartTime('09:00');
+    }
+
+    const deadlineParts = (project.deadline || '').split(' ');
+    setEditDeadline(deadlineParts[0] || '');
+    if (deadlineParts[1]) {
+      const { ampm, time12 } = from24h(deadlineParts[1]);
+      setEditDeadlineAmPm(ampm);
+      setEditDeadlineTime(time12);
+    } else {
+      setEditDeadlineAmPm('오후');
+      setEditDeadlineTime('06:00');
+    }
+
     setEditStatus(project.status);
     setEditProgress(project.progress ?? 0);
     setEditPriority(project.priority);
@@ -298,10 +392,13 @@ export default function ProjectScreen({ navigation, route }) {
       Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
       return;
     }
+    const startDateNorm = normalizeDeadline(editStartDate.trim());
+    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(editStartAmPm, editStartTime)}` : '';
+    const deadlineStr = `${normalizeDeadline(editDeadline.trim())} ${to24h(editDeadlineAmPm, editDeadlineTime)}`;
     const updated = await updateProject(detailProject.id, {
       title: editTitle.trim(),
-      startDate: normalizeDeadline(editStartDate.trim()) || '',
-      deadline: normalizeDeadline(editDeadline.trim()),
+      startDate: startDateStr,
+      deadline: deadlineStr,
       status: editStatus,
       progress: editProgress,
       priority: editPriority,
@@ -661,8 +758,10 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 프로젝트 상세 모달 ── */}
       <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => setShowDetail(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
-            <View style={s.modalHandle} />
+          <Animated.View style={[s.modalSheet, { maxHeight: '90%' }, swipeDetail.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeDetail.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
             {detailProject && (
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* 헤더: 제목 + 닫기 */}
@@ -713,10 +812,10 @@ export default function ProjectScreen({ navigation, route }) {
                   />
                 </View>
 
-                {/* 시작일 */}
-                <Text style={s.inputLabel}>시작일 (YYYY-MM-DD, 선택)</Text>
+                {/* 시작일시 */}
+                <Text style={s.inputLabel}>시작일시 (선택)</Text>
                 <TextInput
-                  style={s.input}
+                  style={[s.input, { marginBottom: 8 }]}
                   value={editStartDate}
                   onChangeText={(t) => setEditStartDate(formatDeadline(t))}
                   placeholder="YYYY-MM-DD"
@@ -724,11 +823,20 @@ export default function ProjectScreen({ navigation, route }) {
                   keyboardType="numeric"
                   maxLength={10}
                 />
+                <View style={s.timeRow}>
+                  <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오전')}>
+                    <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오후')}>
+                    <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                  </TouchableOpacity>
+                  <TextInput style={[s.input, { flex: 1 }]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                </View>
 
-                {/* 마감일 */}
-                <Text style={s.inputLabel}>마감일 (YYYY-MM-DD)</Text>
+                {/* 마감일시 */}
+                <Text style={s.inputLabel}>마감일시</Text>
                 <TextInput
-                  style={s.input}
+                  style={[s.input, { marginBottom: 8 }]}
                   value={editDeadline}
                   onChangeText={(t) => setEditDeadline(formatDeadline(t))}
                   placeholder="YYYY-MM-DD"
@@ -736,6 +844,15 @@ export default function ProjectScreen({ navigation, route }) {
                   keyboardType="numeric"
                   maxLength={10}
                 />
+                <View style={s.timeRow}>
+                  <TouchableOpacity style={[s.ampmBtn, editDeadlineAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditDeadlineAmPm('오전')}>
+                    <Text style={[s.ampmBtnText, editDeadlineAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.ampmBtn, editDeadlineAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditDeadlineAmPm('오후')}>
+                    <Text style={[s.ampmBtnText, editDeadlineAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                  </TouchableOpacity>
+                  <TextInput style={[s.input, { flex: 1 }]} value={editDeadlineTime} onChangeText={(t) => setEditDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                </View>
 
                 {/* 메모 */}
                 <Text style={s.inputLabel}>메모 (선택)</Text>
@@ -821,26 +938,46 @@ export default function ProjectScreen({ navigation, route }) {
                 </View>
               </ScrollView>
             )}
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
       {/* ── 프로젝트 추가 모달 ── */}
-      <Modal visible={showAdd} animationType="slide" transparent>
+      <Modal visible={showAdd} animationType="slide" transparent onRequestClose={() => setShowAdd(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '92%' }]}>
-            <View style={s.modalHandle} />
+          <Animated.View style={[s.modalSheet, { maxHeight: '92%' }, swipeAdd.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeAdd.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
             <Text style={s.modalTitle}>프로젝트 추가</Text>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
             <Text style={s.inputLabel}>제목</Text>
             <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="프로젝트 이름" placeholderTextColor={C.textDim} />
 
-            <Text style={s.inputLabel}>시작일 (YYYY-MM-DD, 선택)</Text>
-            <TextInput style={s.input} value={newStartDate} onChangeText={(t) => setNewStartDate(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <Text style={s.inputLabel}>시작일시 (선택)</Text>
+            <TextInput style={[s.input, { marginBottom: 8 }]} value={newStartDate} onChangeText={(t) => setNewStartDate(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <View style={s.timeRow}>
+              <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오전')}>
+                <Text style={[s.ampmBtnText, newStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오후')}>
+                <Text style={[s.ampmBtnText, newStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+              </TouchableOpacity>
+              <TextInput style={[s.input, { flex: 1 }]} value={newStartTime} onChangeText={(t) => setNewStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+            </View>
 
-            <Text style={s.inputLabel}>마감일 (YYYY-MM-DD)</Text>
-            <TextInput style={s.input} value={newDeadline} onChangeText={(t) => setNewDeadline(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <Text style={s.inputLabel}>마감일시</Text>
+            <TextInput style={[s.input, { marginBottom: 8 }]} value={newDeadline} onChangeText={(t) => setNewDeadline(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <View style={s.timeRow}>
+              <TouchableOpacity style={[s.ampmBtn, newDeadlineAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewDeadlineAmPm('오전')}>
+                <Text style={[s.ampmBtnText, newDeadlineAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.ampmBtn, newDeadlineAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewDeadlineAmPm('오후')}>
+                <Text style={[s.ampmBtnText, newDeadlineAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+              </TouchableOpacity>
+              <TextInput style={[s.input, { flex: 1 }]} value={newDeadlineTime} onChangeText={(t) => setNewDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+            </View>
 
             <Text style={s.inputLabel}>상태</Text>
             <View style={s.optionRow}>
@@ -875,7 +1012,7 @@ export default function ProjectScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
             </ScrollView>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -946,8 +1083,10 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 회의록 상세 모달 ── */}
       <Modal visible={showMeetingDetail} animationType="slide" transparent onRequestClose={() => setShowMeetingDetail(false)}>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
-            <View style={s.modalHandle} />
+          <Animated.View style={[s.modalSheet, { maxHeight: '90%' }, swipeMeetingDetail.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeMeetingDetail.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
             {selectedMeeting && (
               <>
                 <View style={s.meetingDetailHeader}>
@@ -1031,7 +1170,7 @@ export default function ProjectScreen({ navigation, route }) {
                 </ScrollView>
               </>
             )}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -1276,8 +1415,10 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 인물 상세 모달 ── */}
       <Modal visible={showPersonDetail} animationType="slide" transparent onRequestClose={() => setShowPersonDetail(false)}>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '85%' }]}>
-            <View style={s.modalHandle} />
+          <Animated.View style={[s.modalSheet, { maxHeight: '85%' }, swipePersonDetail.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipePersonDetail.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
             {personDetailClient && (
               <>
                 <View style={s.personDetailHeader}>
@@ -1329,7 +1470,7 @@ export default function ProjectScreen({ navigation, route }) {
                 </ScrollView>
               </>
             )}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -1374,8 +1515,10 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 프로젝트 보기 모달 (읽기 전용) ── */}
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '80%' }]}>
-            <View style={s.modalHandle} />
+          <Animated.View style={[s.modalSheet, { maxHeight: '80%' }, swipeProjectView.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeProjectView.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
             {viewProject && (() => {
               const days = daysUntil(viewProject.deadline);
               const linkedMeetings = viewProject.meetingRecordIds?.length
@@ -1448,7 +1591,7 @@ export default function ProjectScreen({ navigation, route }) {
                 </ScrollView>
               );
             })()}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -1630,7 +1773,8 @@ const s = StyleSheet.create({
 
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
   modalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
-  modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
+  modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 2 },
   inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 8, marginTop: 14 },
   input: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12 },
@@ -1695,6 +1839,12 @@ const s = StyleSheet.create({
   sliderWrap: { marginBottom: 4, alignItems: 'center' },
   slider: { width: '100%', height: 40 },
   sliderVal: { color: C.textPrimary, fontSize: 20, fontWeight: '200', textAlign: 'center', marginBottom: 2 },
+
+  timeRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 4 },
+  ampmBtn: { paddingHorizontal: 12, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  ampmBtnActive: { borderColor: C.gold + '88', backgroundColor: C.gold + '22' },
+  ampmBtnText: { color: C.textDim, fontSize: 13 },
+  ampmBtnTextActive: { color: C.gold, fontWeight: '600' },
 
   qsOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
   qsSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 24, alignItems: 'center' },

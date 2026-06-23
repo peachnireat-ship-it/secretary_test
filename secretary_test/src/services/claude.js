@@ -60,8 +60,8 @@ export function josa과와(word) {
 }
 
 // 한국어, 공백(\s), 숫자(0-9), 기본 문장부호(.?!,)를 제외한 모든 것을 제거
-function stripNonKorean(text) {
-  return text.replace(/[^\p{Script=Hangul}\s0-9.?!,\[\]]/gu, '');
+export function stripNonKorean(text) {
+  return text.replace(/[^\p{Script=Hangul}\s0-9.?!,:\[\]]/gu, '');
 }
 
 export async function askClaude(messages, systemPrompt, { raw = false } = {}) {
@@ -186,16 +186,31 @@ export async function fixForeignWordsInText(text) {
   }
 }
 
+function fmtDate(dateStr) {
+  if (!dateStr) return '기록 없음';
+  const [y, m, d] = dateStr.split('-');
+  return `${y}년 ${m}월 ${d}일`;
+}
+
+export function normalizeAIDates(text) {
+  if (!text) return text;
+  // YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD → yyyy년 mm월 dd일
+  return text.replace(/(\d{4})[-./](\d{2})[-./](\d{2})/g, '$1년 $2월 $3일');
+}
+
 export function buildClientSystem(clients, histories) {
   const clientList = clients
     .map((c) => {
       const cHistory = histories
         .filter((h) => h.clientId === c.id)
         .sort((a, b) => b.createdAt - a.createdAt);
-      const lastContact = cHistory[0]?.date || '기록 없음';
-      return `## ${c.company} — ${c.name} (${c.role})\n연락처: ${c.contact}\n메모: ${c.notes}\n마지막 연락: ${lastContact}\n히스토리:\n${cHistory.map((h) => `  - [${h.date}] ${h.type}: ${h.title} → 결과: ${h.result}`).join('\n') || '  (없음)'}`;
+      const lastContact = cHistory[0]?.date ? fmtDate(cHistory[0].date) : '기록 없음';
+      return `## ${c.company} — ${c.name} (${c.role})\n연락처: ${c.contact}\n메모: ${c.notes}\n마지막 연락: ${lastContact}\n히스토리:\n${cHistory.map((h) => `  - [${fmtDate(h.date)}] ${h.type}: ${h.title} → 결과: ${h.result}`).join('\n') || '  (없음)'}`;
     })
     .join('\n\n');
+
+  const today = new Date();
+  const todayLabel = `${today.getFullYear()}년 ${String(today.getMonth() + 1).padStart(2, '0')}월 ${String(today.getDate()).padStart(2, '0')}일`;
 
   return `[언어 규칙 - 최우선] 반드시 한국어(한글)로만 응답하세요. 영어 문장도 사용하지 마세요. 회사명·인명 등 고유명사에만 예외적으로 영어를 쓸 수 있습니다. 한자(漢字), 중국어 간체·번체, 일본어 히라가나·가타카나는 절대 사용 금지입니다.
 
@@ -204,7 +219,7 @@ export function buildClientSystem(clients, histories) {
 등록된 거래처 및 히스토리:
 ${clientList || '(등록된 거래처 없음)'}
 
-오늘 날짜: ${new Date().toISOString().split('T')[0]}
+오늘 날짜: ${todayLabel}
 
 다음 작업을 수행할 수 있습니다:
 1. 특정 거래처와의 관계 및 히스토리 요약
@@ -212,5 +227,6 @@ ${clientList || '(등록된 거래처 없음)'}
 3. 후속 조치 및 다음 스텝 제안
 4. 거래처 관계 분석 및 전략적 조언
 
-모든 응답은 자연스러운 한국어로만 작성하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.`;
+모든 응답은 자연스러운 한국어로만 작성하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.
+날짜를 언급할 때는 반드시 'yyyy년 mm월 dd일' 형식으로 표기하세요 (예: 2024년 01월 15일). YYYY-MM-DD, YYYY.MM.DD, YYYYMMDD 등 다른 형식은 절대 사용하지 마세요.`;
 }

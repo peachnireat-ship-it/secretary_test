@@ -14,6 +14,7 @@ const KEYS = {
   pyannoteUrl: 'pyannote_url',
   currentUser: 'current_user_v1',
   clientFavorites: 'client_favorites_v1',
+  userProfile: 'user_profile_v1',
 };
 
 const TEST_ACCOUNTS = [
@@ -148,6 +149,13 @@ export async function addClient(client) {
   return updated;
 }
 
+export async function updateClient(id, fields) {
+  const list = await getClients();
+  const updated = list.map((c) => (c.id === id ? { ...c, ...fields } : c));
+  await saveClients(updated);
+  return updated;
+}
+
 // ── Histories ─────────────────────────────────────────────
 export async function getHistories() {
   const key = await userKey(KEYS.histories);
@@ -166,6 +174,20 @@ export async function saveHistories(histories) {
 export async function addHistory(history) {
   const list = await getHistories();
   const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...history }, ...list];
+  await saveHistories(updated);
+  return updated;
+}
+
+export async function updateHistory(id, changes) {
+  const list = await getHistories();
+  const updated = list.map((h) => h.id === id ? { ...h, ...changes } : h);
+  await saveHistories(updated);
+  return updated;
+}
+
+export async function deleteHistory(id) {
+  const list = await getHistories();
+  const updated = list.filter((h) => h.id !== id);
   await saveHistories(updated);
   return updated;
 }
@@ -322,6 +344,25 @@ export async function toggleClientFavorite(clientId) {
     : [...current, clientId];
   await AsyncStorage.setItem(key, JSON.stringify(updated));
   return updated;
+}
+
+// ── User Profile (extended) ───────────────────────────────
+export async function getUserProfile() {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const key = `${KEYS.userProfile}_${user.id}`;
+  const raw = await AsyncStorage.getItem(key);
+  const ext = raw ? JSON.parse(raw) : {};
+  return { contact: '', notes: '', ...user, ...ext };
+}
+
+export async function saveUserProfile(fields) {
+  const user = await getCurrentUser();
+  if (!user) return;
+  const key = `${KEYS.userProfile}_${user.id}`;
+  const raw = await AsyncStorage.getItem(key);
+  const current = raw ? JSON.parse(raw) : {};
+  await AsyncStorage.setItem(key, JSON.stringify({ ...current, ...fields }));
 }
 
 // ── Pyannote Server URL ───────────────────────────────────

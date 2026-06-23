@@ -1,8 +1,8 @@
-import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
+import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, Modal, KeyboardAvoidingView } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getTestAccounts, switchAccount } from '../services/storage';
+import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getTestAccounts, switchAccount, getUserProfile, saveUserProfile } from '../services/storage';
 
 export default function SettingsScreen({ user, onUserChange }) {
   const insets = useSafeAreaInsets();
@@ -18,11 +18,17 @@ export default function SettingsScreen({ user, onUserChange }) {
   const [pyannoteStatus, setPyannoteStatus] = useState('');
   const [pyannoteChecking, setPyannoteChecking] = useState(false);
 
+  const [profile, setProfile] = useState(null);
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
+  const [editContact, setEditContact] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+
   useEffect(() => {
     getApiKey().then((k) => { if (k) setApiKeyState(k); });
     getGrokApiKey().then((k) => { if (k) setGrokApiKeyState(k); });
     getAiProvider().then(setProviderState);
     getPyannoteUrl().then((u) => { if (u) setPyannoteUrlState(u); });
+    getUserProfile().then((p) => { if (p) setProfile(p); });
   }, []);
 
   async function handleProviderChange(p) {
@@ -96,7 +102,8 @@ export default function SettingsScreen({ user, onUserChange }) {
     : grokApiKey;
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={[s.scroll, { paddingTop: insets.top + 16 }]} showsVerticalScrollIndicator={false}>
+    <View style={s.root}>
+    <ScrollView contentContainerStyle={[s.scroll, { paddingTop: insets.top + 16 }]} showsVerticalScrollIndicator={false}>
       <View style={s.header}>
         <Text style={s.headerTitle}>설정</Text>
       </View>
@@ -267,7 +274,8 @@ export default function SettingsScreen({ user, onUserChange }) {
       {user && (
         <View style={s.section}>
           <Text style={s.sectionLabel}>계정</Text>
-          {/* 현재 로그인 계정 */}
+
+          {/* 내 프로필 */}
           <View style={[s.card, { marginBottom: 10 }]}>
             <View style={s.cardHeader}>
               <View style={s.accountAvatar}>
@@ -276,9 +284,23 @@ export default function SettingsScreen({ user, onUserChange }) {
               <View style={{ flex: 1 }}>
                 <Text style={s.accountName}>{user.name}</Text>
                 <Text style={s.accountEmail}>{user.email}</Text>
-                {user.team && <Text style={s.accountTeam}>{user.team}</Text>}
+                {user.team && <Text style={s.accountTeam}>{user.team}{user.role ? ` · ${user.role}` : ''}</Text>}
+                {profile?.contact ? <Text style={s.profileContact}>{profile.contact}</Text> : null}
+                {profile?.notes ? <Text style={s.profileNotes}>{profile.notes}</Text> : null}
               </View>
-              <View style={s.activeBadge}><Text style={s.activeBadgeText}>현재</Text></View>
+              <View style={{ gap: 6, alignItems: 'flex-end' }}>
+                <View style={s.activeBadge}><Text style={s.activeBadgeText}>현재</Text></View>
+                <TouchableOpacity
+                  style={s.profileEditBtn}
+                  onPress={() => {
+                    setEditContact(profile?.contact || '');
+                    setEditNotes(profile?.notes || '');
+                    setShowProfileEdit(true);
+                  }}
+                >
+                  <Text style={s.profileEditBtnText}>내 정보 수정</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
           {/* 다른 계정 목록 */}
@@ -343,6 +365,55 @@ export default function SettingsScreen({ user, onUserChange }) {
 
       <View style={{ height: 60 }} />
     </ScrollView>
+
+      {/* ── 내 정보 수정 모달 ── */}
+      <Modal visible={showProfileEdit} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>내 정보 수정</Text>
+            <Text style={s.modalSubTitle}>{user?.name} · {user?.team}</Text>
+
+            <Text style={s.inputLabel}>연락처 (전화번호)</Text>
+            <TextInput
+              style={s.profileInput}
+              value={editContact}
+              onChangeText={setEditContact}
+              placeholder="010-0000-0000"
+              placeholderTextColor={C.textDim}
+              keyboardType="phone-pad"
+            />
+
+            <Text style={[s.inputLabel, { marginTop: 16 }]}>메모 / 소개</Text>
+            <TextInput
+              style={[s.profileInput, { height: 80 }]}
+              value={editNotes}
+              onChangeText={setEditNotes}
+              placeholder="본인 소개 또는 특이사항"
+              placeholderTextColor={C.textDim}
+              multiline
+            />
+
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => setShowProfileEdit(false)}>
+                <Text style={s.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.modalConfirm}
+                onPress={async () => {
+                  await saveUserProfile({ contact: editContact.trim(), notes: editNotes.trim() });
+                  const p = await getUserProfile();
+                  setProfile(p);
+                  setShowProfileEdit(false);
+                }}
+              >
+                <Text style={s.modalConfirmText}>저장</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
 
@@ -391,4 +462,20 @@ const s = StyleSheet.create({
   featureDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
   featureTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '500', marginBottom: 4 },
   featureDesc: { color: C.textSecondary, fontSize: 12, lineHeight: 18 },
+  profileContact: { color: C.accentTeal, fontSize: 12, marginTop: 3 },
+  profileNotes: { color: C.textDim, fontSize: 11, marginTop: 2, lineHeight: 16 },
+  profileEditBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 7, borderWidth: 1, borderColor: C.accentBlue + '55', backgroundColor: C.accentBlue + '11' },
+  profileEditBtnText: { color: C.accentBlue, fontSize: 11, fontWeight: '500' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
+  modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
+  modalSubTitle: { color: C.textDim, fontSize: 12, marginBottom: 20 },
+  inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 8 },
+  profileInput: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12 },
+  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  modalCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  modalCancelText: { color: C.textSecondary, fontSize: 14 },
+  modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentTeal, alignItems: 'center' },
+  modalConfirmText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 });

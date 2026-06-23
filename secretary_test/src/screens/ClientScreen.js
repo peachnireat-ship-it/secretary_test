@@ -1,14 +1,39 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Linking,
+  Animated, PanResponder,
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
-import { getClients, addClient, saveClients, getHistories, addHistory, updateHistory, deleteHistory, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite } from '../services/storage';
-import { askClaude, buildClientSystem, josa과와 } from '../services/claude';
+import { getClients, addClient, updateClient, saveClients, getHistories, addHistory, updateHistory, deleteHistory, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, getCurrentUser } from '../services/storage';
+import { askClaude, buildClientSystem, josa과와, normalizeAIDates } from '../services/claude';
+
+function useSwipeClose(onClose) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 2,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) translateY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 80 || (gs.vy > 0.8 && gs.dy > 10)) {
+          Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }).start(() => {
+            translateY.setValue(0);
+            onClose();
+          });
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+        }
+      },
+    })
+  ).current;
+  return { panHandlers: panResponder.panHandlers, animStyle: { transform: [{ translateY }] } };
+}
 
 const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
 
@@ -39,6 +64,7 @@ export default function ClientScreen({ navigation, route }) {
   const [selectedProject, setSelectedProject] = useState(null);
 
   const [showAddClient, setShowAddClient] = useState(false);
+  const [showEditClient, setShowEditClient] = useState(false);
   const [newName, setNewName] = useState('');
   const [newCompany, setNewCompany] = useState('');
   const [newRole, setNewRole] = useState('');
@@ -68,9 +94,12 @@ export default function ClientScreen({ navigation, route }) {
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
+  const swipeClient = useSwipeClose(() => setSelectedClient(null));
+
   async function load() {
-    const [c, h, m, p, favs] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects(), getClientFavorites()]);
-    setClients(c);
+    const [c, h, m, p, favs, me] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects(), getClientFavorites(), getCurrentUser()]);
+    const filtered = me ? c.filter((cl) => !(cl.name === me.name && cl.company === me.team)) : c;
+    setClients(filtered);
     setHistories(h);
     setMeetingRecords(m);
     setProjects(p);
@@ -154,6 +183,29 @@ export default function ClientScreen({ navigation, route }) {
     const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), notes: newNotes.trim() });
     setClients(updated);
     setShowAddClient(false);
+    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewNotes('');
+  }
+
+  function openEditClient(client) {
+    setNewName(client.name);
+    setNewCompany(client.company);
+    setNewRole(client.role || '');
+    setNewContact(client.contact || '');
+    setNewWorkContact(client.workContact || '');
+    setNewNotes(client.notes || '');
+    setShowEditClient(true);
+  }
+
+  async function handleEditClient() {
+    if (!newName.trim() || !newCompany.trim() || !newContact.trim()) {
+      Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.');
+      return;
+    }
+    const updated = await updateClient(selectedClient.id, { name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), notes: newNotes.trim() });
+    setClients(updated);
+    const updatedClient = updated.find((c) => c.id === selectedClient.id);
+    setSelectedClient(updatedClient);
+    setShowEditClient(false);
     setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewNotes('');
   }
 
@@ -248,7 +300,7 @@ export default function ClientScreen({ navigation, route }) {
       const particle = josa과와(lastWord);
       const nameWithRole = client.role?.trim() ? `${client.name} ${client.role}` : client.name;
       const reply = await askClaude([{ role: 'user', content: `${client.company} ${nameWithRole}${particle}의 관계를 3~4문장으로 자연스럽게 요약해줘. 마지막 연락 날짜, 현재 상황, 다음 필요한 액션을 포함해줘. 반드시 한국어로만 작성해줘.` }], systemPrompt);
-      setClientSummary(reply);
+      setClientSummary(normalizeAIDates(reply));
     } catch (e) {
       setClientSummary(e.message === 'API_KEY_MISSING' ? '설정 탭에서 API 키를 입력하면 AI 요약을 볼 수 있습니다.' : `오류: ${e.message}`);
     } finally {
@@ -272,7 +324,7 @@ export default function ClientScreen({ navigation, route }) {
         [{ role: 'user', content: `등록된 모든 거래처 인원의 관계 히스토리를 종합해서 보고서 형식으로 작성해줘. 각 거래처별로 현재 관계 상태, 마지막 연락 시점, 주요 히스토리 요약, 다음에 필요한 액션을 포함해줘. 히스토리가 없는 거래처는 간략히 언급만 해줘. 반드시 한국어로만 작성해줘.` }],
         systemPrompt
       );
-      setHistorySummary(reply);
+      setHistorySummary(normalizeAIDates(reply));
     } catch (e) {
       setHistorySummary(e.message === 'API_KEY_MISSING' ? '설정 탭에서 API 키를 입력하면 AI 요약을 볼 수 있습니다.' : `오류: ${e.message}`);
     } finally {
@@ -347,7 +399,7 @@ export default function ClientScreen({ navigation, route }) {
                 <Text style={s.clientRole}>{client.role}</Text>
                 <View style={s.clientMeta}>
                   <Text style={s.clientMetaText}>히스토리 {hCount}건</Text>
-                  {lastH && <Text style={s.clientMetaText}>마지막 연락: {lastH.date}</Text>}
+                  {lastH && <Text style={s.clientMetaText}>마지막 연락: {formatHistoryDate(lastH.date)}</Text>}
                 </View>
               </View>
               <TouchableOpacity style={s.starBtn} onPress={() => handleToggleFavorite(client.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -428,8 +480,10 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 클라이언트 상세 모달 ── */}
       <Modal visible={!!selectedClient} animationType="slide" transparent>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { height: '90%' }]}>
-            <View style={s.modalHandle} />
+          <Animated.View style={[s.modalSheet, { height: '90%' }, swipeClient.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeClient.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
             <View style={s.detailHeader}>
               <View style={s.detailAvatar}>
                 <Text style={s.detailAvatarText}>{selectedClient?.name?.[0]}</Text>
@@ -445,9 +499,14 @@ export default function ClientScreen({ navigation, route }) {
                 </View>
                 <Text style={s.detailCompany}>{selectedClient?.company} · {selectedClient?.role}</Text>
               </View>
-              <TouchableOpacity onPress={() => setSelectedClient(null)}>
-                <Text style={s.closeBtn}>✕</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <TouchableOpacity onPress={() => openEditClient(selectedClient)} style={s.editClientBtn}>
+                  <Text style={s.editClientBtnText}>수정</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setSelectedClient(null)}>
+                  <Text style={s.closeBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* 연락처 */}
@@ -485,6 +544,14 @@ export default function ClientScreen({ navigation, route }) {
                 ) : null}
               </View>
             )}
+
+            {/* 메모 */}
+            {selectedClient?.notes ? (
+              <View style={s.notesBox}>
+                <Text style={s.notesLabel}>MEMO</Text>
+                <Text style={s.notesText}>{selectedClient.notes}</Text>
+              </View>
+            ) : null}
 
             {/* AI 요약 */}
             <View style={s.summaryBox}>
@@ -532,7 +599,7 @@ export default function ClientScreen({ navigation, route }) {
                 clientHistories.map((h, i) => (
                   <View key={h.id} style={s.historyItem}>
                     <View style={s.historyLeft}>
-                      <Text style={s.historyDate}>{h.date}</Text>
+                      <Text style={s.historyDate}>{formatHistoryDate(h.date)}</Text>
                       {i < clientHistories.length - 1 && <View style={s.historyLine} />}
                     </View>
                     <View style={s.historyRight}>
@@ -582,7 +649,7 @@ export default function ClientScreen({ navigation, route }) {
                 );
               })()}
             </ScrollView>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -655,6 +722,47 @@ export default function ClientScreen({ navigation, route }) {
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.modalConfirm} onPress={handleEditHistory}>
+                <Text style={s.modalConfirmText}>저장</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 거래처 수정 모달 ── */}
+      <Modal visible={showEditClient} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>거래처 수정</Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
+              <View style={s.inputLabelRow}>
+                <Text style={s.inputLabel}>담당자 이름</Text>
+                <Text style={s.requiredMark}>*</Text>
+              </View>
+              <TextInput style={s.input} value={newName} onChangeText={setNewName} placeholder="홍길동" placeholderTextColor={C.textDim} />
+              <View style={s.inputLabelRow}>
+                <Text style={s.inputLabel}>회사명</Text>
+                <Text style={s.requiredMark}>*</Text>
+              </View>
+              <TextInput style={s.input} value={newCompany} onChangeText={setNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
+              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>직책</Text>
+              <TextInput style={s.input} value={newRole} onChangeText={setNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
+              <View style={s.inputLabelRow}>
+                <Text style={s.inputLabel}>연락처</Text>
+                <Text style={s.requiredMark}>*</Text>
+              </View>
+              <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>직장 연락처</Text>
+              <TextInput style={s.input} value={newWorkContact} onChangeText={setNewWorkContact} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>메모</Text>
+              <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
+            </ScrollView>
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewNotes(''); }}>
+                <Text style={s.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalConfirm} onPress={handleEditClient}>
                 <Text style={s.modalConfirmText}>저장</Text>
               </TouchableOpacity>
             </View>
@@ -962,6 +1070,12 @@ function formatDate(ms) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function formatHistoryDate(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-');
+  return `${y}년 ${m}월 ${d}일`;
+}
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 12 },
@@ -1010,7 +1124,8 @@ const s = StyleSheet.create({
   // Detail Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
   modalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
-  modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
+  modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   detailHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   detailAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
   detailAvatarText: { color: C.accentTeal, fontSize: 22, fontWeight: '400' },
@@ -1023,6 +1138,11 @@ const s = StyleSheet.create({
   contactLabel: { color: C.textPrimary, fontSize: 12, fontWeight: '500' },
   contactNumber: { color: C.accentBlue, fontSize: 15, fontWeight: '400', textDecorationLine: 'underline' },
   closeBtn: { color: C.textSecondary, fontSize: 18, padding: 4 },
+  editClientBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: C.accentBlue + '66', backgroundColor: C.accentBlue + '11' },
+  editClientBtnText: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
+  notesBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, marginBottom: 14 },
+  notesLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 6 },
+  notesText: { color: C.textSecondary, fontSize: 13, lineHeight: 19 },
   summaryBox: { backgroundColor: C.surface + 'CC', borderWidth: 1, borderColor: C.accentTeal + '33', borderRadius: 12, padding: 14, marginBottom: 16 },
   summaryLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   aiGlyph: { color: C.accentTeal, fontSize: 14 },
