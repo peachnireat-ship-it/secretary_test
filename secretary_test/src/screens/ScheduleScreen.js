@@ -216,7 +216,7 @@ export default function ScheduleScreen({ navigation, route }) {
                   isSat && !isSelected && { color: C.accentBlue },
                 ]}>{cell.date}</Text>
               </View>
-              {rangeProj ? (
+              {rangeProj && (
                 <View style={[
                   s.projBar,
                   {
@@ -229,13 +229,14 @@ export default function ScheduleScreen({ navigation, route }) {
                     borderBottomRightRadius: cell.str === rangeProj.deadline ? 4 : 0,
                   },
                 ]} />
-              ) : cellDots.length > 0 ? (
+              )}
+              {cellDots.length > 0 && (
                 <View style={s.dotRow}>
                   {cellDots.map((color, di) => (
                     <View key={di} style={[s.dot, { backgroundColor: isSelected ? '#fff' : color }]} />
                   ))}
                 </View>
-              ) : null}
+              )}
             </TouchableOpacity>
           );
         })}
