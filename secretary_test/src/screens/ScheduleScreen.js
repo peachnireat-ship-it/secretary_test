@@ -187,8 +187,8 @@ export default function ScheduleScreen({ navigation, route }) {
 
   const monthPrefix = `${calYear}-${String(calMonth).padStart(2, '0')}`;
   const daySchedules = selectedDate
-    ? schedules.filter((s) => s.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time))
-    : schedules.filter((s) => s.date.startsWith(monthPrefix)).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+    ? schedules.filter((s) => s.date === selectedDate).sort((a, b) => getScheduleTime(a).localeCompare(getScheduleTime(b)))
+    : schedules.filter((s) => s.date.startsWith(monthPrefix)).sort((a, b) => a.date.localeCompare(b.date) || getScheduleTime(a).localeCompare(getScheduleTime(b)));
 
   const monthEnd = `${monthPrefix}-${String(new Date(calYear, calMonth, 0).getDate()).padStart(2, '0')}`;
   const dayProjects = selectedDate
@@ -220,7 +220,7 @@ export default function ScheduleScreen({ navigation, route }) {
     const scheduleDate = newStartDate.trim().length === 10 ? newStartDate.trim() : selectedDate;
     const startDateStr = newStartDate.trim() ? `${newStartDate.trim()} ${to24h(newStartAmPm, newStartTime)}` : '';
     const endDateStr = newEndDate.trim() ? `${newEndDate.trim()} ${to24h(newEndAmPm, newEndTime)}` : '';
-    const updated = await addSchedule({ date: scheduleDate, time: to24h(newAmPm, newTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: startDateStr, endDate: endDateStr });
+    const updated = await addSchedule({ date: scheduleDate, time: to24h(newStartAmPm, newStartTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: startDateStr, endDate: endDateStr });
     setSchedules(updated);
     setShowAdd(false);
     setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]);
@@ -261,7 +261,7 @@ export default function ScheduleScreen({ navigation, route }) {
   async function handleEditSave() {
     if (!editTitle.trim()) return;
     const scheduleDate = editStartDate.trim().length === 10 ? editStartDate.trim() : viewSchedule.date;
-    const saved24h = to24h(editAmPm, editTime);
+    const saved24h = editStartDate.trim() ? to24h(editStartAmPm, editStartTime) : to24h(editAmPm, editTime);
     const startDateStr = editStartDate.trim() ? `${editStartDate.trim()} ${to24h(editStartAmPm, editStartTime)}` : '';
     const endDateStr = editEndDate.trim() ? `${editEndDate.trim()} ${to24h(editEndAmPm, editEndTime)}` : '';
     const updated = await updateSchedule(viewSchedule.id, {
@@ -275,7 +275,7 @@ export default function ScheduleScreen({ navigation, route }) {
       endDate: endDateStr,
     });
     setSchedules(updated);
-    setViewSchedule((prev) => ({ ...prev, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, startDate: startDateStr, endDate: endDateStr }));
+    setViewSchedule((prev) => ({ ...prev, date: scheduleDate, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, startDate: startDateStr, endDate: endDateStr }));
     setEditMode(false);
   }
 
@@ -471,7 +471,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 ])}
               >
                 <View>
-                  <Text style={s.scheduleTime}>{displayTime(item.time)}</Text>
+                  <Text style={s.scheduleTime}>{displayTime(getScheduleTime(item))}</Text>
                 </View>
                 <View style={s.scheduleDivider} />
                 <View style={s.scheduleBody}>
@@ -526,7 +526,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 >
                   <View>
                     <Text style={s.scheduleDateSmall}>{item.date.slice(5).replace('-', '/')}</Text>
-                    <Text style={s.scheduleTime}>{displayTime(item.time)}</Text>
+                    <Text style={s.scheduleTime}>{displayTime(getScheduleTime(item))}</Text>
                   </View>
                   <View style={s.scheduleDivider} />
                   <View style={s.scheduleBody}>
@@ -899,18 +899,15 @@ export default function ScheduleScreen({ navigation, route }) {
                   <>
                     <Text style={s.modalDateLabel}>{formatDateKo(viewSchedule.date)}</Text>
 
-                    <Text style={s.viewLabel}>시작일</Text>
-                    <Text style={s.viewText}>{viewSchedule.startDate || viewSchedule.date}</Text>
+                    <Text style={s.viewLabel}>시작일시</Text>
+                    <Text style={s.viewText}>{formatStartDateTime(viewSchedule)}</Text>
 
                     {viewSchedule.endDate ? (
                       <>
-                        <Text style={s.viewLabel}>마감일</Text>
-                        <Text style={s.viewText}>{viewSchedule.endDate}</Text>
+                        <Text style={s.viewLabel}>마감일시</Text>
+                        <Text style={s.viewText}>{formatDateTimeKo(viewSchedule.endDate)}</Text>
                       </>
                     ) : null}
-
-                    <Text style={s.viewLabel}>시간</Text>
-                    <Text style={s.viewText}>{displayTime(viewSchedule.time)}</Text>
 
                     <Text style={s.viewLabel}>분류</Text>
                     <View style={[s.tagBadge, { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: tagColor(viewSchedule.tag) + '22', borderColor: tagColor(viewSchedule.tag) + '55' }]}>
@@ -1138,6 +1135,29 @@ function from24h(time24) {
 function displayTime(time24) {
   const { ampm, time12 } = from24h(time24);
   return `${ampm} ${time12}`;
+}
+
+function getScheduleTime(item) {
+  if (item.startDate && item.startDate.includes(' ')) return item.startDate.split(' ')[1];
+  return item.time;
+}
+
+function formatDateTimeKo(dateTimeStr) {
+  if (!dateTimeStr) return '';
+  const [datePart, timePart] = dateTimeStr.split(' ');
+  const [y, m, d] = datePart.split('-');
+  const dateKo = `${y}년 ${parseInt(m)}월 ${parseInt(d)}일`;
+  if (!timePart) return dateKo;
+  const { ampm, time12 } = from24h(timePart);
+  return `${dateKo} ${ampm} ${time12}`;
+}
+
+function formatStartDateTime(schedule) {
+  if (schedule.startDate && schedule.startDate.includes(' ')) {
+    return formatDateTimeKo(schedule.startDate);
+  }
+  const datePart = schedule.startDate || schedule.date;
+  return formatDateTimeKo(`${datePart} ${schedule.time || '00:00'}`);
 }
 
 function fmtTime12(text) {
