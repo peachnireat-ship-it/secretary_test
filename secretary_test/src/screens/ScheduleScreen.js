@@ -435,6 +435,13 @@ export default function ScheduleScreen({ navigation, route }) {
                   </View>
                   <Text style={s.viewProgressText}>{viewProject.progress}% 완료</Text>
 
+                  {viewProject.startDate ? (
+                    <>
+                      <Text style={s.viewLabel}>시작일</Text>
+                      <Text style={s.viewText}>{viewProject.startDate}</Text>
+                    </>
+                  ) : null}
+
                   <Text style={s.viewLabel}>마감일</Text>
                   <Text style={[s.viewText, days < 0 && { color: '#C45B5B' }, days >= 0 && days <= 3 && { color: C.gold }]}>
                     {viewProject.deadline}  ·  {daysLabel(days)}
