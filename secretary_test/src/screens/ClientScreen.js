@@ -1,13 +1,13 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Linking,
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
-import { getClients, addClient, saveClients, getHistories, addHistory, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite } from '../services/storage';
+import { getClients, addClient, saveClients, getHistories, addHistory, updateHistory, deleteHistory, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와 } from '../services/claude';
 
 const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
@@ -43,9 +43,11 @@ export default function ClientScreen({ navigation, route }) {
   const [newCompany, setNewCompany] = useState('');
   const [newRole, setNewRole] = useState('');
   const [newContact, setNewContact] = useState('');
+  const [newWorkContact, setNewWorkContact] = useState('');
   const [newNotes, setNewNotes] = useState('');
 
   const [showAddHistory, setShowAddHistory] = useState(false);
+  const [editingHistory, setEditingHistory] = useState(null);
   const [hType, setHType] = useState('미팅');
   const [hTitle, setHTitle] = useState('');
   const [hContent, setHContent] = useState('');
@@ -149,10 +151,10 @@ export default function ClientScreen({ navigation, route }) {
       Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.\n모두 입력 후 추가해주세요.');
       return;
     }
-    const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), notes: newNotes.trim() });
+    const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), notes: newNotes.trim() });
     setClients(updated);
     setShowAddClient(false);
-    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewNotes('');
+    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewNotes('');
   }
 
   async function handleAddHistory() {
@@ -163,6 +165,41 @@ export default function ClientScreen({ navigation, route }) {
     setShowAddHistory(false);
     setHTitle(''); setHContent(''); setHResult(''); setHType('미팅');
     fetchClientSummary(selectedClient, updated);
+  }
+
+  function openEditHistory(h) {
+    setEditingHistory(h);
+    setHType(h.type);
+    setHTitle(h.title);
+    setHContent(h.content || '');
+    setHResult(h.result || '');
+  }
+
+  async function handleEditHistory() {
+    if (!hTitle.trim() || !editingHistory) return;
+    const updated = await updateHistory(editingHistory.id, { type: hType, title: hTitle.trim(), content: hContent.trim(), result: hResult.trim() });
+    setHistories(updated);
+    setEditingHistory(null);
+    setHTitle(''); setHContent(''); setHResult(''); setHType('미팅');
+    fetchClientSummary(selectedClient, updated);
+  }
+
+  function confirmDeleteHistory(h) {
+    Alert.alert(
+      '히스토리 삭제',
+      `"${h.title}" 기록을 삭제하시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제', style: 'destructive',
+          onPress: async () => {
+            const updated = await deleteHistory(h.id);
+            setHistories(updated);
+            fetchClientSummary(selectedClient, updated);
+          },
+        },
+      ]
+    );
   }
 
   async function handleAIChat() {
@@ -407,12 +444,47 @@ export default function ClientScreen({ navigation, route }) {
                   </TouchableOpacity>
                 </View>
                 <Text style={s.detailCompany}>{selectedClient?.company} · {selectedClient?.role}</Text>
-                <Text style={s.detailContact}>{selectedClient?.contact}</Text>
               </View>
               <TouchableOpacity onPress={() => setSelectedClient(null)}>
                 <Text style={s.closeBtn}>✕</Text>
               </TouchableOpacity>
             </View>
+
+            {/* 연락처 */}
+            {(selectedClient?.contact || selectedClient?.workContact) && (
+              <View style={s.contactSection}>
+                {selectedClient.contact ? (
+                  <View style={s.contactRow}>
+                    <Text style={s.contactLabel}>개인</Text>
+                    <TouchableOpacity onPress={() => Alert.alert(
+                      '전화 걸기',
+                      `${selectedClient.name}(${selectedClient.contact})에게 전화하시겠습니까?`,
+                      [
+                        { text: '취소', style: 'cancel' },
+                        { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.contact.replace(/[^0-9+]/g, '')}`) },
+                      ]
+                    )}>
+                      <Text style={s.contactNumber}>{selectedClient.contact}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+                {selectedClient.workContact ? (
+                  <View style={s.contactRow}>
+                    <Text style={s.contactLabel}>직장</Text>
+                    <TouchableOpacity onPress={() => Alert.alert(
+                      '전화 걸기',
+                      `${selectedClient.name} 직장(${selectedClient.workContact})에 전화하시겠습니까?`,
+                      [
+                        { text: '취소', style: 'cancel' },
+                        { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.workContact.replace(/[^0-9+]/g, '')}`) },
+                      ]
+                    )}>
+                      <Text style={s.contactNumber}>{selectedClient.workContact}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
+            )}
 
             {/* AI 요약 */}
             <View style={s.summaryBox}>
@@ -469,6 +541,14 @@ export default function ClientScreen({ navigation, route }) {
                           <Text style={[s.typeText, { color: typeColor(h.type) }]}>{h.type}</Text>
                         </View>
                         <Text style={s.historyTitleText}>{h.title}</Text>
+                        <View style={{ marginLeft: 'auto', flexDirection: 'row', gap: 10 }}>
+                          <TouchableOpacity onPress={() => openEditHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Text style={s.editHistoryBtn}>편집</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => confirmDeleteHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Text style={s.deleteHistoryBtn}>삭제</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                       {h.content ? <Text style={s.historyContent}>{h.content}</Text> : null}
                       {h.result ? (
@@ -544,31 +624,73 @@ export default function ClientScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── 거래처 추가 모달 ── */}
-      <Modal visible={showAddClient} animationType="slide" transparent>
+      {/* ── 히스토리 수정 모달 ── */}
+      <Modal visible={!!editingHistory} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
           <View style={s.modalSheet}>
             <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>히스토리 수정</Text>
+            <Text style={s.modalSubTitle}>{selectedClient?.company} — {selectedClient?.name}</Text>
+
+            <Text style={s.inputLabel}>유형</Text>
+            <View style={s.tagRow}>
+              {HISTORY_TYPES.map((t) => (
+                <TouchableOpacity key={t} style={[s.tagOption, hType === t && s.tagOptionActive]} onPress={() => setHType(t)}>
+                  <Text style={[s.tagOptionText, hType === t && s.tagOptionTextActive]}>{t}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={s.inputLabel}>제목</Text>
+            <TextInput style={s.input} value={hTitle} onChangeText={setHTitle} placeholder="미팅/연락 제목" placeholderTextColor={C.textDim} />
+
+            <Text style={s.inputLabel}>내용</Text>
+            <TextInput style={[s.input, { height: 72 }]} value={hContent} onChangeText={setHContent} placeholder="논의 내용" placeholderTextColor={C.textDim} multiline />
+
+            <Text style={s.inputLabel}>결과</Text>
+            <TextInput style={s.input} value={hResult} onChangeText={setHResult} placeholder="결과 또는 다음 액션" placeholderTextColor={C.textDim} />
+
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setEditingHistory(null); setHTitle(''); setHContent(''); setHResult(''); setHType('미팅'); }}>
+                <Text style={s.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalConfirm} onPress={handleEditHistory}>
+                <Text style={s.modalConfirmText}>저장</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 거래처 추가 모달 ── */}
+      <Modal visible={showAddClient} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
+          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
+            <View style={s.modalHandle} />
             <Text style={s.modalTitle}>거래처 추가</Text>
-            <View style={s.inputLabelRow}>
-              <Text style={s.inputLabel}>담당자 이름</Text>
-              <Text style={s.requiredMark}>*</Text>
-            </View>
-            <TextInput style={s.input} value={newName} onChangeText={setNewName} placeholder="홍길동" placeholderTextColor={C.textDim} />
-            <View style={s.inputLabelRow}>
-              <Text style={s.inputLabel}>회사명</Text>
-              <Text style={s.requiredMark}>*</Text>
-            </View>
-            <TextInput style={s.input} value={newCompany} onChangeText={setNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
-            <Text style={s.inputLabel}>직책</Text>
-            <TextInput style={s.input} value={newRole} onChangeText={setNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
-            <View style={s.inputLabelRow}>
-              <Text style={s.inputLabel}>연락처</Text>
-              <Text style={s.requiredMark}>*</Text>
-            </View>
-            <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
-            <Text style={s.inputLabel}>메모</Text>
-            <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
+              <View style={s.inputLabelRow}>
+                <Text style={s.inputLabel}>담당자 이름</Text>
+                <Text style={s.requiredMark}>*</Text>
+              </View>
+              <TextInput style={s.input} value={newName} onChangeText={setNewName} placeholder="홍길동" placeholderTextColor={C.textDim} />
+              <View style={s.inputLabelRow}>
+                <Text style={s.inputLabel}>회사명</Text>
+                <Text style={s.requiredMark}>*</Text>
+              </View>
+              <TextInput style={s.input} value={newCompany} onChangeText={setNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
+              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>직책</Text>
+              <TextInput style={s.input} value={newRole} onChangeText={setNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
+              <View style={s.inputLabelRow}>
+                <Text style={s.inputLabel}>연락처</Text>
+                <Text style={s.requiredMark}>*</Text>
+              </View>
+              <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>직장 연락처</Text>
+              <TextInput style={s.input} value={newWorkContact} onChangeText={setNewWorkContact} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>메모</Text>
+              <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
+            </ScrollView>
             <View style={s.modalBtns}>
               <TouchableOpacity style={s.modalCancel} onPress={() => setShowAddClient(false)}>
                 <Text style={s.modalCancelText}>취소</Text>
@@ -895,6 +1017,11 @@ const s = StyleSheet.create({
   detailName: { color: C.textPrimary, fontSize: 18, fontWeight: '400' },
   detailCompany: { color: C.textSecondary, fontSize: 12, marginTop: 2 },
   detailContact: { color: C.textDim, fontSize: 11, marginTop: 2 },
+  contactLink: { color: C.accentBlue, textDecorationLine: 'underline' },
+  contactSection: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 14 },
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  contactLabel: { color: C.textPrimary, fontSize: 12, fontWeight: '500' },
+  contactNumber: { color: C.accentBlue, fontSize: 15, fontWeight: '400', textDecorationLine: 'underline' },
   closeBtn: { color: C.textSecondary, fontSize: 18, padding: 4 },
   summaryBox: { backgroundColor: C.surface + 'CC', borderWidth: 1, borderColor: C.accentTeal + '33', borderRadius: 12, padding: 14, marginBottom: 16 },
   summaryLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
@@ -931,6 +1058,8 @@ const s = StyleSheet.create({
   typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
   typeText: { fontSize: 10, fontWeight: '500' },
   historyTitleText: { color: C.textPrimary, fontSize: 13, flex: 1 },
+  editHistoryBtn: { color: C.textDim, fontSize: 11 },
+  deleteHistoryBtn: { color: C.red, fontSize: 11 },
   historyContent: { color: C.textSecondary, fontSize: 12, lineHeight: 18 },
   resultRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
   resultLabel: { color: C.gold, fontSize: 10, fontWeight: '600', marginTop: 1 },
