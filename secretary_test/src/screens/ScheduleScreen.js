@@ -198,7 +198,7 @@ export default function ScheduleScreen({ navigation, route }) {
           const isToday = cell.str === TODAY_STR;
           const isSun = i % 7 === 0;
           const isSat = i % 7 === 6;
-          const rangeProj = projects.find((p) => p.startDate && p.startDate <= cell.str && p.deadline >= cell.str);
+          const rangeProjs = projects.filter((p) => p.startDate && p.startDate <= cell.str && p.deadline >= cell.str);
           const cellSchedules = schedules.filter((sc) => sc.date === cell.str);
           const deadlineProjs = projects.filter((p) => !p.startDate && p.deadline === cell.str);
           const cellDots = [
@@ -216,20 +216,20 @@ export default function ScheduleScreen({ navigation, route }) {
                   isSat && !isSelected && { color: C.accentBlue },
                 ]}>{cell.date}</Text>
               </View>
-              {rangeProj && (
-                <View style={[
+              {rangeProjs.map((proj) => (
+                <View key={proj.id} style={[
                   s.projBar,
                   {
-                    marginLeft: cell.str === rangeProj.startDate ? 4 : 0,
-                    marginRight: cell.str === rangeProj.deadline ? 4 : 0,
-                    backgroundColor: statusColor(rangeProj.status) + 'CC',
-                    borderTopLeftRadius: cell.str === rangeProj.startDate ? 4 : 0,
-                    borderBottomLeftRadius: cell.str === rangeProj.startDate ? 4 : 0,
-                    borderTopRightRadius: cell.str === rangeProj.deadline ? 4 : 0,
-                    borderBottomRightRadius: cell.str === rangeProj.deadline ? 4 : 0,
+                    marginLeft: cell.str === proj.startDate ? 4 : 0,
+                    marginRight: cell.str === proj.deadline ? 4 : 0,
+                    backgroundColor: statusColor(proj.status) + 'CC',
+                    borderTopLeftRadius: cell.str === proj.startDate ? 4 : 0,
+                    borderBottomLeftRadius: cell.str === proj.startDate ? 4 : 0,
+                    borderTopRightRadius: cell.str === proj.deadline ? 4 : 0,
+                    borderBottomRightRadius: cell.str === proj.deadline ? 4 : 0,
                   },
                 ]} />
-              )}
+              ))}
               {cellDots.length > 0 && (
                 <View style={s.dotRow}>
                   {cellDots.map((color, di) => (
@@ -538,7 +538,7 @@ const s = StyleSheet.create({
   gridNumToday: { color: C.gold, fontWeight: '600' },
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.accentBlue, marginTop: 2 },
   dotActive: { backgroundColor: '#fff' },
-  projBar: { width: '100%', height: 5, marginTop: 3 },
+  projBar: { width: '100%', height: 4, marginTop: 2 },
   dotRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, marginTop: 2, justifyContent: 'center', maxWidth: '90%' },
   dateHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 12 },
   dateLabel: { color: C.textSecondary, fontSize: 13 },
