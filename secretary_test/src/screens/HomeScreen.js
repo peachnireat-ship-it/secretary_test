@@ -31,7 +31,7 @@ function tagColor(tag) {
 
 function todayStr() {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().split('T')[0];
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export default function HomeScreen({ navigation, user }) {

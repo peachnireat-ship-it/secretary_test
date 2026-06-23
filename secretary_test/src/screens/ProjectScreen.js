@@ -147,6 +147,7 @@ export default function ProjectScreen({ navigation, route }) {
 
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [newStartDate, setNewStartDate] = useState('');
   const [newDeadline, setNewDeadline] = useState('');
   const [newStatus, setNewStatus] = useState('진행중');
   const [newProgress, setNewProgress] = useState('0');
@@ -158,6 +159,7 @@ export default function ProjectScreen({ navigation, route }) {
   const [showProjectView, setShowProjectView] = useState(false);
   const [viewProject, setViewProject] = useState(null);
   const [editTitle, setEditTitle] = useState('');
+  const [editStartDate, setEditStartDate] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
   const [editStatus, setEditStatus] = useState('진행중');
   const [editProgress, setEditProgress] = useState(0);
@@ -254,6 +256,7 @@ export default function ProjectScreen({ navigation, route }) {
     const meetingRecord = pendingMeetingRecordId ? meetingRecords.find((r) => r.id === pendingMeetingRecordId) : null;
     const updated = await addProject({
       title: newTitle.trim(),
+      startDate: normalizeDeadline(newStartDate.trim()) || '',
       deadline: normalizeDeadline(newDeadline.trim()),
       status: newStatus,
       progress: parseInt(newProgress) || 0,
@@ -264,7 +267,7 @@ export default function ProjectScreen({ navigation, route }) {
     });
     setProjects(updated);
     setShowAdd(false);
-    setNewTitle(''); setNewDeadline(''); setNewStatus('진행중');
+    setNewTitle(''); setNewStartDate(''); setNewDeadline(''); setNewStatus('진행중');
     setNewProgress('0'); setNewPriority('보통'); setNewNotes('');
     setPendingMeetingRecordId(null);
   }
@@ -279,6 +282,7 @@ export default function ProjectScreen({ navigation, route }) {
   function openDetail(project) {
     setDetailProject(project);
     setEditTitle(project.title);
+    setEditStartDate(project.startDate || '');
     setEditDeadline(project.deadline);
     setEditStatus(project.status);
     setEditProgress(project.progress ?? 0);
@@ -296,6 +300,7 @@ export default function ProjectScreen({ navigation, route }) {
     }
     const updated = await updateProject(detailProject.id, {
       title: editTitle.trim(),
+      startDate: normalizeDeadline(editStartDate.trim()) || '',
       deadline: normalizeDeadline(editDeadline.trim()),
       status: editStatus,
       progress: editProgress,
@@ -588,9 +593,14 @@ export default function ProjectScreen({ navigation, route }) {
                     <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
                       <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
                     </View>
-                    <Text style={[s.deadlineText, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
-                      {item.deadline} · {daysLabel(days)}
-                    </Text>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      {item.startDate ? (
+                        <Text style={s.startDateText}>{item.startDate} 시작</Text>
+                      ) : null}
+                      <Text style={[s.deadlineText, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                        {item.deadline} · {daysLabel(days)}
+                      </Text>
+                    </View>
                   </View>
 
                   {item.notes ? <Text style={s.cardNotes} numberOfLines={1}>{item.notes}</Text> : null}
@@ -703,6 +713,18 @@ export default function ProjectScreen({ navigation, route }) {
                   />
                 </View>
 
+                {/* 시작일 */}
+                <Text style={s.inputLabel}>시작일 (YYYY-MM-DD, 선택)</Text>
+                <TextInput
+                  style={s.input}
+                  value={editStartDate}
+                  onChangeText={(t) => setEditStartDate(formatDeadline(t))}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={C.textDim}
+                  keyboardType="numeric"
+                  maxLength={10}
+                />
+
                 {/* 마감일 */}
                 <Text style={s.inputLabel}>마감일 (YYYY-MM-DD)</Text>
                 <TextInput
@@ -813,6 +835,9 @@ export default function ProjectScreen({ navigation, route }) {
 
             <Text style={s.inputLabel}>제목</Text>
             <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="프로젝트 이름" placeholderTextColor={C.textDim} />
+
+            <Text style={s.inputLabel}>시작일 (YYYY-MM-DD, 선택)</Text>
+            <TextInput style={s.input} value={newStartDate} onChangeText={(t) => setNewStartDate(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
 
             <Text style={s.inputLabel}>마감일 (YYYY-MM-DD)</Text>
             <TextInput style={s.input} value={newDeadline} onChangeText={(t) => setNewDeadline(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
@@ -1510,6 +1535,7 @@ const s = StyleSheet.create({
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
   priorityBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
   priorityText: { fontSize: 10, fontWeight: '500' },
+  startDateText: { color: C.textDim, fontSize: 11 },
   deadlineText: { color: C.textDim, fontSize: 11 },
   cardNotes: { color: C.textDim, fontSize: 11, fontStyle: 'italic' },
   cardRelatedPeopleWrap: { marginTop: 10, gap: 5 },
