@@ -134,6 +134,7 @@ export default function ScheduleScreen({ navigation, route }) {
   const swipeSchedule = useSwipeClose(() => { setShowScheduleView(false); setEditMode(false); });
 
   const calTranslateX = useRef(new Animated.Value(0)).current;
+  const urgencyAnim = useRef(new Animated.Value(0)).current;
   const moveMonthRef = useRef(null);
   const calPanResponder = useRef(
     PanResponder.create({
@@ -177,6 +178,15 @@ export default function ScheduleScreen({ navigation, route }) {
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(urgencyAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(urgencyAnim, { toValue: 0.1, duration: 600, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  useEffect(() => {
     if (!route?.params?.openAI) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowAI(true);
@@ -186,11 +196,20 @@ export default function ScheduleScreen({ navigation, route }) {
   useFocusEffect(useCallback(() => { load(); }, []));
 
   const monthPrefix = `${calYear}-${String(calMonth).padStart(2, '0')}`;
-  const daySchedules = selectedDate
-    ? schedules.filter((s) => s.date === selectedDate).sort((a, b) => getScheduleTime(a).localeCompare(getScheduleTime(b)))
-    : schedules.filter((s) => s.date.startsWith(monthPrefix)).sort((a, b) => a.date.localeCompare(b.date) || getScheduleTime(a).localeCompare(getScheduleTime(b)));
-
   const monthEnd = `${monthPrefix}-${String(new Date(calYear, calMonth, 0).getDate()).padStart(2, '0')}`;
+  const monthStart = `${monthPrefix}-01`;
+  const daySchedules = selectedDate
+    ? schedules.filter((s) => {
+        const sd = (s.startDate || '').split(' ')[0] || s.date;
+        const ed = (s.endDate || '').split(' ')[0] || s.date;
+        return sd <= selectedDate && ed >= selectedDate;
+      }).sort((a, b) => getScheduleTime(a).localeCompare(getScheduleTime(b)))
+    : schedules.filter((s) => {
+        const sd = (s.startDate || '').split(' ')[0] || s.date;
+        const ed = (s.endDate || '').split(' ')[0] || s.date;
+        return sd <= monthEnd && ed >= monthStart;
+      }).sort((a, b) => a.date.localeCompare(b.date) || getScheduleTime(a).localeCompare(getScheduleTime(b)));
+
   const dayProjects = selectedDate
     ? projects.filter((p) => {
         const sd = (p.startDate || '').split(' ')[0];
@@ -200,7 +219,7 @@ export default function ScheduleScreen({ navigation, route }) {
     : projects.filter((p) => {
         const sd = (p.startDate || '').split(' ')[0];
         const dl = (p.deadline || '').split(' ')[0];
-        return sd ? sd <= monthEnd && dl >= `${monthPrefix}-01` : dl >= `${monthPrefix}-01` && dl <= monthEnd;
+        return sd ? sd <= monthEnd && dl >= monthStart : dl >= monthStart && dl <= monthEnd;
       });
 
   function moveMonth(dir) {
@@ -373,7 +392,13 @@ export default function ScheduleScreen({ navigation, route }) {
             const dl = (p.deadline || '').split(' ')[0];
             return sd && sd <= cell.str && dl >= cell.str;
           });
-          const cellSchedules = schedules.filter((sc) => sc.date === cell.str);
+          const rangeSchedules = schedules.filter((sc) => {
+            const sd = (sc.startDate || '').split(' ')[0];
+            const ed = (sc.endDate || '').split(' ')[0];
+            return sd && ed && sd !== ed && sd <= cell.str && ed >= cell.str;
+          });
+          const rangeScheduleIds = new Set(rangeSchedules.map((sc) => sc.id));
+          const cellSchedules = schedules.filter((sc) => sc.date === cell.str && !rangeScheduleIds.has(sc.id));
           const deadlineProjs = projects.filter((p) => {
             const dl = (p.deadline || '').split(' ')[0];
             return !p.startDate && dl === cell.str;
@@ -411,6 +436,24 @@ export default function ScheduleScreen({ navigation, route }) {
                   ]} />
                 );
               })}
+              {rangeSchedules.map((sc) => {
+                const sd = (sc.startDate || '').split(' ')[0];
+                const ed = (sc.endDate || '').split(' ')[0];
+                return (
+                  <View key={sc.id} style={[
+                    s.projBar,
+                    {
+                      marginLeft: cell.str === sd ? 4 : 0,
+                      marginRight: cell.str === ed ? 4 : 0,
+                      backgroundColor: tagColor(sc.tag) + 'CC',
+                      borderTopLeftRadius: cell.str === sd ? 4 : 0,
+                      borderBottomLeftRadius: cell.str === sd ? 4 : 0,
+                      borderTopRightRadius: cell.str === ed ? 4 : 0,
+                      borderBottomRightRadius: cell.str === ed ? 4 : 0,
+                    },
+                  ]} />
+                );
+              })}
               {cellDots.length > 0 && (
                 <View style={s.dotRow}>
                   {cellDots.map((color, di) => (
@@ -440,51 +483,64 @@ export default function ScheduleScreen({ navigation, route }) {
         ) : selectedDate ? (
           <>
             {dayProjects.map((proj) => {
-              const dayLabel = projDayLabel(proj, selectedDate);
+              const urgency = getUrgency(proj.deadline, proj.status);
+              const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
               return (
-                <TouchableOpacity key={proj.id} style={[s.projectCard, { borderColor: dayLabel.color + '55' }]} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
-                  <Text style={[s.projectDeadlineLabel, { color: dayLabel.color }]}>{dayLabel.text}</Text>
-                  <View style={s.scheduleDivider} />
-                  <View style={s.scheduleBody}>
-                    <View style={s.scheduleTitleRow}>
-                      <Text style={s.scheduleTitle}>{proj.title}</Text>
-                      <View style={[s.tagBadge, { backgroundColor: statusColor(proj.status) + '22', borderColor: statusColor(proj.status) + '55' }]}>
-                        <Text style={[s.tagText, { color: statusColor(proj.status) }]}>{proj.status}</Text>
+                <View key={proj.id}>
+                  <TouchableOpacity style={s.itemCard} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
+                    <Text style={[s.projectDeadlineLabel, { color: C.accentTeal }]}>프로젝트</Text>
+                    <View style={s.scheduleDivider} />
+                    <View style={s.scheduleBody}>
+                      <View style={s.scheduleTitleRow}>
+                        <Text style={s.scheduleTitle}>{proj.title}</Text>
+                        <View style={[s.tagBadge, { backgroundColor: statusColor(proj.status) + '22', borderColor: statusColor(proj.status) + '55' }]}>
+                          <Text style={[s.tagText, { color: statusColor(proj.status) }]}>{proj.status}</Text>
+                        </View>
                       </View>
+                      {proj.startDate && (
+                        <Text style={s.scheduleNotes}>{proj.startDate} ~ {proj.deadline}</Text>
+                      )}
                     </View>
-                    {proj.startDate && (
-                      <Text style={s.scheduleNotes}>{proj.startDate} ~ {proj.deadline}</Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                  {urgency > 0 && (
+                    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
+                  )}
+                </View>
               );
             })}
-            {daySchedules.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={s.scheduleCard}
-                activeOpacity={0.7}
-                onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
-                onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
-                  { text: '취소', style: 'cancel' },
-                  { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
-                ])}
-              >
-                <View>
-                  <Text style={s.scheduleTime}>{displayTime(getScheduleTime(item))}</Text>
-                </View>
-                <View style={s.scheduleDivider} />
-                <View style={s.scheduleBody}>
-                  <View style={s.scheduleTitleRow}>
-                    <Text style={s.scheduleTitle}>{item.title}</Text>
-                    <View style={[s.tagBadge, { backgroundColor: tagColor(item.tag) + '22', borderColor: tagColor(item.tag) + '55' }]}>
-                      <Text style={[s.tagText, { color: tagColor(item.tag) }]}>{item.tag}</Text>
+            {daySchedules.map((item) => {
+              const urgency = getUrgency(item.endDate || item.date);
+              const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
+              return (
+                <View key={item.id}>
+                  <TouchableOpacity
+                    style={s.itemCard}
+                    activeOpacity={0.7}
+                    onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
+                    onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
+                      { text: '취소', style: 'cancel' },
+                      { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
+                    ])}
+                  >
+                    <Text style={[s.projectDeadlineLabel, { color: C.accentBlue }]}>일정</Text>
+                    <View style={s.scheduleDivider} />
+                    <View style={s.scheduleBody}>
+                      <View style={s.scheduleTitleRow}>
+                        <Text style={s.scheduleTitle}>{item.title}</Text>
+                        <View style={[s.tagBadge, { backgroundColor: tagColor(item.tag) + '22', borderColor: tagColor(item.tag) + '55' }]}>
+                          <Text style={[s.tagText, { color: tagColor(item.tag) }]}>{item.tag}</Text>
+                        </View>
+                      </View>
+                      {scheduleDateRange(item) ? <Text style={s.scheduleNotes}>{scheduleDateRange(item)}</Text> : null}
+                      {item.notes ? <Text style={s.scheduleNotes}>{item.notes}</Text> : null}
                     </View>
-                  </View>
-                  {item.notes ? <Text style={s.scheduleNotes}>{item.notes}</Text> : null}
+                  </TouchableOpacity>
+                  {urgency > 0 && (
+                    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
+                  )}
                 </View>
-              </TouchableOpacity>
-            ))}
+              );
+            })}
           </>
         ) : (
           [
@@ -494,51 +550,61 @@ export default function ScheduleScreen({ navigation, route }) {
             .sort((a, b) => a._date.localeCompare(b._date) || a._time.localeCompare(b._time))
             .map((item) => {
               if (item._type === 'project') {
-                const dayLabel = { text: item.deadline.slice(5).replace('-', '/'), color: C.gold };
+                const urgency = getUrgency(item.deadline, item.status);
+                const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
                 return (
-                  <TouchableOpacity key={`p-${item.id}`} style={[s.projectCard, { borderColor: dayLabel.color + '55' }]} activeOpacity={0.7} onPress={() => { setViewProject(item); setShowProjectView(true); }}>
-                    <Text style={[s.projectDeadlineLabel, { color: dayLabel.color }]}>{dayLabel.text}</Text>
+                  <View key={`p-${item.id}`}>
+                    <TouchableOpacity style={s.itemCard} activeOpacity={0.7} onPress={() => { setViewProject(item); setShowProjectView(true); }}>
+                      <Text style={[s.projectDeadlineLabel, { color: C.accentTeal }]}>프로젝트</Text>
+                      <View style={s.scheduleDivider} />
+                      <View style={s.scheduleBody}>
+                        <View style={s.scheduleTitleRow}>
+                          <Text style={s.scheduleTitle}>{item.title}</Text>
+                          <View style={[s.tagBadge, { backgroundColor: statusColor(item.status) + '22', borderColor: statusColor(item.status) + '55' }]}>
+                            <Text style={[s.tagText, { color: statusColor(item.status) }]}>{item.status}</Text>
+                          </View>
+                        </View>
+                        {item.startDate && (
+                          <Text style={s.scheduleNotes}>{item.startDate} ~ {item.deadline}</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                    {urgency > 0 && (
+                      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
+                    )}
+                  </View>
+                );
+              }
+              const urgency = getUrgency(item.endDate || item.date);
+              const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
+              return (
+                <View key={`s-${item.id}`}>
+                  <TouchableOpacity
+                    style={s.itemCard}
+                    activeOpacity={0.7}
+                    onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
+                    onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
+                      { text: '취소', style: 'cancel' },
+                      { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
+                    ])}
+                  >
+                    <Text style={[s.projectDeadlineLabel, { color: C.accentBlue }]}>일정</Text>
                     <View style={s.scheduleDivider} />
                     <View style={s.scheduleBody}>
                       <View style={s.scheduleTitleRow}>
                         <Text style={s.scheduleTitle}>{item.title}</Text>
-                        <View style={[s.tagBadge, { backgroundColor: statusColor(item.status) + '22', borderColor: statusColor(item.status) + '55' }]}>
-                          <Text style={[s.tagText, { color: statusColor(item.status) }]}>{item.status}</Text>
+                        <View style={[s.tagBadge, { backgroundColor: tagColor(item.tag) + '22', borderColor: tagColor(item.tag) + '55' }]}>
+                          <Text style={[s.tagText, { color: tagColor(item.tag) }]}>{item.tag}</Text>
                         </View>
                       </View>
-                      {item.startDate && (
-                        <Text style={s.scheduleNotes}>{item.startDate} ~ {item.deadline}</Text>
-                      )}
+                      {scheduleDateRange(item) ? <Text style={s.scheduleNotes}>{scheduleDateRange(item)}</Text> : null}
+                      {item.notes ? <Text style={s.scheduleNotes}>{item.notes}</Text> : null}
                     </View>
                   </TouchableOpacity>
-                );
-              }
-              return (
-                <TouchableOpacity
-                  key={`s-${item.id}`}
-                  style={s.scheduleCard}
-                  activeOpacity={0.7}
-                  onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
-                  onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
-                    { text: '취소', style: 'cancel' },
-                    { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
-                  ])}
-                >
-                  <View>
-                    <Text style={s.scheduleDateSmall}>{item.date.slice(5).replace('-', '/')}</Text>
-                    <Text style={s.scheduleTime}>{displayTime(getScheduleTime(item))}</Text>
-                  </View>
-                  <View style={s.scheduleDivider} />
-                  <View style={s.scheduleBody}>
-                    <View style={s.scheduleTitleRow}>
-                      <Text style={s.scheduleTitle}>{item.title}</Text>
-                      <View style={[s.tagBadge, { backgroundColor: tagColor(item.tag) + '22', borderColor: tagColor(item.tag) + '55' }]}>
-                        <Text style={[s.tagText, { color: tagColor(item.tag) }]}>{item.tag}</Text>
-                      </View>
-                    </View>
-                    {item.notes ? <Text style={s.scheduleNotes}>{item.notes}</Text> : null}
-                  </View>
-                </TouchableOpacity>
+                  {urgency > 0 && (
+                    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
+                  )}
+                </View>
               );
             })
         )}
@@ -557,7 +623,7 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 일정 추가 모달 ── */}
       <Modal visible={showAdd} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { maxHeight: '90%' }, swipeAdd.animStyle]}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, { maxHeight: '90%' }, swipeAdd.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeAdd.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -571,10 +637,10 @@ export default function ScheduleScreen({ navigation, route }) {
               <Text style={s.inputLabel}>시작일시</Text>
               <TextInput style={[s.input, { marginBottom: 8 }]} value={newStartDate} onChangeText={(t) => setNewStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
               <View style={s.timeRow}>
-                <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오전')}>
+                <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오전' && s.optionActive]} onPress={() => setNewStartAmPm('오전')}>
                   <Text style={[s.ampmBtnText, newStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오후')}>
+                <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오후' && s.optionActive]} onPress={() => setNewStartAmPm('오후')}>
                   <Text style={[s.ampmBtnText, newStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                 </TouchableOpacity>
                 <TextInput style={[s.input, { flex: 1 }]} value={newStartTime} onChangeText={(t) => setNewStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
@@ -583,10 +649,10 @@ export default function ScheduleScreen({ navigation, route }) {
               <Text style={s.inputLabel}>마감일시 (선택)</Text>
               <TextInput style={[s.input, { marginBottom: 8 }]} value={newEndDate} onChangeText={(t) => setNewEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
               <View style={s.timeRow}>
-                <TouchableOpacity style={[s.ampmBtn, newEndAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewEndAmPm('오전')}>
+                <TouchableOpacity style={[s.ampmBtn, newEndAmPm === '오전' && s.optionActive]} onPress={() => setNewEndAmPm('오전')}>
                   <Text style={[s.ampmBtnText, newEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.ampmBtn, newEndAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewEndAmPm('오후')}>
+                <TouchableOpacity style={[s.ampmBtn, newEndAmPm === '오후' && s.optionActive]} onPress={() => setNewEndAmPm('오후')}>
                   <Text style={[s.ampmBtnText, newEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                 </TouchableOpacity>
                 <TextInput style={[s.input, { flex: 1 }]} value={newEndTime} onChangeText={(t) => setNewEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
@@ -595,7 +661,7 @@ export default function ScheduleScreen({ navigation, route }) {
               <Text style={s.inputLabel}>분류</Text>
               <View style={s.tagRow}>
                 {TAGS.map((t) => (
-                  <TouchableOpacity key={t} style={[s.tagOption, newTag === t && s.tagOptionActive]} onPress={() => setNewTag(t)}>
+                  <TouchableOpacity key={t} style={[s.tagOption, newTag === t && s.optionActive]} onPress={() => setNewTag(t)}>
                     <Text style={[s.tagOptionText, newTag === t && s.tagOptionTextActive]}>{t}</Text>
                   </TouchableOpacity>
                 ))}
@@ -617,7 +683,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 </View>
               )}
               <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(newClientIds, setNewClientIds)}>
-                <Text style={newClientIds.length > 0 ? s.pickerTriggerTextActive : s.pickerTriggerText}>
+                <Text style={[s.pickerTriggerText, newClientIds.length > 0 && s.pickerTriggerTextActive]}>
                   {newClientIds.length > 0 ? `${newClientIds.length}명 선택됨 · 변경` : '거래처 인원 선택'}
                 </Text>
                 <Text style={s.pickerTriggerIcon}>›</Text>
@@ -643,7 +709,7 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── AI 채팅 모달 ── */}
       <Modal visible={showAI} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { height: '85%' }, swipeAI.animStyle]}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, { height: '85%' }, swipeAI.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeAI.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -696,7 +762,7 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 프로젝트 보기 모달 ── */}
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { maxHeight: '80%' }, swipeProject.animStyle]}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, { maxHeight: '80%' }, swipeProject.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeProject.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -782,7 +848,7 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 일정 상세 모달 ── */}
       <Modal visible={showScheduleView} animationType="slide" transparent onRequestClose={() => { setShowScheduleView(false); setEditMode(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { maxHeight: '80%' }, swipeSchedule.animStyle]}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, { maxHeight: '80%' }, swipeSchedule.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeSchedule.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -831,10 +897,10 @@ export default function ScheduleScreen({ navigation, route }) {
                     <Text style={s.inputLabel}>시작일시</Text>
                     <TextInput style={[s.input, { marginBottom: 8 }]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
                     <View style={s.timeRow}>
-                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오전')}>
+                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.optionActive]} onPress={() => setEditStartAmPm('오전')}>
                         <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오후')}>
+                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.optionActive]} onPress={() => setEditStartAmPm('오후')}>
                         <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                       </TouchableOpacity>
                       <TextInput style={[s.input, { flex: 1 }]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
@@ -843,10 +909,10 @@ export default function ScheduleScreen({ navigation, route }) {
                     <Text style={s.inputLabel}>마감일시 (선택)</Text>
                     <TextInput style={[s.input, { marginBottom: 8 }]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
                     <View style={s.timeRow}>
-                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditEndAmPm('오전')}>
+                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.optionActive]} onPress={() => setEditEndAmPm('오전')}>
                         <Text style={[s.ampmBtnText, editEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditEndAmPm('오후')}>
+                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.optionActive]} onPress={() => setEditEndAmPm('오후')}>
                         <Text style={[s.ampmBtnText, editEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                       </TouchableOpacity>
                       <TextInput style={[s.input, { flex: 1 }]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
@@ -855,7 +921,7 @@ export default function ScheduleScreen({ navigation, route }) {
                     <Text style={s.inputLabel}>분류</Text>
                     <View style={s.tagRow}>
                       {TAGS.map((t) => (
-                        <TouchableOpacity key={t} style={[s.tagOption, editTag === t && s.tagOptionActive]} onPress={() => setEditTag(t)}>
+                        <TouchableOpacity key={t} style={[s.tagOption, editTag === t && s.optionActive]} onPress={() => setEditTag(t)}>
                           <Text style={[s.tagOptionText, editTag === t && s.tagOptionTextActive]}>{t}</Text>
                         </TouchableOpacity>
                       ))}
@@ -877,7 +943,7 @@ export default function ScheduleScreen({ navigation, route }) {
                       </View>
                     )}
                     <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(editClientIds, setEditClientIds)}>
-                      <Text style={editClientIds.length > 0 ? s.pickerTriggerTextActive : s.pickerTriggerText}>
+                      <Text style={[s.pickerTriggerText, editClientIds.length > 0 && s.pickerTriggerTextActive]}>
                         {editClientIds.length > 0 ? `${editClientIds.length}명 선택됨 · 변경` : '거래처 인원 선택'}
                       </Text>
                       <Text style={s.pickerTriggerIcon}>›</Text>
@@ -956,7 +1022,7 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 인물 상세 모달 ── */}
       <Modal visible={showPersonView} animationType="slide" transparent onRequestClose={() => setShowPersonView(false)}>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { maxHeight: '70%' }, swipePerson.animStyle]}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, { maxHeight: '70%' }, swipePerson.animStyle]}>
             <View style={s.modalHandleWrap} {...swipePerson.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -1009,8 +1075,8 @@ export default function ScheduleScreen({ navigation, route }) {
 
       {/* ── 거래처 인원 피커 팝업 ── */}
       <Modal visible={showClientPicker} animationType="slide" transparent onRequestClose={() => setShowClientPicker(false)}>
-        <View style={s.pickerOverlay}>
-          <View style={s.pickerSheet}>
+        <View style={s.modalOverlay}>
+          <View style={[s.sheetBase, s.pickerSheet]}>
             <View style={s.pickerHeader}>
               <TouchableOpacity onPress={() => setShowClientPicker(false)} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerCancelText}>취소</Text>
@@ -1085,8 +1151,8 @@ export default function ScheduleScreen({ navigation, route }) {
 
       {/* ── 신규 거래처 인원 등록 (피커에서 진입) ── */}
       <Modal visible={showPickerAddClient} animationType="slide" transparent onRequestClose={() => setShowPickerAddClient(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.pickerOverlay}>
-          <View style={s.pickerSheet}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <View style={[s.sheetBase, s.pickerSheet]}>
             <View style={s.pickerHeader}>
               <TouchableOpacity onPress={() => setShowPickerAddClient(false)} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerCancelText}>취소</Text>
@@ -1180,12 +1246,6 @@ function fmtDate(text) {
   return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
 }
 
-function fmtTime(text) {
-  const d = text.replace(/\D/g, '').slice(0, 4);
-  if (d.length <= 2) return d;
-  return `${d.slice(0, 2)}:${d.slice(2)}`;
-}
-
 function projDayLabel(proj, date) {
   const sd = (proj.startDate || '').split(' ')[0];
   const dl = (proj.deadline || '').split(' ')[0];
@@ -1222,6 +1282,25 @@ function statusColor(status) {
   return map[status] || C.textSecondary;
 }
 
+function getUrgency(deadlineStr, status) {
+  if (status === '완료' || status === '취소') return 0;
+  if (!deadlineStr) return 0;
+  const datePart = deadlineStr.split(' ')[0];
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(datePart) - t) / 86400000);
+  if (days < 0 || days > 7) return 0;
+  if (days <= 3) return 2;
+  return 1;
+}
+
+function scheduleDateRange(item) {
+  const sd = (item.startDate || '').split(' ')[0];
+  const ed = (item.endDate || '').split(' ')[0];
+  if (!sd || !ed || sd === ed) return null;
+  return `${sd.slice(5).replace('-', '/')} ~ ${ed.slice(5).replace('-', '/')}`;
+}
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16 },
@@ -1254,8 +1333,7 @@ const s = StyleSheet.create({
   emptyWrap: { paddingTop: 60, alignItems: 'center', gap: 8 },
   emptyText: { color: C.textDim, fontSize: 14 },
   emptyHint: { color: C.textDim, fontSize: 11, textAlign: 'center' },
-  scheduleCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
-  projectCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.gold + '55', borderRadius: 12, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  itemCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
   modalTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
   viewBadgeRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   viewBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
@@ -1288,12 +1366,14 @@ const s = StyleSheet.create({
   scheduleNotes: { color: C.textDim, fontSize: 11 },
   tagBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   tagText: { fontSize: 10, fontWeight: '500' },
+  urgencyBorder: { borderRadius: 12, borderWidth: 2 },
   fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentBlue, alignItems: 'center', justifyContent: 'center' },
   fabText: { color: '#fff', fontSize: 26, lineHeight: 30 },
 
   // Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  modalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
+  sheetBase: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  modalSheet: { paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
   modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2 },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
@@ -1302,12 +1382,11 @@ const s = StyleSheet.create({
   input: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12 },
   timeRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   ampmBtn: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-  ampmBtnActive: { borderColor: C.accentBlue + '88', backgroundColor: C.accentBlue + '22' },
+  optionActive: { borderColor: C.accentBlue + '88', backgroundColor: C.accentBlue + '22' },
   ampmBtnText: { color: C.textDim, fontSize: 14 },
   ampmBtnTextActive: { color: C.accentBlue, fontWeight: '500' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tagOption: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-  tagOptionActive: { borderColor: C.accentBlue + '88', backgroundColor: C.accentBlue + '22' },
   tagOptionText: { color: C.textDim, fontSize: 12 },
   tagOptionTextActive: { color: C.accentBlue },
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 24 },
@@ -1332,12 +1411,11 @@ const s = StyleSheet.create({
   // Client picker trigger
   pickerTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12 },
   pickerTriggerText: { color: C.textDim, fontSize: 14, flex: 1 },
-  pickerTriggerTextActive: { color: C.accentBlue, fontSize: 14, fontWeight: '500', flex: 1 },
+  pickerTriggerTextActive: { color: C.accentBlue, fontWeight: '500' },
   pickerTriggerIcon: { color: C.textDim, fontSize: 18 },
 
   // Client picker modal
-  pickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  pickerSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: '80%' },
+  pickerSheet: { height: '80%' },
   pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border },
   pickerHeaderBtn: { minWidth: 52 },
   pickerTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '500' },
