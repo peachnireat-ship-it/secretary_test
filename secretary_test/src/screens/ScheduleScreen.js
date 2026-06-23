@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getSchedules, addSchedule, deleteSchedule, getProjects, getClients, getMeetingRecords } from '../services/storage';
+import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, getClients, getMeetingRecords, getCurrentUser } from '../services/storage';
 import { askClaude, buildScheduleSystem } from '../services/claude';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
@@ -71,15 +71,33 @@ export default function ScheduleScreen({ navigation, route }) {
   const [calMonth, setCalMonth] = useState(today.getMonth() + 1);
 
   const [clients, setClients] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [meetingRecords, setMeetingRecords] = useState([]);
   const [showProjectView, setShowProjectView] = useState(false);
   const [viewProject, setViewProject] = useState(null);
+  const [showPersonView, setShowPersonView] = useState(false);
+  const [viewPerson, setViewPerson] = useState(null);
+
+  const [showScheduleView, setShowScheduleView] = useState(false);
+  const [viewSchedule, setViewSchedule] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [editTag, setEditTag] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editClientIds, setEditClientIds] = useState([]);
+
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerTempIds, setPickerTempIds] = useState([]);
+  const pickerCallback = useRef(null);
 
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newTime, setNewTime] = useState('09:00');
   const [newTag, setNewTag] = useState('회의');
   const [newNotes, setNewNotes] = useState('');
+  const [newClientIds, setNewClientIds] = useState([]);
 
   const [showAI, setShowAI] = useState(false);
   const [chatMessages, setChatMessages] = useState([
@@ -92,13 +110,16 @@ export default function ScheduleScreen({ navigation, route }) {
   const swipeAdd = useSwipeClose(() => setShowAdd(false));
   const swipeAI = useSwipeClose(() => setShowAI(false));
   const swipeProject = useSwipeClose(() => setShowProjectView(false));
+  const swipePerson = useSwipeClose(() => setShowPersonView(false));
+  const swipeSchedule = useSwipeClose(() => { setShowScheduleView(false); setEditMode(false); });
 
   async function load() {
-    const [allSchedules, allProjects, allClients, allRecords] = await Promise.all([getSchedules(), getProjects(), getClients(), getMeetingRecords()]);
+    const [allSchedules, allProjects, allClients, allRecords, user] = await Promise.all([getSchedules(), getProjects(), getClients(), getMeetingRecords(), getCurrentUser()]);
     setSchedules(allSchedules);
     setProjects(allProjects);
     setClients(allClients);
     setMeetingRecords(allRecords);
+    setCurrentUser(user);
   }
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -132,15 +153,41 @@ export default function ScheduleScreen({ navigation, route }) {
 
   async function handleAdd() {
     if (!newTitle.trim()) return;
-    const updated = await addSchedule({ date: selectedDate, time: newTime, title: newTitle.trim(), tag: newTag, notes: newNotes.trim() });
+    const updated = await addSchedule({ date: selectedDate, time: newTime, title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds });
     setSchedules(updated);
     setShowAdd(false);
-    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes('');
+    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]); setClientSearch('');
+  }
+
+  function openClientPicker(currentIds, onConfirm) {
+    setPickerTempIds([...currentIds]);
+    setPickerSearch('');
+    pickerCallback.current = onConfirm;
+    setShowClientPicker(true);
+  }
+
+  function confirmClientPicker() {
+    if (pickerCallback.current) pickerCallback.current(pickerTempIds);
+    setShowClientPicker(false);
   }
 
   async function handleDelete(id) {
     const updated = await deleteSchedule(id);
     setSchedules(updated);
+  }
+
+  async function handleEditSave() {
+    if (!editTitle.trim()) return;
+    const updated = await updateSchedule(viewSchedule.id, {
+      title: editTitle.trim(),
+      time: editTime,
+      tag: editTag,
+      notes: editNotes.trim(),
+      clientIds: editClientIds,
+    });
+    setSchedules(updated);
+    setViewSchedule((prev) => ({ ...prev, title: editTitle.trim(), time: editTime, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds }));
+    setEditMode(false);
   }
 
   async function handleAIChat() {
@@ -311,6 +358,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 key={item.id}
                 style={s.scheduleCard}
                 activeOpacity={0.7}
+                onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
                 onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
                   { text: '취소', style: 'cancel' },
                   { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
@@ -341,39 +389,64 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 일정 추가 모달 ── */}
       <Modal visible={showAdd} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, swipeAdd.animStyle]}>
+          <Animated.View style={[s.modalSheet, { maxHeight: '90%' }, swipeAdd.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeAdd.panHandlers}>
               <View style={s.modalHandle} />
             </View>
-            <Text style={s.modalTitle}>일정 추가</Text>
-            <Text style={s.modalDateLabel}>{formatDateKo(selectedDate)}</Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={s.modalTitle}>일정 추가</Text>
+              <Text style={s.modalDateLabel}>{formatDateKo(selectedDate)}</Text>
 
-            <Text style={s.inputLabel}>제목</Text>
-            <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
+              <Text style={s.inputLabel}>제목</Text>
+              <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
 
-            <Text style={s.inputLabel}>시간</Text>
-            <TextInput style={s.input} value={newTime} onChangeText={setNewTime} placeholder="09:00" placeholderTextColor={C.textDim} />
+              <Text style={s.inputLabel}>시간</Text>
+              <TextInput style={s.input} value={newTime} onChangeText={setNewTime} placeholder="09:00" placeholderTextColor={C.textDim} />
 
-            <Text style={s.inputLabel}>분류</Text>
-            <View style={s.tagRow}>
-              {TAGS.map((t) => (
-                <TouchableOpacity key={t} style={[s.tagOption, newTag === t && s.tagOptionActive]} onPress={() => setNewTag(t)}>
-                  <Text style={[s.tagOptionText, newTag === t && s.tagOptionTextActive]}>{t}</Text>
+              <Text style={s.inputLabel}>분류</Text>
+              <View style={s.tagRow}>
+                {TAGS.map((t) => (
+                  <TouchableOpacity key={t} style={[s.tagOption, newTag === t && s.tagOptionActive]} onPress={() => setNewTag(t)}>
+                    <Text style={[s.tagOptionText, newTag === t && s.tagOptionTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={s.inputLabel}>관련 인물 · 거래처 (선택)</Text>
+              {newClientIds.length > 0 && (
+                <View style={s.selectedPeopleRow}>
+                  {newClientIds.map((id) => {
+                    const c = clients.find((cl) => cl.id === id);
+                    if (!c) return null;
+                    return (
+                      <TouchableOpacity key={id} style={s.selectedPersonChip} onPress={() => setNewClientIds((prev) => prev.filter((x) => x !== id))}>
+                        <Text style={s.selectedPersonChipText}>{c.name}</Text>
+                        <Text style={s.selectedPersonChipX}> ✕</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+              <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(newClientIds, setNewClientIds)}>
+                <Text style={newClientIds.length > 0 ? s.pickerTriggerTextActive : s.pickerTriggerText}>
+                  {newClientIds.length > 0 ? `${newClientIds.length}명 선택됨 · 변경` : '거래처 인원 선택'}
+                </Text>
+                <Text style={s.pickerTriggerIcon}>›</Text>
+              </TouchableOpacity>
+
+              <Text style={s.inputLabel}>메모 (선택)</Text>
+              <TextInput style={[s.input, { height: 72 }]} value={newNotes} onChangeText={setNewNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
+
+              <View style={s.modalBtns}>
+                <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setClientSearch(''); }}>
+                  <Text style={s.modalCancelText}>취소</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={s.inputLabel}>메모 (선택)</Text>
-            <TextInput style={[s.input, { height: 72 }]} value={newNotes} onChangeText={setNewNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
-
-            <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => setShowAdd(false)}>
-                <Text style={s.modalCancelText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalConfirm} onPress={handleAdd}>
-                <Text style={s.modalConfirmText}>추가</Text>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity style={s.modalConfirm} onPress={handleAdd}>
+                  <Text style={s.modalConfirmText}>추가</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ height: 20 }} />
+            </ScrollView>
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
@@ -494,7 +567,7 @@ export default function ScheduleScreen({ navigation, route }) {
                       <Text style={s.viewLabel}>관련 인물</Text>
                       <View style={s.viewPeopleList}>
                         {relatedPeople.map((c) => (
-                          <View key={c.id} style={s.viewPersonRow}>
+                          <TouchableOpacity key={c.id} style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
                             <View style={s.viewPersonAvatar}>
                               <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
                             </View>
@@ -502,7 +575,8 @@ export default function ScheduleScreen({ navigation, route }) {
                               <Text style={s.viewPersonName}>{c.name}</Text>
                               {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                             </View>
-                          </View>
+                            <Text style={s.viewPersonChevron}>›</Text>
+                          </TouchableOpacity>
                         ))}
                       </View>
                     </>
@@ -513,6 +587,259 @@ export default function ScheduleScreen({ navigation, route }) {
               );
             })()}
           </Animated.View>
+        </View>
+      </Modal>
+
+      {/* ── 일정 상세 모달 ── */}
+      <Modal visible={showScheduleView} animationType="slide" transparent onRequestClose={() => { setShowScheduleView(false); setEditMode(false); }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <Animated.View style={[s.modalSheet, { maxHeight: '80%' }, swipeSchedule.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeSchedule.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
+            {viewSchedule && (
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={s.modalTitleRow}>
+                  <Text style={[s.modalTitle, { flex: 1 }]} numberOfLines={2}>
+                    {editMode ? '일정 수정' : viewSchedule.title}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                    {!editMode && (
+                      <>
+                        <TouchableOpacity onPress={() => { setEditTitle(viewSchedule.title); setEditTime(viewSchedule.time); setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []); setEditMode(true); }}>
+                          <Text style={s.editBtn}>수정</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => Alert.alert('삭제', `"${viewSchedule.title}" 일정을 삭제할까요?`, [
+                          { text: '취소', style: 'cancel' },
+                          { text: '삭제', style: 'destructive', onPress: async () => { const updated = await deleteSchedule(viewSchedule.id); setSchedules(updated); setShowScheduleView(false); } },
+                        ])}>
+                          <Text style={s.deleteBtn}>삭제</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    <TouchableOpacity onPress={() => { setShowScheduleView(false); setEditMode(false); }}>
+                      <Text style={s.closeBtn}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {editMode ? (
+                  <>
+                    <Text style={s.inputLabel}>제목</Text>
+                    <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
+
+                    <Text style={s.inputLabel}>시간</Text>
+                    <TextInput style={s.input} value={editTime} onChangeText={setEditTime} placeholder="09:00" placeholderTextColor={C.textDim} />
+
+                    <Text style={s.inputLabel}>분류</Text>
+                    <View style={s.tagRow}>
+                      {TAGS.map((t) => (
+                        <TouchableOpacity key={t} style={[s.tagOption, editTag === t && s.tagOptionActive]} onPress={() => setEditTag(t)}>
+                          <Text style={[s.tagOptionText, editTag === t && s.tagOptionTextActive]}>{t}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={s.inputLabel}>관련 인물 · 거래처 (선택)</Text>
+                    {editClientIds.length > 0 && (
+                      <View style={s.selectedPeopleRow}>
+                        {editClientIds.map((id) => {
+                          const c = clients.find((cl) => cl.id === id);
+                          if (!c) return null;
+                          return (
+                            <TouchableOpacity key={id} style={s.selectedPersonChip} onPress={() => setEditClientIds((prev) => prev.filter((x) => x !== id))}>
+                              <Text style={s.selectedPersonChipText}>{c.name}</Text>
+                              <Text style={s.selectedPersonChipX}> ✕</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                    <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(editClientIds, setEditClientIds)}>
+                      <Text style={editClientIds.length > 0 ? s.pickerTriggerTextActive : s.pickerTriggerText}>
+                        {editClientIds.length > 0 ? `${editClientIds.length}명 선택됨 · 변경` : '거래처 인원 선택'}
+                      </Text>
+                      <Text style={s.pickerTriggerIcon}>›</Text>
+                    </TouchableOpacity>
+
+                    <Text style={s.inputLabel}>메모 (선택)</Text>
+                    <TextInput style={[s.input, { height: 72 }]} value={editNotes} onChangeText={setEditNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
+
+                    <View style={s.modalBtns}>
+                      <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
+                        <Text style={s.modalCancelText}>취소</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
+                        <Text style={s.modalConfirmText}>저장</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={s.modalDateLabel}>{formatDateKo(viewSchedule.date)}</Text>
+
+                    <Text style={s.viewLabel}>시간</Text>
+                    <Text style={s.viewText}>{viewSchedule.time}</Text>
+
+                    <Text style={s.viewLabel}>분류</Text>
+                    <View style={[s.tagBadge, { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: tagColor(viewSchedule.tag) + '22', borderColor: tagColor(viewSchedule.tag) + '55' }]}>
+                      <Text style={[s.tagText, { color: tagColor(viewSchedule.tag) }]}>{viewSchedule.tag}</Text>
+                    </View>
+
+                    {viewSchedule.notes ? (
+                      <>
+                        <Text style={s.viewLabel}>메모</Text>
+                        <Text style={s.viewText}>{viewSchedule.notes}</Text>
+                      </>
+                    ) : null}
+
+                    {(viewSchedule.clientIds?.length > 0) && (() => {
+                      const people = viewSchedule.clientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+                      if (people.length === 0) return null;
+                      return (
+                        <>
+                          <Text style={s.viewLabel}>관련 인물</Text>
+                          <View style={s.viewPeopleList}>
+                            {people.map((c) => (
+                              <TouchableOpacity key={c.id} style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
+                                <View style={s.viewPersonAvatar}>
+                                  <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={s.viewPersonName}>{c.name}</Text>
+                                  {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                                </View>
+                                <Text style={s.viewPersonChevron}>›</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </>
+                      );
+                    })()}
+                  </>
+                )}
+                <View style={{ height: 16 }} />
+              </ScrollView>
+            )}
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 인물 상세 모달 ── */}
+      <Modal visible={showPersonView} animationType="slide" transparent onRequestClose={() => setShowPersonView(false)}>
+        <View style={s.modalOverlay}>
+          <Animated.View style={[s.modalSheet, { maxHeight: '70%' }, swipePerson.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipePerson.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
+            {viewPerson && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={s.personHeader}>
+                  <View style={s.personAvatar}>
+                    <Text style={s.personAvatarText}>{viewPerson.name[0]}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.personName}>{viewPerson.name}</Text>
+                    {viewPerson.company ? (
+                      <Text style={s.personSub}>{viewPerson.company}{viewPerson.role ? ` · ${viewPerson.role}` : ''}</Text>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity onPress={() => setShowPersonView(false)}>
+                    <Text style={s.closeBtn}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {viewPerson.contact ? (
+                  <>
+                    <Text style={s.viewLabel}>연락처</Text>
+                    <Text style={s.viewText}>{viewPerson.contact}</Text>
+                  </>
+                ) : null}
+
+                {viewPerson.notes ? (
+                  <>
+                    <Text style={s.viewLabel}>메모</Text>
+                    <Text style={s.viewText}>{viewPerson.notes}</Text>
+                  </>
+                ) : null}
+
+                <View style={{ height: 16 }} />
+              </ScrollView>
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* ── 거래처 인원 피커 팝업 ── */}
+      <Modal visible={showClientPicker} animationType="slide" transparent onRequestClose={() => setShowClientPicker(false)}>
+        <View style={s.pickerOverlay}>
+          <View style={s.pickerSheet}>
+            <View style={s.pickerHeader}>
+              <TouchableOpacity onPress={() => setShowClientPicker(false)} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={s.pickerTitle}>거래처 인원 선택</Text>
+              <TouchableOpacity onPress={confirmClientPicker} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerConfirmText}>
+                  확인{pickerTempIds.length > 0 ? ` (${pickerTempIds.length})` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.pickerSearchWrap}>
+              <TextInput
+                style={s.pickerSearchInput}
+                value={pickerSearch}
+                onChangeText={setPickerSearch}
+                placeholder="이름 또는 회사 검색"
+                placeholderTextColor={C.textDim}
+              />
+            </View>
+
+            <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
+              {(() => {
+                const isSelf = (c) =>
+                  currentUser &&
+                  c.name === currentUser.name &&
+                  (c.role || '') === (currentUser.role || '') &&
+                  (c.company || '') === (currentUser.team || '');
+                const filtered = clients.filter((c) =>
+                  !isSelf(c) &&
+                  (pickerSearch.trim() === '' ||
+                    c.name.includes(pickerSearch.trim()) ||
+                    (c.company || '').includes(pickerSearch.trim()))
+                );
+                if (filtered.length === 0) {
+                  return <Text style={s.clientSearchEmpty}>검색 결과 없음</Text>;
+                }
+                return filtered.map((c) => {
+                  const selected = pickerTempIds.includes(c.id);
+                  return (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[s.pickerRow, selected && s.pickerRowSelected]}
+                      onPress={() => setPickerTempIds((prev) =>
+                        selected ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                      )}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[s.pickerAvatar, selected && s.pickerAvatarSelected]}>
+                        <Text style={[s.pickerAvatarText, selected && s.pickerAvatarTextSelected]}>{c.name[0]}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.pickerName, selected && s.pickerNameSelected]}>{c.name}</Text>
+                        {c.company ? <Text style={s.pickerSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                      </View>
+                      <View style={[s.pickerCheck, selected && s.pickerCheckSelected]}>
+                        {selected && <Text style={s.pickerCheckMark}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                });
+              })()}
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </View>
         </View>
       </Modal>
     </View>
@@ -595,11 +922,17 @@ const s = StyleSheet.create({
   viewProgressText: { color: C.textDim, fontSize: 11, marginBottom: 16 },
   viewText: { color: C.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 16 },
   viewPeopleList: { gap: 8, marginBottom: 16 },
-  viewPersonRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  viewPersonRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   viewPersonAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.accentBlue + '33', alignItems: 'center', justifyContent: 'center' },
   viewPersonAvatarText: { color: C.accentBlue, fontSize: 13, fontWeight: '600' },
   viewPersonName: { color: C.textPrimary, fontSize: 13, fontWeight: '400' },
   viewPersonSub: { color: C.textDim, fontSize: 11 },
+  viewPersonChevron: { color: C.textDim, fontSize: 18 },
+  personHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 20 },
+  personAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.accentBlue + '33', alignItems: 'center', justifyContent: 'center' },
+  personAvatarText: { color: C.accentBlue, fontSize: 20, fontWeight: '600' },
+  personName: { color: C.textPrimary, fontSize: 18, fontWeight: '400' },
+  personSub: { color: C.textDim, fontSize: 13, marginTop: 2 },
   projectDeadlineLabel: { color: C.gold, fontSize: 11, fontWeight: '600', width: 44, textAlign: 'center' },
   scheduleTime: { color: C.textSecondary, fontSize: 13, fontWeight: '500', width: 44 },
   scheduleDivider: { width: 1, height: 32, backgroundColor: C.borderHigh },
@@ -637,6 +970,44 @@ const s = StyleSheet.create({
   chatHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   aiGlyph: { color: C.accentBlue, fontSize: 16 },
   closeBtn: { color: C.textSecondary, fontSize: 18, padding: 4 },
+  editBtn: { color: C.accentBlue, fontSize: 14, fontWeight: '500', padding: 4 },
+  deleteBtn: { color: '#C45B5B', fontSize: 14, fontWeight: '500', padding: 4 },
+  selectedPeopleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  selectedPersonChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 12 },
+  selectedPersonChipText: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
+  selectedPersonChipX: { color: C.accentBlue, fontSize: 11 },
+  clientSearchEmpty: { color: C.textDim, fontSize: 12, padding: 12, textAlign: 'center' },
+
+  // Client picker trigger
+  pickerTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  pickerTriggerText: { color: C.textDim, fontSize: 14, flex: 1 },
+  pickerTriggerTextActive: { color: C.accentBlue, fontSize: 14, fontWeight: '500', flex: 1 },
+  pickerTriggerIcon: { color: C.textDim, fontSize: 18 },
+
+  // Client picker modal
+  pickerOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  pickerSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: '80%' },
+  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerHeaderBtn: { minWidth: 52 },
+  pickerTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '500' },
+  pickerCancelText: { color: C.textSecondary, fontSize: 15 },
+  pickerConfirmText: { color: C.accentBlue, fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  pickerSearchWrap: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerSearchInput: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 10 },
+  pickerList: { flex: 1 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerRowSelected: { backgroundColor: C.accentBlue + '0D' },
+  pickerAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  pickerAvatarSelected: { backgroundColor: C.accentBlue + '33' },
+  pickerAvatarText: { color: C.textDim, fontSize: 14, fontWeight: '600' },
+  pickerAvatarTextSelected: { color: C.accentBlue },
+  pickerName: { color: C.textPrimary, fontSize: 14 },
+  pickerNameSelected: { color: C.accentBlue, fontWeight: '500' },
+  pickerSub: { color: C.textDim, fontSize: 11, marginTop: 2 },
+  pickerCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  pickerCheckSelected: { backgroundColor: C.accentBlue, borderColor: C.accentBlue },
+  pickerCheckMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
   chatLog: { flex: 1 },
   chatLogContent: { gap: 10, paddingBottom: 10 },
   bubble: { maxWidth: '85%', borderRadius: 14, padding: 12 },

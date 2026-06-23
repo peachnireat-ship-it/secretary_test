@@ -119,6 +119,13 @@ export async function deleteSchedule(id) {
   return updated;
 }
 
+export async function updateSchedule(id, fields) {
+  const list = await getSchedules();
+  const updated = list.map((s) => (s.id === id ? { ...s, ...fields } : s));
+  await saveSchedules(updated);
+  return updated;
+}
+
 // ── Clients ───────────────────────────────────────────────
 export async function getClients() {
   const key = await userKey(KEYS.clients);
