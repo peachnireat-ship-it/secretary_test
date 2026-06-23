@@ -1,6 +1,7 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  Animated, PanResponder,
 } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,6 +37,30 @@ function buildMonthGrid(year, month) {
   return cells;
 }
 
+function useSwipeClose(onClose) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 2,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) translateY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 80 || gs.vy > 0.8) {
+          Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }).start(() => {
+            translateY.setValue(0);
+            onClose();
+          });
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+        }
+      },
+    })
+  ).current;
+  return { panHandlers: panResponder.panHandlers, animStyle: { transform: [{ translateY }] } };
+}
+
 export default function ScheduleScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const today = new Date();
@@ -63,6 +88,10 @@ export default function ScheduleScreen({ navigation, route }) {
   const [chatInput, setChatInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
+
+  const swipeAdd = useSwipeClose(() => setShowAdd(false));
+  const swipeAI = useSwipeClose(() => setShowAI(false));
+  const swipeProject = useSwipeClose(() => setShowProjectView(false));
 
   async function load() {
     const [allSchedules, allProjects, allClients, allRecords] = await Promise.all([getSchedules(), getProjects(), getClients(), getMeetingRecords()]);
@@ -312,8 +341,10 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 일정 추가 모달 ── */}
       <Modal visible={showAdd} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHandle} />
+          <Animated.View style={[s.modalSheet, swipeAdd.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeAdd.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
             <Text style={s.modalTitle}>일정 추가</Text>
             <Text style={s.modalDateLabel}>{formatDateKo(selectedDate)}</Text>
 
@@ -343,15 +374,17 @@ export default function ScheduleScreen({ navigation, route }) {
                 <Text style={s.modalConfirmText}>추가</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
       {/* ── AI 채팅 모달 ── */}
       <Modal visible={showAI} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={[s.modalSheet, { height: '85%' }]}>
-            <View style={s.modalHandle} />
+          <Animated.View style={[s.modalSheet, { height: '85%' }, swipeAI.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeAI.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
             <View style={s.chatHeader}>
               <View style={s.chatHeaderLeft}>
                 <Text style={s.aiGlyph}>✦</Text>
@@ -394,15 +427,17 @@ export default function ScheduleScreen({ navigation, route }) {
                 <Text style={s.sendBtnText}>↑</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
       {/* ── 프로젝트 보기 모달 ── */}
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '80%' }]}>
-            <View style={s.modalHandle} />
+          <Animated.View style={[s.modalSheet, { maxHeight: '80%' }, swipeProject.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeProject.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
             {viewProject && (() => {
               const days = daysUntil(viewProject.deadline);
               const linkedMeetings = viewProject.meetingRecordIds?.length > 0
@@ -477,7 +512,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 </ScrollView>
               );
             })()}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
     </View>
@@ -580,7 +615,8 @@ const s = StyleSheet.create({
   // Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
   modalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
-  modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
+  modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2 },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
   modalDateLabel: { color: C.textDim, fontSize: 12, marginBottom: 20 },
   inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 8, marginTop: 16 },
