@@ -1,13 +1,13 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
-  Animated, PanResponder,
+  Animated, PanResponder, Linking,
 } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, getClients, getMeetingRecords, getCurrentUser } from '../services/storage';
+import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, getClients, getMeetingRecords, getCurrentUser, addClient } from '../services/storage';
 import { askClaude, buildScheduleSystem } from '../services/claude';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
@@ -47,7 +47,7 @@ function useSwipeClose(onClose) {
         if (gs.dy > 0) translateY.setValue(gs.dy);
       },
       onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80 || gs.vy > 0.8) {
+        if (gs.dy > 80 || (gs.vy > 0.8 && gs.dy > 10)) {
           Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }).start(() => {
             translateY.setValue(0);
             onClose();
@@ -86,11 +86,19 @@ export default function ScheduleScreen({ navigation, route }) {
   const [editTag, setEditTag] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editClientIds, setEditClientIds] = useState([]);
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editEndDate, setEditEndDate] = useState('');
 
   const [showClientPicker, setShowClientPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
   const [pickerTempIds, setPickerTempIds] = useState([]);
   const pickerCallback = useRef(null);
+
+  const [showPickerAddClient, setShowPickerAddClient] = useState(false);
+  const [pickerNewName, setPickerNewName] = useState('');
+  const [pickerNewCompany, setPickerNewCompany] = useState('');
+  const [pickerNewRole, setPickerNewRole] = useState('');
+  const [pickerNewContact, setPickerNewContact] = useState('');
 
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -98,6 +106,10 @@ export default function ScheduleScreen({ navigation, route }) {
   const [newTag, setNewTag] = useState('회의');
   const [newNotes, setNewNotes] = useState('');
   const [newClientIds, setNewClientIds] = useState([]);
+  const [newStartDate, setNewStartDate] = useState('');
+  const [newEndDate, setNewEndDate] = useState('');
+  const [newAmPm, setNewAmPm] = useState('오전');
+  const [editAmPm, setEditAmPm] = useState('오전');
 
   const [showAI, setShowAI] = useState(false);
   const [chatMessages, setChatMessages] = useState([
@@ -112,6 +124,37 @@ export default function ScheduleScreen({ navigation, route }) {
   const swipeProject = useSwipeClose(() => setShowProjectView(false));
   const swipePerson = useSwipeClose(() => setShowPersonView(false));
   const swipeSchedule = useSwipeClose(() => { setShowScheduleView(false); setEditMode(false); });
+
+  const calTranslateX = useRef(new Animated.Value(0)).current;
+  const moveMonthRef = useRef(null);
+  const calPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5 && Math.abs(gs.dx) > 8,
+      onPanResponderMove: (_, gs) => { calTranslateX.setValue(gs.dx); },
+      onPanResponderRelease: (_, gs) => {
+        const THRESHOLD = 60;
+        if (gs.dx < -THRESHOLD || (gs.vx < -0.4 && gs.dx < -10)) {
+          Animated.timing(calTranslateX, { toValue: -500, duration: 180, useNativeDriver: true }).start(() => {
+            moveMonthRef.current(1);
+            calTranslateX.setValue(500);
+            Animated.timing(calTranslateX, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+          });
+        } else if (gs.dx > THRESHOLD || (gs.vx > 0.4 && gs.dx > 10)) {
+          Animated.timing(calTranslateX, { toValue: 500, duration: 180, useNativeDriver: true }).start(() => {
+            moveMonthRef.current(-1);
+            calTranslateX.setValue(-500);
+            Animated.timing(calTranslateX, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+          });
+        } else {
+          Animated.spring(calTranslateX, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(calTranslateX, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+      },
+    })
+  ).current;
 
   async function load() {
     const [allSchedules, allProjects, allClients, allRecords, user] = await Promise.all([getSchedules(), getProjects(), getClients(), getMeetingRecords(), getCurrentUser()]);
@@ -150,17 +193,19 @@ export default function ScheduleScreen({ navigation, route }) {
     if (m > 12) { m = 1; y += 1; }
     setCalYear(y); setCalMonth(m);
   }
+  moveMonthRef.current = moveMonth;
 
   async function handleAdd() {
     if (!newTitle.trim()) return;
-    const updated = await addSchedule({ date: selectedDate, time: newTime, title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds });
+    const scheduleDate = newStartDate.trim().length === 10 ? newStartDate.trim() : selectedDate;
+    const updated = await addSchedule({ date: scheduleDate, time: to24h(newAmPm, newTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: newStartDate.trim(), endDate: newEndDate.trim() });
     setSchedules(updated);
     setShowAdd(false);
-    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]); setClientSearch('');
+    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]); setNewStartDate(''); setNewEndDate(''); setNewAmPm('오전');
   }
 
   function openClientPicker(currentIds, onConfirm) {
-    setPickerTempIds([...currentIds]);
+    setPickerTempIds([...new Set(currentIds)]);
     setPickerSearch('');
     pickerCallback.current = onConfirm;
     setShowClientPicker(true);
@@ -171,6 +216,19 @@ export default function ScheduleScreen({ navigation, route }) {
     setShowClientPicker(false);
   }
 
+  async function handlePickerAddClient() {
+    if (!pickerNewName.trim() || !pickerNewCompany.trim() || !pickerNewContact.trim()) {
+      Alert.alert('필수 항목 누락', '이름, 회사명, 연락처는 필수입니다.');
+      return;
+    }
+    const updated = await addClient({ name: pickerNewName.trim(), company: pickerNewCompany.trim(), role: pickerNewRole.trim(), contact: pickerNewContact.trim(), notes: '' });
+    setClients(updated);
+    const newClient = updated[0]; // addClient prepends, so index 0 is the new entry
+    if (newClient) setPickerTempIds((prev) => prev.includes(newClient.id) ? prev : [...prev, newClient.id]);
+    setPickerNewName(''); setPickerNewCompany(''); setPickerNewRole(''); setPickerNewContact('');
+    setShowPickerAddClient(false);
+  }
+
   async function handleDelete(id) {
     const updated = await deleteSchedule(id);
     setSchedules(updated);
@@ -178,15 +236,20 @@ export default function ScheduleScreen({ navigation, route }) {
 
   async function handleEditSave() {
     if (!editTitle.trim()) return;
+    const scheduleDate = editStartDate.trim().length === 10 ? editStartDate.trim() : viewSchedule.date;
+    const saved24h = to24h(editAmPm, editTime);
     const updated = await updateSchedule(viewSchedule.id, {
+      date: scheduleDate,
       title: editTitle.trim(),
-      time: editTime,
+      time: saved24h,
       tag: editTag,
       notes: editNotes.trim(),
       clientIds: editClientIds,
+      startDate: editStartDate.trim(),
+      endDate: editEndDate.trim(),
     });
     setSchedules(updated);
-    setViewSchedule((prev) => ({ ...prev, title: editTitle.trim(), time: editTime, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds }));
+    setViewSchedule((prev) => ({ ...prev, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, startDate: editStartDate.trim(), endDate: editEndDate.trim() }));
     setEditMode(false);
   }
 
@@ -267,7 +330,8 @@ export default function ScheduleScreen({ navigation, route }) {
       </View>
 
       {/* ── 캘린더 그리드 ── */}
-      <View style={s.grid}>
+      <View style={s.gridClip}>
+        <Animated.View style={[s.grid, { transform: [{ translateX: calTranslateX }] }]} {...calPanResponder.panHandlers}>
         {buildMonthGrid(calYear, calMonth).map((cell, i) => {
           if (!cell) return <View key={`e-${i}`} style={s.gridCell} />;
           const isSelected = selectedDate === cell.str;
@@ -316,6 +380,7 @@ export default function ScheduleScreen({ navigation, route }) {
             </TouchableOpacity>
           );
         })}
+        </Animated.View>
       </View>
 
       {/* ── 선택 날짜 ── */}
@@ -364,7 +429,7 @@ export default function ScheduleScreen({ navigation, route }) {
                   { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
                 ])}
               >
-                <Text style={s.scheduleTime}>{item.time}</Text>
+                <Text style={s.scheduleTime}>{displayTime(item.time)}</Text>
                 <View style={s.scheduleDivider} />
                 <View style={s.scheduleBody}>
                   <View style={s.scheduleTitleRow}>
@@ -382,7 +447,7 @@ export default function ScheduleScreen({ navigation, route }) {
       </ScrollView>
 
       {/* ── 추가 버튼 ── */}
-      <TouchableOpacity style={s.fab} onPress={() => setShowAdd(true)}>
+      <TouchableOpacity style={s.fab} onPress={() => { setNewStartDate(selectedDate); setNewEndDate(''); setShowAdd(true); }}>
         <Text style={s.fabText}>+</Text>
       </TouchableOpacity>
 
@@ -400,8 +465,22 @@ export default function ScheduleScreen({ navigation, route }) {
               <Text style={s.inputLabel}>제목</Text>
               <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
 
+              <Text style={s.inputLabel}>시작일</Text>
+              <TextInput style={s.input} value={newStartDate} onChangeText={(t) => setNewStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+
+              <Text style={s.inputLabel}>마감일 (선택)</Text>
+              <TextInput style={s.input} value={newEndDate} onChangeText={(t) => setNewEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+
               <Text style={s.inputLabel}>시간</Text>
-              <TextInput style={s.input} value={newTime} onChangeText={setNewTime} placeholder="09:00" placeholderTextColor={C.textDim} />
+              <View style={s.timeRow}>
+                <TouchableOpacity style={[s.ampmBtn, newAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewAmPm('오전')}>
+                  <Text style={[s.ampmBtnText, newAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.ampmBtn, newAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewAmPm('오후')}>
+                  <Text style={[s.ampmBtnText, newAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                </TouchableOpacity>
+                <TextInput style={[s.input, { flex: 1 }]} value={newTime} onChangeText={(t) => setNewTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+              </View>
 
               <Text style={s.inputLabel}>분류</Text>
               <View style={s.tagRow}>
@@ -438,7 +517,7 @@ export default function ScheduleScreen({ navigation, route }) {
               <TextInput style={[s.input, { height: 72 }]} value={newNotes} onChangeText={setNewNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
 
               <View style={s.modalBtns}>
-                <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setClientSearch(''); }}>
+                <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setNewStartDate(''); setNewEndDate(''); setNewAmPm('오전'); }}>
                   <Text style={s.modalCancelText}>취소</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.modalConfirm} onPress={handleAdd}>
@@ -606,7 +685,7 @@ export default function ScheduleScreen({ navigation, route }) {
                   <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                     {!editMode && (
                       <>
-                        <TouchableOpacity onPress={() => { setEditTitle(viewSchedule.title); setEditTime(viewSchedule.time); setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []); setEditMode(true); }}>
+                        <TouchableOpacity onPress={() => { const { ampm, time12 } = from24h(viewSchedule.time); setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm); setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []); setEditStartDate(viewSchedule.startDate || ''); setEditEndDate(viewSchedule.endDate || ''); setEditMode(true); }}>
                           <Text style={s.editBtn}>수정</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => Alert.alert('삭제', `"${viewSchedule.title}" 일정을 삭제할까요?`, [
@@ -628,8 +707,22 @@ export default function ScheduleScreen({ navigation, route }) {
                     <Text style={s.inputLabel}>제목</Text>
                     <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
 
+                    <Text style={s.inputLabel}>시작일</Text>
+                    <TextInput style={s.input} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+
+                    <Text style={s.inputLabel}>마감일 (선택)</Text>
+                    <TextInput style={s.input} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+
                     <Text style={s.inputLabel}>시간</Text>
-                    <TextInput style={s.input} value={editTime} onChangeText={setEditTime} placeholder="09:00" placeholderTextColor={C.textDim} />
+                    <View style={s.timeRow}>
+                      <TouchableOpacity style={[s.ampmBtn, editAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditAmPm('오전')}>
+                        <Text style={[s.ampmBtnText, editAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[s.ampmBtn, editAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditAmPm('오후')}>
+                        <Text style={[s.ampmBtnText, editAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                      </TouchableOpacity>
+                      <TextInput style={[s.input, { flex: 1 }]} value={editTime} onChangeText={(t) => setEditTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                    </View>
 
                     <Text style={s.inputLabel}>분류</Text>
                     <View style={s.tagRow}>
@@ -678,8 +771,18 @@ export default function ScheduleScreen({ navigation, route }) {
                   <>
                     <Text style={s.modalDateLabel}>{formatDateKo(viewSchedule.date)}</Text>
 
+                    <Text style={s.viewLabel}>시작일</Text>
+                    <Text style={s.viewText}>{viewSchedule.startDate || viewSchedule.date}</Text>
+
+                    {viewSchedule.endDate ? (
+                      <>
+                        <Text style={s.viewLabel}>마감일</Text>
+                        <Text style={s.viewText}>{viewSchedule.endDate}</Text>
+                      </>
+                    ) : null}
+
                     <Text style={s.viewLabel}>시간</Text>
-                    <Text style={s.viewText}>{viewSchedule.time}</Text>
+                    <Text style={s.viewText}>{displayTime(viewSchedule.time)}</Text>
 
                     <Text style={s.viewLabel}>분류</Text>
                     <View style={[s.tagBadge, { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: tagColor(viewSchedule.tag) + '22', borderColor: tagColor(viewSchedule.tag) + '55' }]}>
@@ -752,7 +855,16 @@ export default function ScheduleScreen({ navigation, route }) {
                 {viewPerson.contact ? (
                   <>
                     <Text style={s.viewLabel}>연락처</Text>
-                    <Text style={s.viewText}>{viewPerson.contact}</Text>
+                    <TouchableOpacity onPress={() => Alert.alert(
+                      '전화 걸기',
+                      `${viewPerson.name}(${viewPerson.contact})에게 전화하시겠습니까?`,
+                      [
+                        { text: '취소', style: 'cancel' },
+                        { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${viewPerson.contact.replace(/[^0-9+]/g, '')}`) },
+                      ]
+                    )}>
+                      <Text style={[s.viewText, s.contactLink]}>{viewPerson.contact}</Text>
+                    </TouchableOpacity>
                   </>
                 ) : null}
 
@@ -797,6 +909,9 @@ export default function ScheduleScreen({ navigation, route }) {
             </View>
 
             <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity style={s.pickerAddNewBtn} onPress={() => setShowPickerAddClient(true)}>
+                <Text style={s.pickerAddNewText}>+ 신규 거래처 인원 등록</Text>
+              </TouchableOpacity>
               {(() => {
                 const isSelf = (c) =>
                   currentUser &&
@@ -819,7 +934,7 @@ export default function ScheduleScreen({ navigation, route }) {
                       key={c.id}
                       style={[s.pickerRow, selected && s.pickerRowSelected]}
                       onPress={() => setPickerTempIds((prev) =>
-                        selected ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                        selected ? prev.filter((x) => x !== c.id) : prev.includes(c.id) ? prev : [...prev, c.id]
                       )}
                       activeOpacity={0.7}
                     >
@@ -842,8 +957,85 @@ export default function ScheduleScreen({ navigation, route }) {
           </View>
         </View>
       </Modal>
+
+      {/* ── 신규 거래처 인원 등록 (피커에서 진입) ── */}
+      <Modal visible={showPickerAddClient} animationType="slide" transparent onRequestClose={() => setShowPickerAddClient(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.pickerOverlay}>
+          <View style={s.pickerSheet}>
+            <View style={s.pickerHeader}>
+              <TouchableOpacity onPress={() => setShowPickerAddClient(false)} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={s.pickerTitle}>신규 거래처 인원 등록</Text>
+              <TouchableOpacity onPress={handlePickerAddClient} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerConfirmText}>추가</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={s.pickerAddForm} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={s.inputLabel}>이름 *</Text>
+              <TextInput style={s.input} value={pickerNewName} onChangeText={setPickerNewName} placeholder="홍길동" placeholderTextColor={C.textDim} />
+              <Text style={s.inputLabel}>회사명 *</Text>
+              <TextInput style={s.input} value={pickerNewCompany} onChangeText={setPickerNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
+              <Text style={s.inputLabel}>직책</Text>
+              <TextInput style={s.input} value={pickerNewRole} onChangeText={setPickerNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
+              <Text style={s.inputLabel}>연락처 *</Text>
+              <TextInput style={s.input} value={pickerNewContact} onChangeText={setPickerNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
+}
+
+function to24h(ampm, time12) {
+  const parts = time12.split(':');
+  let h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  if (ampm === '오후' && h !== 12) h += 12;
+  if (ampm === '오전' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function from24h(time24) {
+  const parts = (time24 || '09:00').split(':');
+  const h = parseInt(parts[0], 10) || 0;
+  const mStr = parts[1] || '00';
+  const ampm = h < 12 ? '오전' : '오후';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return { ampm, time12: `${String(h12).padStart(2, '0')}:${mStr}` };
+}
+
+function displayTime(time24) {
+  const { ampm, time12 } = from24h(time24);
+  return `${ampm} ${time12}`;
+}
+
+function fmtTime12(text) {
+  const d = text.replace(/\D/g, '').slice(0, 4);
+  if (d.length <= 1) return d;
+  const hRaw = parseInt(d.slice(0, 2), 10);
+  const h = Math.min(Math.max(hRaw, 1), 12);
+  const hStr = String(h).padStart(2, '0');
+  if (d.length === 2) return hStr;
+  const mStr = d.slice(2);
+  if (d.length === 3) return `${hStr}:${mStr}`;
+  const mRaw = parseInt(mStr, 10);
+  return `${hStr}:${String(Math.min(mRaw, 59)).padStart(2, '0')}`;
+}
+
+function fmtDate(text) {
+  const d = text.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 4) return d;
+  if (d.length <= 6) return `${d.slice(0, 4)}-${d.slice(4)}`;
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
+}
+
+function fmtTime(text) {
+  const d = text.replace(/\D/g, '').slice(0, 4);
+  if (d.length <= 2) return d;
+  return `${d.slice(0, 2)}:${d.slice(2)}`;
 }
 
 function projDayLabel(proj, date) {
@@ -891,6 +1083,7 @@ const s = StyleSheet.create({
   monthLabel: { color: C.textPrimary, fontSize: 15, fontWeight: '400' },
   weekHeader: { flexDirection: 'row', paddingHorizontal: 12, marginBottom: 4 },
   weekDay: { flex: 1, textAlign: 'center', color: C.textDim, fontSize: 10, letterSpacing: 0.5 },
+  gridClip: { overflow: 'hidden' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginBottom: 8 },
   gridCell: { width: '14.28%', minHeight: 52, alignItems: 'center', justifyContent: 'flex-start', paddingVertical: 4 },
   gridNumWrap: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
@@ -933,8 +1126,9 @@ const s = StyleSheet.create({
   personAvatarText: { color: C.accentBlue, fontSize: 20, fontWeight: '600' },
   personName: { color: C.textPrimary, fontSize: 18, fontWeight: '400' },
   personSub: { color: C.textDim, fontSize: 13, marginTop: 2 },
+  contactLink: { color: C.accentBlue, textDecorationLine: 'underline' },
   projectDeadlineLabel: { color: C.gold, fontSize: 11, fontWeight: '600', width: 44, textAlign: 'center' },
-  scheduleTime: { color: C.textSecondary, fontSize: 13, fontWeight: '500', width: 44 },
+  scheduleTime: { color: C.textSecondary, fontSize: 12, fontWeight: '500', width: 64 },
   scheduleDivider: { width: 1, height: 32, backgroundColor: C.borderHigh },
   scheduleBody: { flex: 1, gap: 4 },
   scheduleTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -954,6 +1148,11 @@ const s = StyleSheet.create({
   modalDateLabel: { color: C.textDim, fontSize: 12, marginBottom: 20 },
   inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 8, marginTop: 16 },
   input: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12 },
+  timeRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  ampmBtn: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  ampmBtnActive: { borderColor: C.accentBlue + '88', backgroundColor: C.accentBlue + '22' },
+  ampmBtnText: { color: C.textDim, fontSize: 14 },
+  ampmBtnTextActive: { color: C.accentBlue, fontWeight: '500' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tagOption: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   tagOptionActive: { borderColor: C.accentBlue + '88', backgroundColor: C.accentBlue + '22' },
@@ -1007,6 +1206,9 @@ const s = StyleSheet.create({
   pickerCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
   pickerCheckSelected: { backgroundColor: C.accentBlue, borderColor: C.accentBlue },
   pickerCheckMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  pickerAddNewBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.accentBlue + '0A' },
+  pickerAddNewText: { color: C.accentBlue, fontSize: 14, fontWeight: '500' },
+  pickerAddForm: { flex: 1, paddingHorizontal: 20 },
 
   chatLog: { flex: 1 },
   chatLogContent: { gap: 10, paddingBottom: 10 },
