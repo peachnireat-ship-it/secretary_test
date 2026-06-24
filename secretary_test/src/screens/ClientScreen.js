@@ -372,7 +372,7 @@ export default function ClientScreen({ navigation, route }) {
             </View>
           )}
         </TouchableOpacity>
-        <View style={{ flex: 1 }} />
+        <View style={s.flex1} />
         <TouchableOpacity style={[s.sortBtn, sortOrder === 'asc' && s.sortBtnActive]} onPress={() => setSortOrder('asc')}>
           <Text style={[s.sortBtnText, sortOrder === 'asc' && s.sortBtnTextActive]}>가↑</Text>
         </TouchableOpacity>
@@ -420,7 +420,7 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 입력 방식 선택 ── */}
       <Modal visible={showSourcePicker} animationType="fade" transparent>
         <View style={s.modalOverlay}>
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowSourcePicker(false)} />
+          <TouchableOpacity style={s.flex1} activeOpacity={1} onPress={() => setShowSourcePicker(false)} />
           <View style={s.sourceSheet}>
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>거래처 추가</Text>
@@ -439,7 +439,7 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 연락처 선택 모달 ── */}
       <Modal visible={showContactPicker} animationType="slide" transparent>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { height: '80%' }]}>
+          <View style={[s.modalSheet, s.h80pct]}>
             <View style={s.modalHandle} />
             <View style={s.chatHeader}>
               <Text style={s.modalTitle}>연락처 선택</Text>
@@ -448,16 +448,16 @@ export default function ClientScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
             <TextInput
-              style={[s.searchInput, { marginBottom: 12 }]}
+              style={[s.searchInput, s.mb12]}
               value={contactSearch}
               onChangeText={setContactSearch}
               placeholder="이름 검색"
               placeholderTextColor={C.textDim}
             />
             {contactLoading ? (
-              <ActivityIndicator size="large" color={C.accentTeal} style={{ marginTop: 24 }} />
+              <ActivityIndicator size="large" color={C.accentTeal} style={s.mt24} />
             ) : filteredContactList.length === 0 ? (
-              <Text style={[s.emptyText, { marginTop: 24 }]}>연락처가 없습니다</Text>
+              <Text style={[s.emptyText, s.mt24]}>연락처가 없습니다</Text>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
                 {filteredContactList.map((contact) => (
@@ -465,7 +465,7 @@ export default function ClientScreen({ navigation, route }) {
                     <View style={s.clientAvatar}>
                       <Text style={s.clientAvatarText}>{contact.name?.[0] || '?'}</Text>
                     </View>
-                    <View style={{ flex: 1 }}>
+                    <View style={s.flex1}>
                       <Text style={s.clientName}>{contact.name}</Text>
                       <Text style={s.clientRole}>{contact.phoneNumbers?.[0]?.number || ''}</Text>
                     </View>
@@ -480,7 +480,7 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 클라이언트 상세 모달 ── */}
       <Modal visible={!!selectedClient} animationType="slide" transparent>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { height: '90%' }, swipeClient.animStyle]}>
+          <Animated.View style={[s.modalSheet, s.h90pct, swipeClient.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeClient.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -488,8 +488,8 @@ export default function ClientScreen({ navigation, route }) {
               <View style={s.detailAvatar}>
                 <Text style={s.detailAvatarText}>{selectedClient?.name?.[0]}</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={s.flex1}>
+                <View style={s.nameStarRow}>
                   <Text style={s.detailName}>{selectedClient?.name}</Text>
                   <TouchableOpacity onPress={() => selectedClient && handleToggleFavorite(selectedClient.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Text style={[s.detailStarIcon, selectedClient && favorites.includes(selectedClient.id) && s.starIconActive]}>
@@ -499,7 +499,7 @@ export default function ClientScreen({ navigation, route }) {
                 </View>
                 <Text style={s.detailCompany}>{selectedClient?.company} · {selectedClient?.role}</Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={s.editCloseRow}>
                 <TouchableOpacity onPress={() => openEditClient(selectedClient)} style={s.editClientBtn}>
                   <Text style={s.editClientBtnText}>수정</Text>
                 </TouchableOpacity>
@@ -560,7 +560,7 @@ export default function ClientScreen({ navigation, route }) {
                 <Text style={s.summaryLabel}>AI 관계 요약</Text>
               </View>
               {summaryLoading
-                ? <ActivityIndicator size="small" color={C.accentTeal} style={{ marginTop: 8 }} />
+                ? <ActivityIndicator size="small" color={C.accentTeal} style={s.mt8} />
                 : <Text style={s.summaryText}>{clientSummary || '요약 준비 중...'}</Text>
               }
             </View>
@@ -592,7 +592,7 @@ export default function ClientScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={s.flex1} showsVerticalScrollIndicator={false}>
               {clientHistories.length === 0 ? (
                 <Text style={s.emptyText}>기록된 히스토리가 없습니다</Text>
               ) : (
@@ -608,7 +608,7 @@ export default function ClientScreen({ navigation, route }) {
                           <Text style={[s.typeText, { color: typeColor(h.type) }]}>{h.type}</Text>
                         </View>
                         <Text style={s.historyTitleText}>{h.title}</Text>
-                        <View style={{ marginLeft: 'auto', flexDirection: 'row', gap: 10 }}>
+                        <View style={s.historyActionRow}>
                           <TouchableOpacity onPress={() => openEditHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                             <Text style={s.editHistoryBtn}>편집</Text>
                           </TouchableOpacity>
@@ -634,7 +634,7 @@ export default function ClientScreen({ navigation, route }) {
                 const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));
                 if (!linked.length) return null;
                 return (
-                  <View style={[s.linkedSection, { marginTop: 16 }]}>
+                  <View style={[s.linkedSection, s.mt16]}>
                     <Text style={s.linkedSectionLabel}>연결된 회의록 {linked.length}건</Text>
                     {linked.map((r) => (
                       <TouchableOpacity key={r.id} style={s.meetingRecordItem} activeOpacity={0.7} onPress={() => setSelectedMeetingRecord(r)}>
@@ -732,10 +732,10 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 거래처 수정 모달 ── */}
       <Modal visible={showEditClient} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
+          <View style={[s.modalSheet, s.maxH90pct]}>
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>거래처 수정</Text>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.scrollPB8}>
               <View style={s.inputLabelRow}>
                 <Text style={s.inputLabel}>담당자 이름</Text>
                 <Text style={s.requiredMark}>*</Text>
@@ -746,16 +746,16 @@ export default function ClientScreen({ navigation, route }) {
                 <Text style={s.requiredMark}>*</Text>
               </View>
               <TextInput style={s.input} value={newCompany} onChangeText={setNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
-              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>직책</Text>
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>직책</Text>
               <TextInput style={s.input} value={newRole} onChangeText={setNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
               <View style={s.inputLabelRow}>
                 <Text style={s.inputLabel}>연락처</Text>
                 <Text style={s.requiredMark}>*</Text>
               </View>
               <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
-              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>직장 연락처</Text>
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>직장 연락처</Text>
               <TextInput style={s.input} value={newWorkContact} onChangeText={setNewWorkContact} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
-              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>메모</Text>
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>메모</Text>
               <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
             </ScrollView>
             <View style={s.modalBtns}>
@@ -773,10 +773,10 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 거래처 추가 모달 ── */}
       <Modal visible={showAddClient} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
+          <View style={[s.modalSheet, s.maxH90pct]}>
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>거래처 추가</Text>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.scrollPB8}>
               <View style={s.inputLabelRow}>
                 <Text style={s.inputLabel}>담당자 이름</Text>
                 <Text style={s.requiredMark}>*</Text>
@@ -787,16 +787,16 @@ export default function ClientScreen({ navigation, route }) {
                 <Text style={s.requiredMark}>*</Text>
               </View>
               <TextInput style={s.input} value={newCompany} onChangeText={setNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
-              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>직책</Text>
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>직책</Text>
               <TextInput style={s.input} value={newRole} onChangeText={setNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
               <View style={s.inputLabelRow}>
                 <Text style={s.inputLabel}>연락처</Text>
                 <Text style={s.requiredMark}>*</Text>
               </View>
               <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
-              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>직장 연락처</Text>
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>직장 연락처</Text>
               <TextInput style={s.input} value={newWorkContact} onChangeText={setNewWorkContact} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
-              <Text style={[s.inputLabel, { marginTop: 16, marginBottom: 8 }]}>메모</Text>
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>메모</Text>
               <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
             </ScrollView>
             <View style={s.modalBtns}>
@@ -814,18 +814,18 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── AI 거래처 히스토리 종합 모달 ── */}
       <Modal visible={showHistoryAI} animationType="slide" transparent onRequestClose={() => setShowHistoryAI(false)}>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { height: '85%' }]}>
+          <View style={[s.modalSheet, s.h85pct]}>
             <View style={s.modalHandle} />
             <View style={s.chatHeader}>
               <View style={s.chatHeaderLeft}>
-                <Text style={[s.aiGlyph, { color: C.accentTeal }]}>✦</Text>
+                <Text style={s.aiGlyph}>✦</Text>
                 <Text style={s.modalTitle}>AI 거래처 히스토리</Text>
               </View>
               <TouchableOpacity onPress={() => setShowHistoryAI(false)}>
                 <Text style={s.closeBtn}>✕</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+            <ScrollView style={s.flex1} showsVerticalScrollIndicator={false} contentContainerStyle={s.scrollPB24}>
               {historySummaryLoading ? (
                 <View style={s.historyAILoading}>
                   <ActivityIndicator size="small" color={C.accentTeal} />
@@ -848,11 +848,11 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── AI 채팅 모달 ── */}
       <Modal visible={showAI} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={[s.modalSheet, { height: '85%' }]}>
+          <View style={[s.modalSheet, s.h85pct]}>
             <View style={s.modalHandle} />
             <View style={s.chatHeader}>
               <View style={s.chatHeaderLeft}>
-                <Text style={[s.aiGlyph, { color: C.accentTeal }]}>✦</Text>
+                <Text style={s.aiGlyph}>✦</Text>
                 <Text style={s.modalTitle}>AI 거래처 비서</Text>
               </View>
               <TouchableOpacity onPress={() => setShowAI(false)}>
@@ -875,7 +875,7 @@ export default function ClientScreen({ navigation, route }) {
 
             <View style={s.chatInputRow}>
               <TextInput style={s.chatInput} value={chatInput} onChangeText={setChatInput} placeholder="거래처에 대해 물어보세요..." placeholderTextColor={C.textDim} onSubmitEditing={handleAIChat} returnKeyType="send" />
-              <TouchableOpacity style={[s.sendBtn, { backgroundColor: C.accentTeal }, !chatInput.trim() && { opacity: 0.4 }]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
+              <TouchableOpacity style={[s.sendBtn, !chatInput.trim() && s.opacity40]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
                 <Text style={s.sendBtnText}>↑</Text>
               </TouchableOpacity>
             </View>
@@ -885,12 +885,12 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 프로젝트 상세 모달 ── */}
       <Modal visible={!!selectedProject} animationType="slide" transparent onRequestClose={() => setSelectedProject(null)}>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '85%' }]}>
+          <View style={[s.modalSheet, s.maxH85pct]}>
             <View style={s.modalHandle} />
             {selectedProject && (
               <>
                 <View style={s.projDetailHeader}>
-                  <View style={{ flex: 1 }}>
+                  <View style={s.flex1}>
                     <View style={s.projDetailBadgeRow}>
                       <View style={[s.projStatusBadge, { borderColor: projectStatusColor(selectedProject.status) + '66', backgroundColor: projectStatusColor(selectedProject.status) + '18' }]}>
                         <Text style={[s.projStatusText, { color: projectStatusColor(selectedProject.status) }]}>{selectedProject.status}</Text>
@@ -903,7 +903,7 @@ export default function ClientScreen({ navigation, route }) {
                     </View>
                     <Text style={s.projDetailTitle}>{selectedProject.title}</Text>
                   </View>
-                  <TouchableOpacity onPress={() => setSelectedProject(null)} style={{ marginLeft: 8 }}>
+                  <TouchableOpacity onPress={() => setSelectedProject(null)} style={s.ml8}>
                     <Text style={s.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -912,7 +912,7 @@ export default function ClientScreen({ navigation, route }) {
                   <View style={s.projProgressTrack}>
                     <View style={[s.projProgressFill, { width: `${selectedProject.progress ?? 0}%`, backgroundColor: projectStatusColor(selectedProject.status) }]} />
                   </View>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                  <View style={s.projDeadlineRow}>
                     <Text style={s.projDeadlineText}>마감일 {selectedProject.deadline}{selectedProject.deadline && selectedProject.deadline !== '미정' ? (() => { const d = projDaysUntil(selectedProject.deadline); return d > 0 ? `  ·  ${d}일 후` : d === 0 ? '  ·  오늘 마감' : `  ·  ${Math.abs(d)}일 초과`; })() : ''}</Text>
                     <Text style={s.projProgressLabel}>{selectedProject.progress ?? 0}%</Text>
                   </View>
@@ -935,11 +935,11 @@ export default function ClientScreen({ navigation, route }) {
                       <View style={s.projSection}>
                         <Text style={s.linkedSectionLabel}>관련 인물 {people.length}명</Text>
                         {people.map((c, idx) => (
-                          <View key={c.id} style={[s.projPersonRow, idx < people.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}>
+                          <View key={c.id} style={[s.projPersonRow, idx < people.length - 1 && s.borderBottom]}>
                             <View style={s.clientAvatar}>
                               <Text style={s.clientAvatarText}>{c.name[0]}</Text>
                             </View>
-                            <View style={{ flex: 1 }}>
+                            <View style={s.flex1}>
                               <Text style={s.clientName}>{c.name}</Text>
                               {c.company ? <Text style={s.clientRole}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                             </View>
@@ -967,7 +967,7 @@ export default function ClientScreen({ navigation, route }) {
                       </View>
                     );
                   })()}
-                  <View style={{ height: 20 }} />
+                  <View style={s.spacerH20} />
                 </ScrollView>
               </>
             )}
@@ -978,13 +978,13 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 회의록 상세 모달 ── */}
       <Modal visible={!!selectedMeetingRecord} animationType="slide" transparent onRequestClose={() => setSelectedMeetingRecord(null)}>
         <View style={s.modalOverlay}>
-          <View style={[s.modalSheet, { maxHeight: '90%' }]}>
+          <View style={[s.modalSheet, s.maxH90pct]}>
             <View style={s.modalHandle} />
             {selectedMeetingRecord && (
               <>
                 <View style={s.meetingDetailHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.modalTitle, { marginBottom: 0 }]} numberOfLines={2}>{selectedMeetingRecord.title || '회의록'}</Text>
+                  <View style={s.flex1}>
+                    <Text style={[s.modalTitle, s.mb0]} numberOfLines={2}>{selectedMeetingRecord.title || '회의록'}</Text>
                     {selectedMeetingRecord.createdAt && (
                       <Text style={s.meetingDetailDate}>
                         {new Date(selectedMeetingRecord.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })}
@@ -992,11 +992,11 @@ export default function ClientScreen({ navigation, route }) {
                       </Text>
                     )}
                   </View>
-                  <TouchableOpacity onPress={() => setSelectedMeetingRecord(null)} style={{ marginLeft: 8 }}>
+                  <TouchableOpacity onPress={() => setSelectedMeetingRecord(null)} style={s.ml8}>
                     <Text style={s.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
-                <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
+                <ScrollView showsVerticalScrollIndicator={false} style={s.mt8}>
                   {selectedMeetingRecord.summary ? (
                     <>
                       <Text style={s.meetingDetailSectionLabel}>SUMMARY</Text>
@@ -1014,12 +1014,12 @@ export default function ClientScreen({ navigation, route }) {
                           if (segs.length === 0) return <Text style={s.meetingDetailText}>{selectedMeetingRecord.transcript}</Text>;
                           const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
                           return (
-                            <View style={{ gap: 12 }}>
+                            <View style={s.transcriptSegments}>
                               {segs.map((seg, i) => {
                                 const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
                                 return (
                                   <View key={i}>
-                                    <Text style={{ color, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 }}>{seg.speaker}</Text>
+                                    <Text style={[s.speakerLabel, { color }]}>{seg.speaker}</Text>
                                     <Text style={s.meetingDetailText}>{seg.text}</Text>
                                   </View>
                                 );
@@ -1031,9 +1031,9 @@ export default function ClientScreen({ navigation, route }) {
                     </>
                   ) : null}
                   {!selectedMeetingRecord.summary && !selectedMeetingRecord.transcript && (
-                    <Text style={[s.emptyText, { marginTop: 20 }]}>저장된 내용이 없습니다.</Text>
+                    <Text style={[s.emptyText, s.mt20]}>저장된 내용이 없습니다.</Text>
                   )}
-                  <View style={{ height: 20 }} />
+                  <View style={s.spacerH20} />
                 </ScrollView>
               </>
             )}
@@ -1096,7 +1096,6 @@ const s = StyleSheet.create({
   clientRole: { color: C.textSecondary, fontSize: 12 },
   clientMeta: { flexDirection: 'row', gap: 12, marginTop: 2 },
   clientMetaText: { color: C.textDim, fontSize: 10 },
-  chevron: { color: C.textDim, fontSize: 18 },
   clientCardFav: { borderColor: C.gold + '55', backgroundColor: C.gold + '08' },
   starBtn: { padding: 4 },
   starIcon: { color: C.textDim, fontSize: 18 },
@@ -1131,8 +1130,6 @@ const s = StyleSheet.create({
   detailAvatarText: { color: C.accentTeal, fontSize: 22, fontWeight: '400' },
   detailName: { color: C.textPrimary, fontSize: 18, fontWeight: '400' },
   detailCompany: { color: C.textSecondary, fontSize: 12, marginTop: 2 },
-  detailContact: { color: C.textDim, fontSize: 11, marginTop: 2 },
-  contactLink: { color: C.accentBlue, textDecorationLine: 'underline' },
   contactSection: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 14 },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   contactLabel: { color: C.textPrimary, fontSize: 12, fontWeight: '500' },
@@ -1235,6 +1232,38 @@ const s = StyleSheet.create({
   bubbleTextUser: { color: C.textPrimary },
   chatInputRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   chatInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 24, color: C.textPrimary, fontSize: 14, paddingHorizontal: 18, paddingVertical: 12 },
-  sendBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  sendBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: C.accentTeal },
   sendBtnText: { color: '#fff', fontSize: 18 },
+  // Layout helpers
+  flex1: { flex: 1 },
+  spacerH20: { height: 20 },
+  // Modal height variants
+  h80pct: { height: '80%' },
+  h85pct: { height: '85%' },
+  h90pct: { height: '90%' },
+  maxH85pct: { maxHeight: '85%' },
+  maxH90pct: { maxHeight: '90%' },
+  // Spacing modifiers
+  mb0: { marginBottom: 0 },
+  mb12: { marginBottom: 12 },
+  mt8: { marginTop: 8 },
+  mt16: { marginTop: 16 },
+  mt20: { marginTop: 20 },
+  mt24: { marginTop: 24 },
+  ml8: { marginLeft: 8 },
+  inputLabelSpacing: { marginTop: 16, marginBottom: 8 },
+  // Content container padding
+  scrollPB8: { paddingBottom: 8 },
+  scrollPB24: { paddingBottom: 24 },
+  // Row layouts
+  nameStarRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  editCloseRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  historyActionRow: { marginLeft: 'auto', flexDirection: 'row', gap: 10 },
+  projDeadlineRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  // Borders
+  borderBottom: { borderBottomWidth: 1, borderBottomColor: C.border },
+  // Transcript
+  transcriptSegments: { gap: 12 },
+  speakerLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 },
+  opacity40: { opacity: 0.4 },
 });

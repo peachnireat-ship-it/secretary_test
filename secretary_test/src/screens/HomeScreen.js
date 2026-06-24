@@ -179,7 +179,7 @@ export default function HomeScreen({ navigation, user }) {
       </View>
 
       {/* ── AI 기능 안내 ── */}
-      <View style={[s.section, { marginBottom: 48 }]}>
+      <View style={[s.section, s.sectionLast]}>
         <Text style={s.sectionLabel}>AI FEATURES</Text>
         <View style={s.aiCard}>
           <TouchableOpacity
@@ -188,29 +188,29 @@ export default function HomeScreen({ navigation, user }) {
             onPress={() => navigation.navigate('일정', { openAI: true })}
           >
             <View style={[s.aiDot, { backgroundColor: C.accentBlue }]} />
-            <View style={{ flex: 1 }}>
+            <View style={s.flex1}>
               <Text style={s.aiTitle}>AI 일정 관리</Text>
               <Text style={s.aiDesc}>자연어로 일정 추가 · 일정 충돌 감지 · AI 질문 응답</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.7}
-            style={[s.aiRow, { borderTopWidth: 1, borderTopColor: C.border }]}
+            style={[s.aiRow, s.aiRowBordered]}
             onPress={() => navigation.navigate('거래처', { openHistoryAI: true })}
           >
             <View style={[s.aiDot, { backgroundColor: C.accentTeal }]} />
-            <View style={{ flex: 1 }}>
+            <View style={s.flex1}>
               <Text style={s.aiTitle}>AI 거래처 히스토리</Text>
               <Text style={s.aiDesc}>관계 요약 · 히스토리 분석 · 후속 조치 제안</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.7}
-            style={[s.aiRow, { borderTopWidth: 1, borderTopColor: C.border }]}
+            style={[s.aiRow, s.aiRowBordered]}
             onPress={() => navigation.navigate('프로젝트', { openAI: true })}
           >
             <View style={[s.aiDot, { backgroundColor: C.red }]} />
-            <View style={{ flex: 1 }}>
+            <View style={s.flex1}>
               <Text style={s.aiTitle}>AI 프로젝트 지연 분석</Text>
               <Text style={s.aiDesc}>지연 원인 패턴 분석 · 위험 프로젝트 식별 · 개선 액션 플랜</Text>
             </View>
@@ -267,7 +267,6 @@ const s = StyleSheet.create({
   badgeText: { color: C.goldDim, fontSize: 10, letterSpacing: 3, fontWeight: '600' },
   teamBadge: { backgroundColor: C.accentBlue + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   teamBadgeText: { color: C.accentBlue, fontSize: 10, letterSpacing: 1, fontWeight: '600' },
-  clockText: { color: C.textPrimary, fontSize: 20, fontWeight: '200', letterSpacing: -2, lineHeight: 68 },
   dateText: { color: C.textDim, fontSize: 17, marginTop: 6, letterSpacing: 0.5 },
   greetingText: { color: C.textSecondary, fontSize: 20, marginTop: 4, letterSpacing: 1 },
   rule: { height: 1, backgroundColor: C.border, marginBottom: 32 },
@@ -314,4 +313,7 @@ const s = StyleSheet.create({
   aiDot: { width: 8, height: 8, borderRadius: 4 },
   aiTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '500', marginBottom: 3 },
   aiDesc: { color: C.textSecondary, fontSize: 11, lineHeight: 17 },
+  flex1: { flex: 1 },
+  sectionLast: { marginBottom: 48 },
+  aiRowBordered: { borderTopWidth: 1, borderTopColor: C.border },
 });

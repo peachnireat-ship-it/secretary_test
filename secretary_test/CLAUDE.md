@@ -355,3 +355,19 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
   - 일부/미선택 상태 → "전체 선택" 표시, 누르면 `tasks.map((_, i) => i)`로 전체 인덱스 선택
 - `taskSelectAllText` 스타일 추가 (`C.accentTeal`, 12px)
 - 기존 개별 행 선택(toggle) 동작 변경 없음
+
+---
+
+#### CSS 스타일 정리 1차 (`HomeScreen.js`, `LoginScreen.js`, `ClientScreen.js`)
+
+**변경 내용** (`css-guide.md` 규칙 적용)
+- **인라인 스타일 → StyleSheet 이관**: 세 파일 합산 43개 인라인 스타일 제거
+- **미사용 스타일 제거**: `clockText` (HomeScreen), `chevron` · `detailContact` · `contactLink` (ClientScreen)
+- **주요 추가 스타일**
+  - `LoginScreen`: `loginBtnDisabled`
+  - `HomeScreen`: `flex1`, `sectionLast`, `aiRowBordered`
+  - `ClientScreen`: `flex1`, `spacerH20`, 모달 높이 변형 5종 (`h80pct`~`maxH90pct`), 간격 모디파이어 8종, 레이아웃 행 4종 (`nameStarRow`, `editCloseRow`, `historyActionRow`, `projDeadlineRow`), `borderBottom`, `transcriptSegments`, `speakerLabel`, `opacity40` 등 총 28종
+- **`sendBtn`**: 기존 인라인 `backgroundColor: C.accentTeal` → StyleSheet에 통합, 비활성 시 `opacity40` 사용
+
+**공통 스타일 메모** (추후 분리 후보)
+- `flex1`, `scrollPB*`, `inputLabelSpacing`, `borderBottom`, 모달 높이 변형 패턴은 나머지 스크린에서도 반복될 예정 → `css-todo.md` 참고

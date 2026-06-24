@@ -1,0 +1,48 @@
+# Dependency directories (의존성 디렉토리 - 토큰 낭비 방지)
+node_modules/
+bower_components/
+.pnpm-store/
+
+# Build and Output directories (빌드 결과물)
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# Environment and Secrets (보안 민감 파일 - 필수 제외!)
+.env
+.env.*
+*.pem
+*.key
+secret.json
+
+# Version Control System (버전 관리 시스템)
+.git/
+.svn/
+.hg/
+
+# OS and IDE files (운영체제 및 에디터 설정 파일)
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+
+# Logs and Diagnostics (로그 파일)
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Media and Heavy Assets (용량이 큰 미디어 파일)
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.zip
+*.tar.gz
+*.pdf

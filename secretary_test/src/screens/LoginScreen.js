@@ -72,7 +72,7 @@ export default function LoginScreen({ onLogin }) {
 
           {!!error && <Text style={s.error}>{error}</Text>}
 
-          <TouchableOpacity style={[s.loginBtn, loading && { opacity: 0.6 }]} onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
+          <TouchableOpacity style={[s.loginBtn, loading && s.loginBtnDisabled]} onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
             {loading
               ? <ActivityIndicator color="#09090E" />
               : <Text style={s.loginBtnText}>로그인</Text>
@@ -115,6 +115,7 @@ const s = StyleSheet.create({
   error: { color: C.red, fontSize: 12, marginTop: 8 },
   loginBtn: { marginTop: 28, backgroundColor: C.accentBlue, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   loginBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  loginBtnDisabled: { opacity: 0.6 },
   testAccountWrap: { marginTop: 40, gap: 10 },
   testAccountLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 4 },
   testAccountBtn: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 14, gap: 4 },
