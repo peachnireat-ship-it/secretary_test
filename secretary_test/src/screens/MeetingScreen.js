@@ -653,8 +653,10 @@ export default function MeetingScreen({ navigation }) {
         setSummary(finalSummary);
       }
       const clientIds = [...new Set(Object.values(speakerClientMap).filter(Boolean))];
-      await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary: finalSummary, transcript: finalTranscript, tasks, clientIds });
+      const updated = await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary: finalSummary, transcript: finalTranscript, tasks, clientIds });
+      setMeetingRecords(updated);
       setSaved(true);
+      analyzeWorkTopics(updated);
     }
   }
 
@@ -700,8 +702,9 @@ export default function MeetingScreen({ navigation }) {
     setExpandedId((prev) => (prev === id ? null : id));
   }
 
-  async function analyzeWorkTopics() {
-    const withSummary = meetingRecords.filter((r) => r.summary).slice(0, 20);
+  async function analyzeWorkTopics(recordsOverride) {
+    const records = recordsOverride ?? meetingRecords;
+    const withSummary = records.filter((r) => r.summary).slice(0, 20);
     if (withSummary.length === 0) return;
     setWorkTopicsLoading(true);
     setWorkTopics('');
