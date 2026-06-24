@@ -690,7 +690,7 @@ export default function ProjectScreen({ navigation, route }) {
                     <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
                       <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
                     </View>
-                    <View style={{ flex: 1, gap: 2 }}>
+                    <View style={s.deadlineWrap}>
                       {item.startDate ? (
                         <Text style={s.startDateText}>{item.startDate} 시작</Text>
                       ) : null}
@@ -717,7 +717,7 @@ export default function ProjectScreen({ navigation, route }) {
                           <View style={s.cardPersonAvatar}>
                             <Text style={s.cardPersonAvatarText}>{c.name[0]}</Text>
                           </View>
-                          <View style={{ flex: 1 }}>
+                          <View style={s.flex1}>
                             <Text style={s.cardPersonName} numberOfLines={1}>{c.name}</Text>
                             {c.company ? <Text style={s.cardPersonCompany} numberOfLines={1}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                           </View>
@@ -766,11 +766,11 @@ export default function ProjectScreen({ navigation, route }) {
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* 헤더: 제목 + 닫기 */}
                 <View style={s.detailHeader}>
-                  <View style={{ flex: 1 }}>
+                  <View style={s.flex1}>
                     <Text style={s.inputLabel}>제목</Text>
                     <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholderTextColor={C.textDim} />
                   </View>
-                  <TouchableOpacity onPress={() => setShowDetail(false)} style={{ marginLeft: 12, marginTop: 20 }}>
+                  <TouchableOpacity onPress={() => setShowDetail(false)} style={s.closeBtnOffset}>
                     <Text style={s.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -815,7 +815,7 @@ export default function ProjectScreen({ navigation, route }) {
                 {/* 시작일시 */}
                 <Text style={s.inputLabel}>시작일시 (선택)</Text>
                 <TextInput
-                  style={[s.input, { marginBottom: 8 }]}
+                  style={[s.input, s.mb8]}
                   value={editStartDate}
                   onChangeText={(t) => setEditStartDate(formatDeadline(t))}
                   placeholder="YYYY-MM-DD"
@@ -830,13 +830,13 @@ export default function ProjectScreen({ navigation, route }) {
                   <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오후')}>
                     <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                   </TouchableOpacity>
-                  <TextInput style={[s.input, { flex: 1 }]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                  <TextInput style={[s.input, s.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
                 </View>
 
                 {/* 마감일시 */}
                 <Text style={s.inputLabel}>마감일시</Text>
                 <TextInput
-                  style={[s.input, { marginBottom: 8 }]}
+                  style={[s.input, s.mb8]}
                   value={editDeadline}
                   onChangeText={(t) => setEditDeadline(formatDeadline(t))}
                   placeholder="YYYY-MM-DD"
@@ -851,13 +851,13 @@ export default function ProjectScreen({ navigation, route }) {
                   <TouchableOpacity style={[s.ampmBtn, editDeadlineAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditDeadlineAmPm('오후')}>
                     <Text style={[s.ampmBtnText, editDeadlineAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                   </TouchableOpacity>
-                  <TextInput style={[s.input, { flex: 1 }]} value={editDeadlineTime} onChangeText={(t) => setEditDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                  <TextInput style={[s.input, s.flex1]} value={editDeadlineTime} onChangeText={(t) => setEditDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
                 </View>
 
                 {/* 메모 */}
                 <Text style={s.inputLabel}>메모 (선택)</Text>
                 <TextInput
-                  style={[s.input, { height: 80 }]}
+                  style={[s.input, s.h80]}
                   value={editNotes}
                   onChangeText={setEditNotes}
                   multiline
@@ -876,7 +876,7 @@ export default function ProjectScreen({ navigation, route }) {
                   return (
                     <>
                       <View style={s.relatedPeopleHeaderRow}>
-                        <Text style={[s.inputLabel, { marginTop: 0, marginBottom: 0 }]}>관련 인물</Text>
+                        <Text style={[s.inputLabel, s.inputLabelInline]}>관련 인물</Text>
                         <TouchableOpacity
                           onPress={() => { setDetailPersonPickerVisible(true); setDetailPersonPickerSearch(''); }}
                           style={s.addPersonBtn}
@@ -891,14 +891,14 @@ export default function ProjectScreen({ navigation, route }) {
                             return (
                               <View key={c.id} style={s.relatedPersonChip}>
                                 <TouchableOpacity
-                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}
+                                  style={s.personChipInner}
                                   activeOpacity={0.7}
                                   onPress={() => { setPersonDetailClient(c); setShowPersonDetail(true); }}
                                 >
                                   <View style={s.relatedPersonAvatar}>
                                     <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
                                   </View>
-                                  <View style={{ flex: 1 }}>
+                                  <View style={s.flex1}>
                                     <Text style={s.relatedPersonName}>{c.name}</Text>
                                     {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                                   </View>
@@ -908,10 +908,10 @@ export default function ProjectScreen({ navigation, route }) {
                                     onPress={() => setEditClientIds((prev) => prev.filter((id) => id !== c.id))}
                                     hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
                                   >
-                                    <Text style={{ color: C.textDim, fontSize: 13 }}>✕</Text>
+                                    <Text style={s.removePersonIcon}>✕</Text>
                                   </TouchableOpacity>
                                 ) : (
-                                  <Text style={{ color: C.textDim, fontSize: 16, paddingLeft: 4 }}>›</Text>
+                                  <Text style={s.personChevron}>›</Text>
                                 )}
                               </View>
                             );
@@ -930,7 +930,7 @@ export default function ProjectScreen({ navigation, route }) {
                       { text: '삭제', style: 'destructive', onPress: async () => { setProjects(await deleteProject(detailProject.id)); setShowDetail(false); } },
                     ]);
                   }}>
-                    <Text style={[s.modalCancelText, { color: C.red }]}>삭제</Text>
+                    <Text style={[s.modalCancelText, s.textRed]}>삭제</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
                     <Text style={s.modalConfirmText}>저장</Text>
@@ -956,7 +956,7 @@ export default function ProjectScreen({ navigation, route }) {
             <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="프로젝트 이름" placeholderTextColor={C.textDim} />
 
             <Text style={s.inputLabel}>시작일시 (선택)</Text>
-            <TextInput style={[s.input, { marginBottom: 8 }]} value={newStartDate} onChangeText={(t) => setNewStartDate(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <TextInput style={[s.input, s.mb8]} value={newStartDate} onChangeText={(t) => setNewStartDate(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
             <View style={s.timeRow}>
               <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오전')}>
                 <Text style={[s.ampmBtnText, newStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
@@ -964,11 +964,11 @@ export default function ProjectScreen({ navigation, route }) {
               <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오후')}>
                 <Text style={[s.ampmBtnText, newStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
               </TouchableOpacity>
-              <TextInput style={[s.input, { flex: 1 }]} value={newStartTime} onChangeText={(t) => setNewStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+              <TextInput style={[s.input, s.flex1]} value={newStartTime} onChangeText={(t) => setNewStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
             </View>
 
             <Text style={s.inputLabel}>마감일시</Text>
-            <TextInput style={[s.input, { marginBottom: 8 }]} value={newDeadline} onChangeText={(t) => setNewDeadline(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <TextInput style={[s.input, s.mb8]} value={newDeadline} onChangeText={(t) => setNewDeadline(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
             <View style={s.timeRow}>
               <TouchableOpacity style={[s.ampmBtn, newDeadlineAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewDeadlineAmPm('오전')}>
                 <Text style={[s.ampmBtnText, newDeadlineAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
@@ -976,7 +976,7 @@ export default function ProjectScreen({ navigation, route }) {
               <TouchableOpacity style={[s.ampmBtn, newDeadlineAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewDeadlineAmPm('오후')}>
                 <Text style={[s.ampmBtnText, newDeadlineAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
               </TouchableOpacity>
-              <TextInput style={[s.input, { flex: 1 }]} value={newDeadlineTime} onChangeText={(t) => setNewDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+              <TextInput style={[s.input, s.flex1]} value={newDeadlineTime} onChangeText={(t) => setNewDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
             </View>
 
             <Text style={s.inputLabel}>상태</Text>
@@ -1001,9 +1001,9 @@ export default function ProjectScreen({ navigation, route }) {
             <TextInput style={s.input} value={newProgress} onChangeText={setNewProgress} placeholder="0" placeholderTextColor={C.textDim} keyboardType="numeric" />
 
             <Text style={s.inputLabel}>메모 (선택)</Text>
-            <TextInput style={[s.input, { height: 64 }]} value={newNotes} onChangeText={setNewNotes} placeholder="지연 원인, 진행 상황 등" placeholderTextColor={C.textDim} multiline />
+            <TextInput style={[s.input, s.h64]} value={newNotes} onChangeText={setNewNotes} placeholder="지연 원인, 진행 상황 등" placeholderTextColor={C.textDim} multiline />
 
-            <View style={[s.modalBtns, { marginBottom: 8 }]}>
+            <View style={[s.modalBtns, s.mb8]}>
               <TouchableOpacity style={s.modalCancel} onPress={() => setShowAdd(false)}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
@@ -1019,7 +1019,7 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── AI 지연 분석 채팅 모달 ── */}
       <Modal visible={showAI} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={[s.modalSheet, { height: '88%' }]}>
+          <View style={[s.modalSheet, s.h88pct]}>
             <View style={s.modalHandle} />
             <View style={s.chatHeader}>
               <View style={s.chatHeaderLeft}>
@@ -1073,7 +1073,7 @@ export default function ProjectScreen({ navigation, route }) {
                 onSubmitEditing={handleAIChat}
                 returnKeyType="send"
               />
-              <TouchableOpacity style={[s.sendBtn, !chatInput.trim() && { opacity: 0.4 }]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
+              <TouchableOpacity style={[s.sendBtn, !chatInput.trim() && s.opacity40]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
                 <Text style={s.sendBtnText}>↑</Text>
               </TouchableOpacity>
             </View>
@@ -1083,15 +1083,15 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 회의록 상세 모달 ── */}
       <Modal visible={showMeetingDetail} animationType="slide" transparent onRequestClose={() => setShowMeetingDetail(false)}>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { maxHeight: '90%' }, swipeMeetingDetail.animStyle]}>
+          <Animated.View style={[s.modalSheet, s.maxH90pct, swipeMeetingDetail.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeMeetingDetail.panHandlers}>
               <View style={s.modalHandle} />
             </View>
             {selectedMeeting && (
               <>
                 <View style={s.meetingDetailHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.modalTitle, { marginBottom: 0 }]} numberOfLines={2}>{selectedMeeting.title || '회의록'}</Text>
+                  <View style={s.flex1}>
+                    <Text style={[s.modalTitle, s.mb0]} numberOfLines={2}>{selectedMeeting.title || '회의록'}</Text>
                     {selectedMeeting.createdAt && (
                       <Text style={s.meetingDetailDate}>
                         {new Date(selectedMeeting.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })}
@@ -1108,11 +1108,11 @@ export default function ProjectScreen({ navigation, route }) {
                   <TouchableOpacity onPress={() => openContentEditModal(selectedMeeting)} style={s.meetingEditBtn}>
                     <Text style={s.meetingEditBtnText}>내용 편집</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setShowMeetingDetail(false)} style={{ marginLeft: 8 }}>
+                  <TouchableOpacity onPress={() => setShowMeetingDetail(false)} style={s.ml8}>
                     <Text style={s.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
-                <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
+                <ScrollView showsVerticalScrollIndicator={false} style={s.mt8}>
                   {selectedMeeting.summary ? (
                     <>
                       <Text style={s.inputLabel}>요약</Text>
@@ -1147,12 +1147,12 @@ export default function ProjectScreen({ navigation, route }) {
                           if (segs.length === 0) return <Text style={s.meetingDetailText}>{selectedMeeting.transcript}</Text>;
                           const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
                           return (
-                            <View style={{ gap: 12 }}>
+                            <View style={s.gap12}>
                               {segs.map((seg, i) => {
                                 const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
                                 return (
                                   <View key={i}>
-                                    <Text style={{ color, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 }}>{seg.speaker}</Text>
+                                    <Text style={[s.speakerLabel, { color }]}>{seg.speaker}</Text>
                                     <Text style={s.meetingDetailText}>{seg.text}</Text>
                                   </View>
                                 );
@@ -1164,9 +1164,9 @@ export default function ProjectScreen({ navigation, route }) {
                     </>
                   ) : null}
                   {!selectedMeeting.summary && !selectedMeeting.transcript && !selectedMeeting.tasks?.length && (
-                    <Text style={[s.emptyText, { marginTop: 20 }]}>저장된 내용이 없습니다.</Text>
+                    <Text style={[s.emptyText, s.mt20]}>저장된 내용이 없습니다.</Text>
                   )}
-                  <View style={{ height: 20 }} />
+                  <View style={s.spacerH20} />
                 </ScrollView>
               </>
             )}
@@ -1189,7 +1189,7 @@ export default function ProjectScreen({ navigation, route }) {
                 const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
                 return (
                   <View key={speaker} style={[s.speakerRow, isDeleted && s.speakerRowDeleted]}>
-                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && { opacity: 0.4 }]} />
+                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && s.opacity40]} />
                     <Text style={[s.speakerOrigLabel, { color }, isDeleted && s.speakerOrigLabelDeleted]}>{speaker}</Text>
                     <Text style={s.speakerArrow}>→</Text>
                     <TextInput
@@ -1230,7 +1230,7 @@ export default function ProjectScreen({ navigation, route }) {
               {speakerEditCustom.map((item, idx) => (
                 <View key={`custom-${idx}`} style={s.speakerRow}>
                   <TextInput
-                    style={[s.speakerInput, { width: 64, flex: 0 }]}
+                    style={[s.speakerInput, s.speakerInputFixed]}
                     value={item.origKey}
                     onChangeText={(v) => setSpeakerEditCustom((prev) => prev.map((c, i) => i === idx ? { ...c, origKey: v } : c))}
                     placeholder="원본 ID"
@@ -1336,7 +1336,7 @@ export default function ProjectScreen({ navigation, route }) {
 
       {/* ── 거래처 선택 모달 ── */}
       <Modal visible={!!clientPickerSpeaker} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setClientPickerSpeaker(null)}>
-        <View style={[s.modalOverlay, { justifyContent: 'center', paddingHorizontal: 32 }]}>
+        <View style={[s.modalOverlay, s.modalOverlayCentered]}>
           <View style={[s.speakerModalBox, s.clientPickerBox]}>
             <Text style={s.speakerModalTitle}>거래처 선택</Text>
             <TextInput
@@ -1415,7 +1415,7 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 인물 상세 모달 ── */}
       <Modal visible={showPersonDetail} animationType="slide" transparent onRequestClose={() => setShowPersonDetail(false)}>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { maxHeight: '85%' }, swipePersonDetail.animStyle]}>
+          <Animated.View style={[s.modalSheet, s.maxH85pct, swipePersonDetail.animStyle]}>
             <View style={s.modalHandleWrap} {...swipePersonDetail.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -1425,7 +1425,7 @@ export default function ProjectScreen({ navigation, route }) {
                   <View style={s.personDetailAvatar}>
                     <Text style={s.relatedPersonAvatarText}>{personDetailClient.name[0]}</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <View style={s.flex1}>
                     <Text style={s.personDetailName}>{personDetailClient.name}</Text>
                     {personDetailClient.company ? (
                       <Text style={s.personDetailCompany}>{personDetailClient.company}{personDetailClient.role ? ` · ${personDetailClient.role}` : ''}</Text>
@@ -1454,7 +1454,7 @@ export default function ProjectScreen({ navigation, route }) {
                       <>
                         <Text style={s.inputLabel}>히스토리 {personHistories.length}건</Text>
                         {personHistories.map((h, i) => (
-                          <View key={h.id} style={[s.personHistoryItem, i < personHistories.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}>
+                          <View key={h.id} style={[s.personHistoryItem, i < personHistories.length - 1 && s.borderBottom]}>
                             <Text style={s.personHistoryDate}>{h.date}</Text>
                             <Text style={s.personHistoryTitle}>{h.title}</Text>
                             {h.content ? <Text style={s.personHistoryContent}>{h.content}</Text> : null}
@@ -1464,9 +1464,9 @@ export default function ProjectScreen({ navigation, route }) {
                     );
                   })()}
                   {!personDetailClient.notes && !histories.filter((h) => h.clientId === personDetailClient.id).length && (
-                    <Text style={[s.emptyText, { marginTop: 20 }]}>저장된 정보가 없습니다.</Text>
+                    <Text style={[s.emptyText, s.mt20]}>저장된 정보가 없습니다.</Text>
                   )}
-                  <View style={{ height: 20 }} />
+                  <View style={s.spacerH20} />
                 </ScrollView>
               </>
             )}
@@ -1476,7 +1476,7 @@ export default function ProjectScreen({ navigation, route }) {
 
       {/* ── 인물 추가 피커 모달 (프로젝트 상세) ── */}
       <Modal visible={detailPersonPickerVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setDetailPersonPickerVisible(false)}>
-        <View style={[s.modalOverlay, { justifyContent: 'center', paddingHorizontal: 32 }]}>
+        <View style={[s.modalOverlay, s.modalOverlayCentered]}>
           <View style={[s.speakerModalBox, s.clientPickerBox]}>
             <Text style={s.speakerModalTitle}>인물 추가</Text>
             <TextInput
@@ -1515,7 +1515,7 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 프로젝트 보기 모달 (읽기 전용) ── */}
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { maxHeight: '80%' }, swipeProjectView.animStyle]}>
+          <Animated.View style={[s.modalSheet, s.maxH80pct, swipeProjectView.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeProjectView.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -1530,8 +1530,8 @@ export default function ProjectScreen({ navigation, route }) {
               return (
                 <ScrollView showsVerticalScrollIndicator={false}>
                   <View style={s.detailHeader}>
-                    <Text style={[s.modalTitle, { flex: 1 }]} numberOfLines={2}>{viewProject.title}</Text>
-                    <TouchableOpacity onPress={() => setShowProjectView(false)} style={{ marginLeft: 12 }}>
+                    <Text style={[s.modalTitle, s.flex1]} numberOfLines={2}>{viewProject.title}</Text>
+                    <TouchableOpacity onPress={() => setShowProjectView(false)} style={s.ml12}>
                       <Text style={s.closeBtn}>✕</Text>
                     </TouchableOpacity>
                   </View>
@@ -1549,7 +1549,7 @@ export default function ProjectScreen({ navigation, route }) {
                   <View style={s.progressTrack}>
                     <View style={[s.progressFill, { width: `${viewProject.progress}%`, backgroundColor: statusColor(viewProject.status) }]} />
                   </View>
-                  <Text style={[s.progressLabel, { marginTop: 4, marginBottom: 12 }]}>{viewProject.progress}% 완료</Text>
+                  <Text style={[s.progressLabel, s.progressLabelSpacing]}>{viewProject.progress}% 완료</Text>
 
                   <Text style={s.inputLabel}>마감일</Text>
                   <Text style={[s.viewText, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
@@ -1569,11 +1569,11 @@ export default function ProjectScreen({ navigation, route }) {
                       <View style={s.relatedPeopleRow}>
                         {people.map((c) => (
                           <View key={c.id} style={s.relatedPersonChip}>
-                            <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }]}>
+                            <View style={s.personChipInner}>
                               <View style={s.relatedPersonAvatar}>
                                 <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
                               </View>
-                              <View style={{ flex: 1 }}>
+                              <View style={s.flex1}>
                                 <Text style={s.relatedPersonName}>{c.name}</Text>
                                 {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                               </View>
@@ -1584,10 +1584,10 @@ export default function ProjectScreen({ navigation, route }) {
                     </>
                   )}
 
-                  <TouchableOpacity style={[s.modalConfirm, { marginTop: 16, marginHorizontal: 0, marginBottom: 8 }]} onPress={() => { setShowProjectView(false); openDetail(viewProject); }}>
+                  <TouchableOpacity style={[s.modalConfirm, s.confirmBtnBlock]} onPress={() => { setShowProjectView(false); openDetail(viewProject); }}>
                     <Text style={s.modalConfirmText}>수정하기</Text>
                   </TouchableOpacity>
-                  <View style={{ height: 8 }} />
+                  <View style={s.spacerH8} />
                 </ScrollView>
               );
             })()}
@@ -1808,11 +1808,6 @@ const s = StyleSheet.create({
   personHistoryContent: { color: C.textDim, fontSize: 12, lineHeight: 18 },
 
   detailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
-  detailTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '500', flex: 1, marginRight: 12 },
-  detailBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  detailSection: { marginTop: 18 },
-  detailSectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 6 },
-  detailValue: { color: C.textSecondary, fontSize: 14, lineHeight: 20 },
 
   chatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   chatHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -1850,4 +1845,35 @@ const s = StyleSheet.create({
   qsSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 24, alignItems: 'center' },
   qsValue: { color: C.textPrimary, fontSize: 48, fontWeight: '200', letterSpacing: -2, marginBottom: 4 },
   qsSlider: { width: '100%', height: 44, marginBottom: 12 },
+
+  deadlineWrap: { flex: 1, gap: 2 },
+  flex1: { flex: 1 },
+  closeBtnOffset: { marginLeft: 12, marginTop: 20 },
+  mb8: { marginBottom: 8 },
+  h80: { height: 80 },
+  h64: { height: 64 },
+  h88pct: { height: '88%' },
+  maxH90pct: { maxHeight: '90%' },
+  maxH85pct: { maxHeight: '85%' },
+  maxH80pct: { maxHeight: '80%' },
+  inputLabelInline: { marginTop: 0, marginBottom: 0 },
+  personChipInner: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  removePersonIcon: { color: C.textDim, fontSize: 13 },
+  personChevron: { color: C.textDim, fontSize: 16, paddingLeft: 4 },
+  textRed: { color: C.red },
+  opacity40: { opacity: 0.4 },
+  mb0: { marginBottom: 0 },
+  ml8: { marginLeft: 8 },
+  mt8: { marginTop: 8 },
+  gap12: { gap: 12 },
+  speakerLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 },
+  mt20: { marginTop: 20 },
+  spacerH20: { height: 20 },
+  speakerInputFixed: { width: 64, flex: 0 },
+  modalOverlayCentered: { justifyContent: 'center', paddingHorizontal: 32 },
+  borderBottom: { borderBottomWidth: 1, borderBottomColor: C.border },
+  ml12: { marginLeft: 12 },
+  progressLabelSpacing: { marginTop: 4, marginBottom: 12 },
+  confirmBtnBlock: { marginTop: 16, marginHorizontal: 0, marginBottom: 8 },
+  spacerH8: { height: 8 },
 });

@@ -810,7 +810,7 @@ export default function MeetingScreen({ navigation }) {
                 const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
                 return (
                   <View key={speaker} style={[s.speakerRow, isDeleted && s.speakerRowDeleted]}>
-                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && { opacity: 0.4 }]} />
+                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && s.opacity40]} />
                     <Text style={[s.speakerOrigLabel, { color }, isDeleted && s.speakerOrigLabelDeleted]}>{speaker}</Text>
                     <Text style={s.speakerArrow}>→</Text>
                     <TextInput
@@ -851,7 +851,7 @@ export default function MeetingScreen({ navigation }) {
               {speakerEditCustom.map((item, idx) => (
                 <View key={`custom-${idx}`} style={s.speakerRow}>
                   <TextInput
-                    style={[s.speakerInput, { width: 64, flex: 0 }]}
+                    style={[s.speakerInput, s.speakerInputFixed]}
                     value={item.origKey}
                     onChangeText={(v) => setSpeakerEditCustom((prev) => prev.map((c, i) => i === idx ? { ...c, origKey: v } : c))}
                     placeholder="원본 ID"
@@ -959,7 +959,7 @@ export default function MeetingScreen({ navigation }) {
                         <Text style={[s.segSpeakerText, { color }]}>{seg.speaker}</Text>
                       </TouchableOpacity>
                       {isTextEditing ? (
-                        <View style={{ flex: 1 }}>
+                        <View style={s.flex1}>
                           <TextInput
                             style={s.segTextInput}
                             value={segTextEditValue}
@@ -980,7 +980,7 @@ export default function MeetingScreen({ navigation }) {
                         </View>
                       ) : (
                         <TouchableOpacity
-                          style={{ flex: 1 }}
+                          style={s.flex1}
                           onPress={() => {
                             setSegmentPickerIdx(null);
                             openSegTextEdit(idx);
@@ -1028,11 +1028,11 @@ export default function MeetingScreen({ navigation }) {
       </Modal>
 
       <Modal visible={!!clientPickerSpeaker} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { setClientPickerSpeaker(null); setAddPersonRecordId(null); }}>
-        <View style={[s.modalOverlay, { justifyContent: 'center', paddingHorizontal: 32 }]}>
+        <View style={[s.modalOverlay, s.modalOverlayCentered]}>
           <View style={[s.modalBox, s.clientPickerBox]}>
             <Text style={s.modalTitle}>거래처 선택</Text>
             <TextInput
-              style={[s.modalInput, { marginBottom: 4 }]}
+              style={[s.modalInput, s.mb4]}
               value={clientPickerSearch}
               onChangeText={setClientPickerSearch}
               placeholder="이름 또는 회사 검색"
@@ -1052,7 +1052,7 @@ export default function MeetingScreen({ navigation }) {
                       activeOpacity={0.7}
                     >
                       <View style={s.clientPickerItemRow}>
-                        <View style={{ flex: 1 }}>
+                        <View style={s.flex1}>
                           <Text style={[s.clientPickerName, isSelected && s.clientPickerNameSelected]}>{c.name}</Text>
                           {!!c.company && <Text style={s.clientPickerCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text>}
                         </View>
@@ -1083,9 +1083,9 @@ export default function MeetingScreen({ navigation }) {
               <Text style={s.newClientRegBtnText}>+ 거래처 신규 등록</Text>
             </TouchableOpacity>
             {clientPickerContext === 'addPerson' ? (
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+              <View style={s.addPersonBtnRow}>
                 <TouchableOpacity
-                  style={[s.newClientRegBtn, addPersonSelectedIds.size > 0 && s.clientConfirmBtn, { flex: 1 }]}
+                  style={[s.newClientRegBtn, addPersonSelectedIds.size > 0 && s.clientConfirmBtn, s.flex1]}
                   onPress={confirmAddPersonClients}
                   activeOpacity={0.8}
                 >
@@ -1094,7 +1094,7 @@ export default function MeetingScreen({ navigation }) {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[s.newClientRegBtn, { flex: 1 }]}
+                  style={[s.newClientRegBtn, s.flex1]}
                   onPress={() => { setClientPickerSpeaker(null); setAddPersonRecordId(null); setAddPersonSelectedIds(new Set()); }}
                   activeOpacity={0.7}
                 >
@@ -1102,7 +1102,7 @@ export default function MeetingScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={[s.modalCancelBtn, { flex: 0, marginTop: 4 }]} onPress={() => { setClientPickerSpeaker(null); setAddPersonRecordId(null); setAddPersonSelectedIds(new Set()); }} activeOpacity={0.7}>
+              <TouchableOpacity style={[s.modalCancelBtn, s.cancelBtnCompact]} onPress={() => { setClientPickerSpeaker(null); setAddPersonRecordId(null); setAddPersonSelectedIds(new Set()); }} activeOpacity={0.7}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
             )}
@@ -1165,7 +1165,7 @@ export default function MeetingScreen({ navigation }) {
                     <View style={s.personDetailAvatar}>
                       <Text style={s.personDetailAvatarText}>{selectedPersonClient.name[0]}</Text>
                     </View>
-                    <View style={{ flex: 1 }}>
+                    <View style={s.flex1}>
                       <Text style={s.personDetailName}>{selectedPersonClient.name}</Text>
                       {selectedPersonClient.company ? (
                         <Text style={s.personDetailCompany}>{selectedPersonClient.company}{selectedPersonClient.role ? ` · ${selectedPersonClient.role}` : ''}</Text>
@@ -1200,7 +1200,7 @@ export default function MeetingScreen({ navigation }) {
                   </View>
 
                   {/* 스크롤 영역 */}
-                  <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                  <ScrollView style={s.flex1} showsVerticalScrollIndicator={false}>
                     {selectedPersonClient.notes ? (
                       <View style={s.personNotesBox}>
                         <Text style={s.personNotesText}>{selectedPersonClient.notes}</Text>
@@ -1236,7 +1236,7 @@ export default function MeetingScreen({ navigation }) {
                     )}
 
                     {linkedMeetings.length > 0 && (
-                      <View style={[s.personLinkedSection, { marginTop: 16 }]}>
+                      <View style={[s.personLinkedSection, s.mt16]}>
                         <Text style={s.personSectionLabel}>연결된 회의록 {linkedMeetings.length}건</Text>
                         {linkedMeetings.map((r) => (
                           <View key={r.id} style={s.personMeetingItem}>
@@ -1399,7 +1399,7 @@ export default function MeetingScreen({ navigation }) {
 
           {/* 요약 결과 */}
           {!!summary && (
-            <View style={[s.section, { marginBottom: 16 }]}>
+            <View style={[s.section, s.mb16]}>
               <View style={s.transcriptHeader}>
                 <View>
                   <Text style={s.sectionLabel}>SUMMARY</Text>
@@ -1419,7 +1419,7 @@ export default function MeetingScreen({ navigation }) {
 
           {/* 원본 텍스트 */}
           {!!transcript && (
-            <View style={[s.section, { marginBottom: 16 }]}>
+            <View style={[s.section, s.mb16]}>
               <View style={s.transcriptHeader}>
                 <Text style={s.sectionLabel}>TRANSCRIPT</Text>
                 <TouchableOpacity onPress={() => copyToClipboard(transcript)} activeOpacity={0.7}>
@@ -1434,9 +1434,9 @@ export default function MeetingScreen({ navigation }) {
 
           {/* 태스크 목록 */}
           {!!transcript && !loading && (tasks.length > 0 || tasksLoading) && (
-            <View style={[s.section, { marginBottom: 16 }]}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <Text style={[s.sectionLabel, { marginBottom: 0 }]}>TASKS</Text>
+            <View style={[s.section, s.mb16]}>
+              <View style={s.taskHeader}>
+                <Text style={[s.sectionLabel, s.mb0]}>TASKS</Text>
                 {tasks.length > 0 && (
                   <TouchableOpacity
                     onPress={() => {
@@ -1475,7 +1475,7 @@ export default function MeetingScreen({ navigation }) {
                         <View style={[s.taskCheckbox, selected && s.taskCheckboxSelected]}>
                           {selected && <Text style={s.taskCheckmark}>✓</Text>}
                         </View>
-                        <View style={{ flex: 1 }}>
+                        <View style={s.flex1}>
                           <Text style={s.taskContent}>{task.content}</Text>
                           <View style={s.taskMeta}>
                             <Text style={s.taskMetaText}>{task.assignee}</Text>
@@ -1513,7 +1513,7 @@ export default function MeetingScreen({ navigation }) {
 
           {/* 태스크 추출 + 저장 버튼 */}
           {(!!summary || !!transcript) && !loading && (
-            <View style={[s.saveRow, { marginBottom: 48 }]}>
+            <View style={[s.saveRow, s.mb48]}>
               {saved ? (
                 <View style={s.savedBadge}>
                   <Text style={s.savedText}>✓ 기록에 저장됨</Text>
@@ -1619,7 +1619,7 @@ export default function MeetingScreen({ navigation }) {
                       <Text style={s.deleteBtnText}>삭제</Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={[s.historySource, { marginTop: 6 }]}>{formatDateTime(item.createdAt)} · {item.source}</Text>
+                  <Text style={[s.historySource, s.mt6]}>{formatDateTime(item.createdAt)} · {item.source}</Text>
                 </View>
                 {!isExpanded && !!item.summary && (
                   <Text style={s.historyPreview} numberOfLines={2}>{item.summary}</Text>
@@ -1650,12 +1650,12 @@ export default function MeetingScreen({ navigation }) {
                           if (segs.length === 0) return <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>;
                           const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
                           return (
-                            <View style={{ gap: 12 }}>
+                            <View style={s.gap12}>
                               {segs.map((seg, i) => {
                                 const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
                                 return (
                                   <View key={i}>
-                                    <Text style={{ color, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 }}>{seg.speaker}</Text>
+                                    <Text style={[s.speakerLabel, { color }]}>{seg.speaker}</Text>
                                     <Text style={[s.historyBody, { color: C.textSecondary }]}>{seg.text}</Text>
                                   </View>
                                 );
@@ -1680,7 +1680,7 @@ export default function MeetingScreen({ navigation }) {
                               <View style={s.linkedPersonAvatar}>
                                 <Text style={s.linkedPersonAvatarText}>{c.name[0]}</Text>
                               </View>
-                              <View style={{ flex: 1 }}>
+                              <View style={s.flex1}>
                                 <Text style={s.linkedClientName} numberOfLines={1}>{c.name}</Text>
                                 {!!c.company && (
                                   <Text style={s.linkedClientCompany} numberOfLines={1}>
@@ -1699,7 +1699,7 @@ export default function MeetingScreen({ navigation }) {
                             </TouchableOpacity>
                           ))}
                           {linked.length === 0 && (
-                            <Text style={{ color: C.textDim, fontSize: 12, paddingVertical: 4 }}>등록된 인물이 없습니다</Text>
+                            <Text style={s.emptyPersonText}>등록된 인물이 없습니다</Text>
                           )}
                         </View>
                       );
@@ -1738,7 +1738,7 @@ export default function MeetingScreen({ navigation }) {
                                   <View style={[s.taskCheckbox, isSelected && s.taskCheckboxSelected]}>
                                     {isSelected && <Text style={s.taskCheckmark}>✓</Text>}
                                   </View>
-                                  <View style={{ flex: 1 }}>
+                                  <View style={s.flex1}>
                                     <Text style={s.taskContent}>{task.content}</Text>
                                     <View style={s.taskMeta}>
                                       <Text style={s.taskMetaText}>{task.assignee}</Text>
@@ -1990,7 +1990,6 @@ const s = StyleSheet.create({
   personCloseBtn: { color: C.textSecondary, fontSize: 18, padding: 4 },
   personNotesBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, marginBottom: 12 },
   personNotesText: { color: C.textSecondary, fontSize: 13, lineHeight: 19 },
-  personSection: { marginBottom: 16 },
   personLinkedSection: { marginBottom: 12 },
   personHistoryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   personSectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 8 },
@@ -2172,24 +2171,12 @@ const s = StyleSheet.create({
     paddingVertical: 5, paddingHorizontal: 6,
   },
   deleteBtnText: { color: C.red, fontSize: 11, fontWeight: '500' },
-  extractTasksBtn: {
-    backgroundColor: C.accentPurple + '22', borderWidth: 1,
-    borderColor: C.accentPurple + '55', borderRadius: 10,
-    paddingVertical: 12, alignItems: 'center',
-  },
-  extractTasksBtnText: { color: C.accentPurple, fontSize: 14, fontWeight: '500' },
   taskRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
   taskRowBorder: { borderBottomWidth: 1, borderBottomColor: C.border },
-  taskPriorityDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
   taskContent: { color: C.textPrimary, fontSize: 13, lineHeight: 20, fontWeight: '500' },
   taskMeta: { flexDirection: 'row', gap: 6, marginTop: 4, alignItems: 'center' },
   taskMetaText: { color: C.textDim, fontSize: 11 },
   taskPriorityLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.5 },
-  taskAddBtn: {
-    borderWidth: 1, borderColor: C.accentTeal + '66', borderRadius: 8,
-    paddingVertical: 5, paddingHorizontal: 10, marginLeft: 8,
-  },
-  taskAddBtnText: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
   taskCheckbox: {
     width: 20, height: 20, borderRadius: 10,
     borderWidth: 1.5, borderColor: C.borderHigh,
@@ -2204,4 +2191,21 @@ const s = StyleSheet.create({
   },
   bundleBtnDisabled: { opacity: 0.4 },
   bundleBtnText: { color: C.accentTeal, fontSize: 14, fontWeight: '600' },
+
+  opacity40: { opacity: 0.4 },
+  speakerInputFixed: { width: 64, flex: 0 },
+  flex1: { flex: 1 },
+  modalOverlayCentered: { justifyContent: 'center', paddingHorizontal: 32 },
+  mb4: { marginBottom: 4 },
+  addPersonBtnRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  cancelBtnCompact: { flex: 0, marginTop: 4 },
+  mt16: { marginTop: 16 },
+  mb16: { marginBottom: 16 },
+  mb0: { marginBottom: 0 },
+  taskHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  mb48: { marginBottom: 48 },
+  mt6: { marginTop: 6 },
+  gap12: { gap: 12 },
+  speakerLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 },
+  emptyPersonText: { color: C.textDim, fontSize: 12, paddingVertical: 4 },
 });

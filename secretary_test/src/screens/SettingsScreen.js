@@ -174,7 +174,7 @@ export default function SettingsScreen({ user, onUserChange }) {
         {provider === 'grok' && (
           <View style={s.card}>
             <View style={s.cardHeader}>
-              <Text style={[s.aiGlyph, { color: C.accentPurple }]}>✦</Text>
+              <Text style={[s.aiGlyph, s.aiGlyphPurple]}>✦</Text>
               <Text style={s.cardTitle}>xAI Grok API 키</Text>
             </View>
             <Text style={s.cardDesc}>
@@ -194,7 +194,7 @@ export default function SettingsScreen({ user, onUserChange }) {
               />
             </View>
             <View style={s.btnRow}>
-              <TouchableOpacity style={[s.saveBtn, { backgroundColor: C.accentPurple }, grokSaved && s.savedBtn]} onPress={handleSaveGrok}>
+              <TouchableOpacity style={[s.saveBtn, s.saveBtnGrok, grokSaved && s.savedBtn]} onPress={handleSaveGrok}>
                 <Text style={s.saveBtnText}>{grokSaved ? '저장됨 ✓' : '저장'}</Text>
               </TouchableOpacity>
               {grokApiKey ? (
@@ -218,7 +218,7 @@ export default function SettingsScreen({ user, onUserChange }) {
         <Text style={s.sectionLabel}>화자 구분 서버 (pyannote)</Text>
         <View style={s.card}>
           <View style={s.cardHeader}>
-            <Text style={[s.aiGlyph, { color: C.accentTeal }]}>◈</Text>
+            <Text style={[s.aiGlyph, s.aiGlyphTeal]}>◈</Text>
             <Text style={s.cardTitle}>pyannote 서버 URL</Text>
           </View>
           <Text style={s.cardDesc}>
@@ -239,13 +239,13 @@ export default function SettingsScreen({ user, onUserChange }) {
           </View>
           <View style={s.btnRow}>
             <TouchableOpacity
-              style={[s.saveBtn, { backgroundColor: C.accentTeal }, pyannoteStatus === 'saved' && s.savedBtn]}
+              style={[s.saveBtn, s.saveBtnTeal, pyannoteStatus === 'saved' && s.savedBtn]}
               onPress={handleSavePyannoteUrl}
             >
               <Text style={s.saveBtnText}>{pyannoteStatus === 'saved' ? '저장됨 ✓' : '저장'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[s.clearBtn, { borderColor: C.accentTeal + '55', flex: 1, alignItems: 'center' }]}
+              style={[s.clearBtn, s.testBtnMod]}
               onPress={handleTestPyannote}
               disabled={pyannoteChecking || !pyannoteUrl}
             >
@@ -276,19 +276,19 @@ export default function SettingsScreen({ user, onUserChange }) {
           <Text style={s.sectionLabel}>계정</Text>
 
           {/* 내 프로필 */}
-          <View style={[s.card, { marginBottom: 10 }]}>
+          <View style={[s.card, s.mb10]}>
             <View style={s.cardHeader}>
               <View style={s.accountAvatar}>
                 <Text style={s.accountAvatarText}>{user.name[0]}</Text>
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={s.flex1}>
                 <Text style={s.accountName}>{user.name}</Text>
                 <Text style={s.accountEmail}>{user.email}</Text>
                 {user.team && <Text style={s.accountTeam}>{user.team}{user.role ? ` · ${user.role}` : ''}</Text>}
                 {profile?.contact ? <Text style={s.profileContact}>{profile.contact}</Text> : null}
                 {profile?.notes ? <Text style={s.profileNotes}>{profile.notes}</Text> : null}
               </View>
-              <View style={{ gap: 6, alignItems: 'flex-end' }}>
+              <View style={s.profileActions}>
                 <View style={s.activeBadge}><Text style={s.activeBadgeText}>현재</Text></View>
                 <TouchableOpacity
                   style={s.profileEditBtn}
@@ -317,10 +317,10 @@ export default function SettingsScreen({ user, onUserChange }) {
                 ])}
               >
                 <View style={s.cardHeader}>
-                  <View style={[s.accountAvatar, { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '44' }]}>
-                    <Text style={[s.accountAvatarText, { color: C.accentTeal }]}>{account.name[0]}</Text>
+                  <View style={[s.accountAvatar, s.accountAvatarAlt]}>
+                    <Text style={[s.accountAvatarText, s.accountAvatarTextAlt]}>{account.name[0]}</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <View style={s.flex1}>
                     <Text style={s.accountName}>{account.name}</Text>
                     <Text style={s.accountEmail}>{account.email}</Text>
                   </View>
@@ -330,7 +330,7 @@ export default function SettingsScreen({ user, onUserChange }) {
             ))
           }
           <TouchableOpacity
-            style={[s.logoutBtn, { marginTop: 10 }]}
+            style={[s.logoutBtn, s.mt10]}
             onPress={() => Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
               { text: '취소', style: 'cancel' },
               { text: '로그아웃', style: 'destructive', onPress: async () => { await logout(); onUserChange?.(null); } },
@@ -352,9 +352,9 @@ export default function SettingsScreen({ user, onUserChange }) {
             { color: C.accentTeal, title: '거래처 관계 요약', desc: '거래처를 탭하면 AI가 관계 히스토리를 분석해 현황과 다음 액션을 자동 요약합니다.' },
             { color: C.accentTeal, title: '거래처 히스토리 AI', desc: '"삼성물산이랑 마지막 만난 게 언제야?", "LG전자 다음 미팅 전에 뭘 준비해야 해?" 같은 질문에 답합니다.' },
           ].map((f, i) => (
-            <View key={i} style={[s.featureRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
+            <View key={i} style={[s.featureRow, i > 0 && s.featureRowBorder]}>
               <View style={[s.featureDot, { backgroundColor: f.color }]} />
-              <View style={{ flex: 1 }}>
+              <View style={s.flex1}>
                 <Text style={s.featureTitle}>{f.title}</Text>
                 <Text style={s.featureDesc}>{f.desc}</Text>
               </View>
@@ -363,7 +363,7 @@ export default function SettingsScreen({ user, onUserChange }) {
         </View>
       </View>
 
-      <View style={{ height: 60 }} />
+      <View style={s.h60} />
     </ScrollView>
 
       {/* ── 내 정보 수정 모달 ── */}
@@ -384,9 +384,9 @@ export default function SettingsScreen({ user, onUserChange }) {
               keyboardType="phone-pad"
             />
 
-            <Text style={[s.inputLabel, { marginTop: 16 }]}>메모 / 소개</Text>
+            <Text style={[s.inputLabel, s.mt16]}>메모 / 소개</Text>
             <TextInput
-              style={[s.profileInput, { height: 80 }]}
+              style={[s.profileInput, s.h80]}
               value={editNotes}
               onChangeText={setEditNotes}
               placeholder="본인 소개 또는 특이사항"
@@ -478,4 +478,20 @@ const s = StyleSheet.create({
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
   modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentTeal, alignItems: 'center' },
   modalConfirmText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+
+  aiGlyphPurple: { color: C.accentPurple },
+  aiGlyphTeal: { color: C.accentTeal },
+  saveBtnGrok: { backgroundColor: C.accentPurple },
+  saveBtnTeal: { backgroundColor: C.accentTeal },
+  testBtnMod: { borderColor: C.accentTeal + '55', flex: 1 },
+  mb10: { marginBottom: 10 },
+  flex1: { flex: 1 },
+  profileActions: { gap: 6, alignItems: 'flex-end' },
+  accountAvatarAlt: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '44' },
+  accountAvatarTextAlt: { color: C.accentTeal },
+  mt10: { marginTop: 10 },
+  featureRowBorder: { borderTopWidth: 1, borderTopColor: C.border },
+  h60: { height: 60 },
+  mt16: { marginTop: 16 },
+  h80: { height: 80 },
 });

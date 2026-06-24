@@ -16,9 +16,13 @@
 - `inputLabelSpacing: { marginTop: 16, marginBottom: 8 }`
 - `borderBottom: { borderBottomWidth: 1, borderBottomColor: C.border }`
 
-### ⏳ 다음 정리할 파일
-- `MeetingScreen.js`
-- `MessageScreen.js`
-- `ProjectScreen.js`
-- `ScheduleScreen.js`
-- `SettingsScreen.js`
+### ✅ 완료된 파일 (2차)
+| 파일 | 인라인 제거 | 미사용 제거 | 추가 스타일 수 |
+|------|------------|------------|--------------|
+| `SettingsScreen.js` | 16개 | 0개 | 15개 |
+| `MessageScreen.js` | 9개 | 0개 | 8개 |
+| `MeetingScreen.js` | 18개 | 5개 (`extractTasksBtn`, `extractTasksBtnText`, `taskPriorityDot`, `taskAddBtn`, `personSection`) | 19개 |
+| `ProjectScreen.js` | 28개 | 5개 (`detailTitle`, `detailBadgeRow`, `detailSection`, `detailSectionLabel`, `detailValue`) | 32개 |
+| `ScheduleScreen.js` | 20개 | 3개 (`dotActive`, `scheduleTime`, `scheduleDateSmall`) | 17개 |
+
+### ✅ 모든 파일 정리 완료

@@ -371,3 +371,17 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 **공통 스타일 메모** (추후 분리 후보)
 - `flex1`, `scrollPB*`, `inputLabelSpacing`, `borderBottom`, 모달 높이 변형 패턴은 나머지 스크린에서도 반복될 예정 → `css-todo.md` 참고
+
+---
+
+#### CSS 스타일 정리 2차 (`MeetingScreen.js`, `MessageScreen.js`, `ProjectScreen.js`, `ScheduleScreen.js`, `SettingsScreen.js`)
+
+**변경 내용** (`css-guide.md` 규칙 적용)
+- **인라인 스타일 → StyleSheet 이관**: 5개 파일 합산 약 91개 인라인 스타일 제거
+- **미사용 스타일 제거**: 13개
+  - MeetingScreen: `extractTasksBtn`, `extractTasksBtnText`, `taskPriorityDot`, `taskAddBtn`, `personSection`
+  - ProjectScreen: `detailTitle`, `detailBadgeRow`, `detailSection`, `detailSectionLabel`, `detailValue`
+  - ScheduleScreen: `dotActive`, `scheduleTime`, `scheduleDateSmall`
+- **공통 패턴으로 추가된 스타일** (각 파일별):
+  - `flex1`, `opacity40`, `speakerInputFixed`, `speakerLabel`, `gap12`, `mb0`~`mb48`, `mt6`~`mt20`, `ml8`/`ml12`, `spacerH20`/`H16`/`H8`, `maxH80pct`~`maxH90pct`, `h64`~`h88pct` 등
+- **동적 스타일 유지** (인라인 그대로): `statusColor()`, `priorityColor()`, `tagColor()` 런타임 색상, `insets.top/bottom` 기반 패딩, `Animated.Value` 트랜스폼, 색상 알파 블렌딩(`+'22'/'55'`) 등

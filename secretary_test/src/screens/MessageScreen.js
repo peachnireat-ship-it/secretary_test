@@ -304,7 +304,7 @@ export default function MessageScreen({ user }) {
                   </View>
                 </View>
               </View>
-              <Text style={[s.cardSubject, item.status === '미확인' && { color: C.textPrimary }]} numberOfLines={1}>{item.subject}</Text>
+              <Text style={[s.cardSubject, item.status === '미확인' && s.cardSubjectUnread]} numberOfLines={1}>{item.subject}</Text>
               <View style={s.cardBottom}>
                 <Text style={s.cardPreview} numberOfLines={1}>{item.content || '내용 없음'}</Text>
                 <Text style={s.cardTime}>{timeAgo(item.createdAt)}</Text>
@@ -322,13 +322,13 @@ export default function MessageScreen({ user }) {
       {/* 상세 모달 */}
       <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => { setShowDetail(false); setEditMode(false); setReplyMode(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.overlay}>
-          <View style={[s.sheet, { maxHeight: '90%' }]}>
+          <View style={[s.sheet, s.maxH90pct]}>
             <View style={s.handle} />
             {detailMsg && (
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* 헤더 */}
                 <View style={s.detailHeader}>
-                  <View style={{ flex: 1 }}>
+                  <View style={s.flex1}>
                     {editMode ? (
                       <>
                         <Text style={s.inputLabel}>{detailMsg.direction === 'sent' ? '수신자' : '발신자'}</Text>
@@ -382,7 +382,7 @@ export default function MessageScreen({ user }) {
                     </View>
                   </>
                 ) : (
-                  <View style={[s.detailSection, { flexDirection: 'row', gap: 8 }]}>
+                  <View style={[s.detailSection, s.badgesRow]}>
                     <View style={[s.priorityBadge, { borderColor: priorityColor(detailMsg.priority) + '55', backgroundColor: priorityColor(detailMsg.priority) + '18' }]}>
                       <Text style={[s.badgeLabel, { color: priorityColor(detailMsg.priority) }]}>{detailMsg.priority}</Text>
                     </View>
@@ -396,7 +396,7 @@ export default function MessageScreen({ user }) {
                 <View style={s.detailSection}>
                   <Text style={s.sectionLabel}>내용</Text>
                   {editMode
-                    ? <TextInput style={[s.input, { height: 120 }]} value={editContent} onChangeText={setEditContent} multiline placeholderTextColor={C.textDim} placeholder="메세지 내용" />
+                    ? <TextInput style={[s.input, s.h120]} value={editContent} onChangeText={setEditContent} multiline placeholderTextColor={C.textDim} placeholder="메세지 내용" />
                     : <Text style={s.detailContent}>{detailMsg.content || '내용 없음'}</Text>
                   }
                 </View>
@@ -444,7 +444,7 @@ export default function MessageScreen({ user }) {
                     </View>
                     <View style={s.detailSection}>
                       <Text style={s.sectionLabel}>답장 내용</Text>
-                      <TextInput style={[s.input, { height: 120 }]} value={replyContent} onChangeText={setReplyContent} multiline placeholderTextColor={C.textDim} placeholder="답장 내용을 입력하세요" />
+                      <TextInput style={[s.input, s.h120]} value={replyContent} onChangeText={setReplyContent} multiline placeholderTextColor={C.textDim} placeholder="답장 내용을 입력하세요" />
                     </View>
                   </>
                 )}
@@ -466,10 +466,10 @@ export default function MessageScreen({ user }) {
                         { text: '취소', style: 'cancel' },
                         { text: '삭제', style: 'destructive', onPress: async () => { setMessages(await deleteMessage(detailMsg.id)); setShowDetail(false); } },
                       ])}>
-                        <Text style={[s.cancelText, { color: C.red }]}>삭제</Text>
+                        <Text style={[s.cancelText, s.textRed]}>삭제</Text>
                       </TouchableOpacity>
                       {detailMsg.direction === 'received' && (
-                        <TouchableOpacity style={[s.confirmBtn, { backgroundColor: C.accentTeal }]} onPress={() => startReply(detailMsg)}>
+                        <TouchableOpacity style={[s.confirmBtn, s.confirmBtnTeal]} onPress={() => startReply(detailMsg)}>
                           <Text style={s.confirmText}>답장</Text>
                         </TouchableOpacity>
                       )}
@@ -553,7 +553,7 @@ export default function MessageScreen({ user }) {
               <TextInput style={s.input} value={newSubject} onChangeText={setNewSubject} placeholder="메세지 제목" placeholderTextColor={C.textDim} />
 
               <Text style={s.inputLabel}>내용</Text>
-              <TextInput style={[s.input, { height: 100 }]} value={newContent} onChangeText={setNewContent} placeholder="메세지 내용" placeholderTextColor={C.textDim} multiline />
+              <TextInput style={[s.input, s.h100]} value={newContent} onChangeText={setNewContent} placeholder="메세지 내용" placeholderTextColor={C.textDim} multiline />
 
               <Text style={s.inputLabel}>우선순위</Text>
               <View style={s.optionRow}>
@@ -672,4 +672,13 @@ const s = StyleSheet.create({
   historyMeta: { color: C.textDim, fontSize: 10, letterSpacing: 0.5, marginBottom: 4 },
   historySubject: { color: C.textSecondary, fontSize: 13, fontWeight: '400', marginBottom: 4 },
   historyContent: { color: C.textDim, fontSize: 13, lineHeight: 20 },
+
+  cardSubjectUnread: { color: C.textPrimary },
+  maxH90pct: { maxHeight: '90%' },
+  flex1: { flex: 1 },
+  badgesRow: { flexDirection: 'row', gap: 8 },
+  h120: { height: 120 },
+  h100: { height: 100 },
+  textRed: { color: C.red },
+  confirmBtnTeal: { backgroundColor: C.accentTeal },
 });
