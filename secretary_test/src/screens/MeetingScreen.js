@@ -1435,7 +1435,26 @@ export default function MeetingScreen({ navigation }) {
           {/* 태스크 목록 */}
           {!!transcript && !loading && (tasks.length > 0 || tasksLoading) && (
             <View style={[s.section, { marginBottom: 16 }]}>
-              <Text style={s.sectionLabel}>TASKS</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <Text style={[s.sectionLabel, { marginBottom: 0 }]}>TASKS</Text>
+                {tasks.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (selectedTaskIndices.size === tasks.length) {
+                        setSelectedTaskIndices(new Set());
+                      } else {
+                        setSelectedTaskIndices(new Set(tasks.map((_, i) => i)));
+                      }
+                    }}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={s.taskSelectAllText}>
+                      {selectedTaskIndices.size === tasks.length ? '전체 해제' : '전체 선택'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               {tasksLoading && (
                 <View style={s.loadingBox}>
                   <ActivityIndicator color={C.accentPurple} size="small" />
@@ -1878,6 +1897,7 @@ const s = StyleSheet.create({
   actionBtnDisabled: { opacity: 0.5 },
   taskExtractBtn: { backgroundColor: C.accentPurple + '22', borderColor: C.accentPurple + '55' },
   taskExtractBtnText: { color: C.accentPurple, fontSize: 14, fontWeight: '500' },
+  taskSelectAllText: { color: C.accentTeal, fontSize: 12, fontWeight: '500' },
   saveBtnNew: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '55' },
   saveBtn: {
     backgroundColor: C.accentTeal + '22', borderWidth: 1,

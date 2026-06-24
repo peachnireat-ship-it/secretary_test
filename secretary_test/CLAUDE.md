@@ -343,3 +343,15 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 2. 저장 완료 즉시 백그라운드에서 업무 주제 분석 실행 (API 호출)
 3. 저장된 기록 탭으로 이동 시 분석 결과 자동 반영
 4. 기존 수동 "업무 주제 분석" 버튼도 그대로 동작
+
+---
+
+#### 태스크 추출 결과 전체 선택 버튼 (`MeetingScreen.js`)
+
+**변경 내용**
+- TASKS 섹션 헤더에 **전체 선택 / 전체 해제** 토글 버튼 추가
+  - `tasks.length > 0`일 때만 헤더 우측에 표시
+  - 전부 선택된 상태(`selectedTaskIndices.size === tasks.length`) → "전체 해제" 표시, 누르면 `new Set()`으로 초기화
+  - 일부/미선택 상태 → "전체 선택" 표시, 누르면 `tasks.map((_, i) => i)`로 전체 인덱스 선택
+- `taskSelectAllText` 스타일 추가 (`C.accentTeal`, 12px)
+- 기존 개별 행 선택(toggle) 동작 변경 없음
