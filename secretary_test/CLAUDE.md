@@ -358,6 +358,18 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ---
 
+#### 저장된 기록 탭 태스크 목록 전체 선택 버튼 (`MeetingScreen.js`)
+
+**변경 내용**
+- 기록 탭 TASKS 섹션 헤더에 **전체 선택 / 전체 해제** 토글 버튼 추가
+  - 기존 `<Text style={s.historySectionLabel}>TASKS</Text>` →  `historySectionHeader` View로 감싸고 우측에 버튼 추가
+  - 전부 선택된 상태(`selected.size === item.tasks.length`) → "전체 해제", 누르면 `new Set()`으로 초기화
+  - 일부/미선택 상태 → "전체 선택", 누르면 `item.tasks.map((_, i) => i)` 전체 인덱스 선택
+  - `historySelectedTasks` state 함수형 업데이트로 처리 (각 회의록 ID별 독립 Set)
+- `historySectionHeader` (기존 스타일, flexRow + space-between), `taskSelectAllText` (기존 스타일, accentTeal 12px) 재사용 — 신규 스타일 추가 없음
+
+---
+
 #### CSS 스타일 정리 1차 (`HomeScreen.js`, `LoginScreen.js`, `ClientScreen.js`)
 
 **변경 내용** (`css-guide.md` 규칙 적용)

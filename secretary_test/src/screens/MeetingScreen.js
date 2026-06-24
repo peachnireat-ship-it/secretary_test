@@ -1724,7 +1724,28 @@ export default function MeetingScreen({ navigation }) {
                       const selected = historySelectedTasks[item.id] || new Set();
                       return (
                         <View style={s.historySection}>
-                          <Text style={s.historySectionLabel}>TASKS</Text>
+                          <View style={s.historySectionHeader}>
+                            <Text style={s.historySectionLabel}>TASKS</Text>
+                            <TouchableOpacity
+                              onPress={() => {
+                                setHistorySelectedTasks((prev) => {
+                                  const cur = prev[item.id] || new Set();
+                                  return {
+                                    ...prev,
+                                    [item.id]: cur.size === item.tasks.length
+                                      ? new Set()
+                                      : new Set(item.tasks.map((_, i) => i)),
+                                  };
+                                });
+                              }}
+                              activeOpacity={0.7}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Text style={s.taskSelectAllText}>
+                                {selected.size === item.tasks.length ? '전체 해제' : '전체 선택'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
                           <View style={s.card}>
                             {item.tasks.map((task, i) => {
                               const isSelected = selected.has(i);
