@@ -344,6 +344,7 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
 | 2026-06-29 | 초기 구성 | 전체 | - |
+| 2026-06-29 | 드라이런 수정: raw:true 가이드 추가, qa 루프 경로 명시, developer 통신 경로 명확화 | feature-dev, qa 스킬, developer.md, orchestrator | 드라이런 테스트 이슈 #1~#4 수정 |
 
 ---
 
