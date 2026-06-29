@@ -10,7 +10,7 @@ import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
 import * as FileSystem from 'expo-file-system';
-import { transcribeAudio, diarizeSegments, diarizeWithPyannote, convertToMonoViaServer } from '../services/groqStt';
+import { transcribeAudio, diarizeSegments, diarizeWithPyannote, convertToMonoViaServer, rediarizeTranscript } from '../services/groqStt';
 import { askClaude, buildTaskExtractionSystem, fixForeignWordsInText } from '../services/claude';
 import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects, getHistories } from '../services/storage';
 
@@ -176,6 +176,12 @@ export default function MeetingScreen({ navigation }) {
 
   const [pickedAfterTranscript, setPickedAfterTranscript] = useState(false);
   const [fixingForeignId, setFixingForeignId] = useState(null);
+
+  const [speakerCount, setSpeakerCount] = useState(null);
+  const [rediarizingId, setRediarizingId] = useState(null);
+  const [showRediarizeModal, setShowRediarizeModal] = useState(false);
+  const [rediarizeTarget, setRediarizeTarget] = useState(null);
+  const [rediarizeCountInput, setRediarizeCountInput] = useState('');
 
   const timerRef = useRef(null);
   const scrollRef = useRef(null);
@@ -416,7 +422,7 @@ export default function MeetingScreen({ navigation }) {
       if (segments.length > 0) {
         setLoadingMsg('화자 구분 분석 중…');
         const pyResult = await diarizeWithPyannote(audioUri, audioMime, segments);
-        diarized = pyResult ?? await diarizeSegments(segments);
+        diarized = pyResult ?? await diarizeSegments(segments, speakerCount);
       }
 
       const speakers = extractSpeakers(diarized);
@@ -663,6 +669,51 @@ export default function MeetingScreen({ navigation }) {
   function copyToClipboard(text) {
     Clipboard.setString(text);
     Alert.alert('복사 완료', '클립보드에 복사되었습니다.');
+  }
+
+  function openRediarizeModal(item) {
+    setRediarizeTarget(item);
+    setRediarizeCountInput('');
+    setShowRediarizeModal(true);
+  }
+
+  async function confirmRediarize() {
+    const item = rediarizeTarget;
+    const count = parseInt(rediarizeCountInput) || null;
+    setShowRediarizeModal(false);
+    setRediarizeTarget(null);
+    setRediarizingId(item.id);
+    try {
+      const newTranscript = await rediarizeTranscript(item.transcript, count);
+      const newSummary = await askClaude(
+        [{ role: 'user', content: newTranscript }],
+        `[언어 규칙] 반드시 한국어로만 응답하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.
+
+회의 내용을 아래 형식으로 간결하게 요약하세요.
+화자가 구분된 경우, 주요 논의 내용·결정 사항·액션 아이템에 화자 이름을 명시하세요.
+
+## 핵심 주제
+(회의의 주요 목적이나 주제)
+
+## 주요 논의 내용
+(핵심 포인트를 간결하게 bullet로, 화자 이름 포함)
+
+## 결정 사항
+(회의에서 결정된 사항 및 주도한 화자, 없으면 "없음")
+
+## 액션 아이템
+(후속 조치 및 담당자/기한, 없으면 "없음")`
+      );
+      const updated = await updateMeetingRecord(item.id, {
+        transcript: newTranscript,
+        summary: newSummary,
+      });
+      setMeetingRecords(updated);
+    } catch (e) {
+      handleApiError(e);
+    } finally {
+      setRediarizingId(null);
+    }
   }
 
   async function runFixForeignWords(item) {
@@ -1254,6 +1305,35 @@ export default function MeetingScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* 화자 재분리 모달 */}
+      <Modal visible={showRediarizeModal} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowRediarizeModal(false)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior="padding">
+          <View style={[s.modalScrollContent, { justifyContent: 'center' }]}>
+            <View style={s.modalBox}>
+              <Text style={s.modalTitle}>화자 재분리</Text>
+              <Text style={s.speakerModalSubtitle}>AI가 화자 구분을 다시 분석하고 요약을 자동 갱신합니다</Text>
+              <Text style={s.speakerModalSubtitle}>참석자 수 (선택)</Text>
+              <TextInput
+                style={s.modalInput}
+                value={rediarizeCountInput}
+                onChangeText={setRediarizeCountInput}
+                placeholder="비우면 자동 감지"
+                placeholderTextColor={C.textDim}
+                keyboardType="number-pad"
+              />
+              <View style={s.modalBtns}>
+                <TouchableOpacity style={s.modalCancelBtn} onPress={() => setShowRediarizeModal(false)} activeOpacity={0.7}>
+                  <Text style={s.modalCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.modalSaveBtn} onPress={confirmRediarize} activeOpacity={0.8}>
+                  <Text style={s.modalSaveText}>재분리</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* 상단 탭 */}
       <View style={s.topTab}>
         <TouchableOpacity
@@ -1319,6 +1399,29 @@ export default function MeetingScreen({ navigation }) {
               </View>
 
               <View style={s.rule} />
+
+              {/* 참석자 수 힌트 */}
+              <View style={s.speakerCountRow}>
+                <Text style={s.speakerCountLabel}>참석자 수</Text>
+                <View style={s.speakerCountRight}>
+                  <TouchableOpacity
+                    style={[s.speakerCountBtn, !speakerCount && s.opacity40]}
+                    onPress={() => setSpeakerCount((prev) => (prev && prev > 2 ? prev - 1 : null))}
+                    activeOpacity={0.7}
+                    disabled={!speakerCount}
+                  >
+                    <Text style={s.speakerCountBtnText}>−</Text>
+                  </TouchableOpacity>
+                  <Text style={s.speakerCountValue}>{speakerCount ? `${speakerCount}명` : '자동'}</Text>
+                  <TouchableOpacity
+                    style={s.speakerCountBtn}
+                    onPress={() => setSpeakerCount((prev) => Math.min(10, (prev || 1) + 1))}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.speakerCountBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
               {/* 직접 녹음 */}
               <View style={s.section}>
@@ -1606,10 +1709,20 @@ export default function MeetingScreen({ navigation }) {
                       <Text style={s.segmentEditBtnText}>화자 수정</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[s.fixForeignBtn, !!fixingForeignId && s.fixForeignBtnDisabled]}
+                      style={[s.rediarizeBtn, (!!rediarizingId || !!fixingForeignId) && s.rediarizeBtnDisabled]}
+                      onPress={() => openRediarizeModal(item)}
+                      activeOpacity={0.7}
+                      disabled={!!rediarizingId || !!fixingForeignId}
+                    >
+                      <Text style={s.rediarizeBtnText}>
+                        {rediarizingId === item.id ? '재분리 중…' : '화자 재분리'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.fixForeignBtn, (!!fixingForeignId || !!rediarizingId) && s.fixForeignBtnDisabled]}
                       onPress={() => runFixForeignWords(item)}
                       activeOpacity={0.7}
-                      disabled={!!fixingForeignId}
+                      disabled={!!fixingForeignId || !!rediarizingId}
                     >
                       <Text style={s.fixForeignBtnText}>
                         {fixingForeignId === item.id ? '수정 중…' : '외국어 수정'}
@@ -2213,6 +2326,15 @@ const s = StyleSheet.create({
   bundleBtnDisabled: { opacity: 0.4 },
   bundleBtnText: { color: C.accentTeal, fontSize: 14, fontWeight: '600' },
 
+  speakerCountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, paddingHorizontal: 4 },
+  speakerCountLabel: { color: C.textDim, fontSize: 12, letterSpacing: 0.5 },
+  speakerCountRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  speakerCountBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: C.borderHigh, alignItems: 'center', justifyContent: 'center' },
+  speakerCountBtnText: { color: C.textPrimary, fontSize: 18, lineHeight: 22 },
+  speakerCountValue: { color: C.textPrimary, fontSize: 15, fontWeight: '500', minWidth: 44, textAlign: 'center' },
+  rediarizeBtn: { borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 7, paddingVertical: 5, paddingHorizontal: 6 },
+  rediarizeBtnText: { color: C.accentBlue, fontSize: 11, fontWeight: '500' },
+  rediarizeBtnDisabled: { opacity: 0.4 },
   opacity40: { opacity: 0.4 },
   speakerInputFixed: { width: 64, flex: 0 },
   flex1: { flex: 1 },

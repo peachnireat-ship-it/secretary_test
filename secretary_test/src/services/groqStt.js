@@ -43,7 +43,7 @@ function isValidSegment(s) {
   return (s.no_speech_prob ?? 0) < 0.6 && (s.avg_logprob ?? 0) > -1.0;
 }
 
-export async function diarizeSegments(segments) {
+export async function diarizeSegments(segments, speakerCount = null) {
   if (!segments?.length) return '';
 
   const input = segments
@@ -51,6 +51,10 @@ export async function diarizeSegments(segments) {
     .map((s) => `[${formatSec(s.start)}-${formatSec(s.end)}] ${(s.text || '').trim()}`)
     .filter((l) => l)
     .join('\n');
+
+  const countHint = speakerCount
+    ? `\n\n※ 이 회의 참석자는 총 ${speakerCount}명입니다. 반드시 ${speakerCount}명의 화자로만 구분하세요.`
+    : '';
 
   return askClaude(
     [{ role: 'user', content: input }],
@@ -65,7 +69,33 @@ export async function diarizeSegments(segments) {
 
 출력 형식:
 - 연속된 같은 화자의 발화는 합쳐서 "[화자 N] 내용" 형식으로 출력하세요.
-- 타임스탬프는 제거하고, 다른 설명 없이 화자 구분된 대화문만 출력하세요.`
+- 타임스탬프는 제거하고, 다른 설명 없이 화자 구분된 대화문만 출력하세요.${countHint}`
+  );
+}
+
+export async function rediarizeTranscript(transcriptText, speakerCount = null) {
+  if (!transcriptText?.trim()) return transcriptText;
+
+  const rawText = transcriptText
+    .replace(/\[([^\]\n]+)\]\n?/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (!rawText) return transcriptText;
+
+  const countHint = speakerCount
+    ? `\n\n※ 이 회의 참석자는 총 ${speakerCount}명입니다. 반드시 ${speakerCount}명의 화자로만 구분하세요.`
+    : '';
+
+  return askClaude(
+    [{ role: 'user', content: rawText }],
+    `[언어 규칙] 반드시 한국어로만 응답하세요.
+
+다음은 회의 전사 텍스트입니다. 대화 흐름, 질문/답변 패턴, 내용의 연속성을 분석하여 화자를 구분하세요.${countHint}
+
+출력 형식:
+- 연속된 같은 화자의 발화는 합쳐서 "[화자 N] 내용" 형식으로 출력하세요.
+- 다른 설명 없이 화자 구분된 대화문만 출력하세요.`
   );
 }
 
