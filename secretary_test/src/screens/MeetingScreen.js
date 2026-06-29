@@ -346,7 +346,8 @@ export default function MeetingScreen({ navigation }) {
 (회의에서 결정된 사항 및 주도한 화자, 없으면 "없음")
 
 ## 액션 아이템
-(후속 조치 및 담당자/기한, 없으면 "없음")`
+(후속 조치 및 담당자/기한, 없으면 "없음")`,
+        { raw: true }
       );
       setSummary(sum);
     } catch (e) {
@@ -702,7 +703,8 @@ export default function MeetingScreen({ navigation }) {
 (회의에서 결정된 사항 및 주도한 화자, 없으면 "없음")
 
 ## 액션 아이템
-(후속 조치 및 담당자/기한, 없으면 "없음")`
+(후속 조치 및 담당자/기한, 없으면 "없음")`,
+        { raw: true }
       );
       const updated = await updateMeetingRecord(item.id, {
         transcript: newTranscript,
@@ -776,7 +778,8 @@ export default function MeetingScreen({ navigation }) {
 (자주 언급된 주제어, 프로젝트명, 이슈 등)
 
 ## 인사이트
-(전체 회의를 통해 파악할 수 있는 업무 패턴이나 특이사항, 1~2문장)`
+(전체 회의를 통해 파악할 수 있는 업무 패턴이나 특이사항, 1~2문장)`,
+        { raw: true }
       );
       setWorkTopics(result);
       await saveWorkTopics(result);
