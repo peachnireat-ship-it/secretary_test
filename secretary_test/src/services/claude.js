@@ -133,12 +133,17 @@ export function buildProjectDelaySystem(projects, schedules) {
 프로젝트 현황 (총 ${projects.length}건 / 지연·위험 ${delayedCount}건 / 마감 초과 ${overdueCount}건):
 ${projectLines || '(등록된 프로젝트 없음)'}
 
-다음을 수행할 수 있습니다:
+## 응답 규칙
+- 분석·조언·조회 요청: 자연스러운 한국어 텍스트로만 응답하세요. JSON을 절대 포함하지 마세요.
+- 프로젝트 상태·진행률 변경 요청일 때만: 아래 JSON 한 줄만 출력하세요.
+  {"action":"update_project","id":"프로젝트ID","changes":{"status":"상태값","progress":숫자}}
+
+## 할 수 있는 작업
 1. 전체 지연 원인 패턴 분석 (메모·상태·진행률 기반)
 2. 우선 조치가 필요한 프로젝트 식별 및 순서 제안
 3. 마감 위험 프로젝트의 회복 계획 수립
 4. 반복 지연 패턴 및 근본 원인 진단
-5. 프로젝트 상태 업데이트 — JSON: {"action":"update_project","id":"...","changes":{"status":"...","progress":...}}
+5. 프로젝트 상태·진행률 업데이트
 
 분석 요청 시 반드시 다음 항목을 포함하세요:
 - 지연 원인 분류 (자원 부족 / 의사결정 지연 / 외부 의존 / 범위 변경 / 커뮤니케이션 문제 등)

@@ -432,9 +432,9 @@ export default function ProjectScreen({ navigation, route }) {
         .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
 
       const systemPrompt = buildProjectDelaySystem(projects, []);
-      const reply = await askClaude(apiMessages, systemPrompt);
+      const reply = await askClaude(apiMessages, systemPrompt, { raw: true });
 
-      const jsonMatch = reply.match(/\{[\s\S]*"action"\s*:\s*"update_project"[\s\S]*\}/);
+      const jsonMatch = reply.match(/\{[\s\S]*?"action"\s*:\s*"update_project"[\s\S]*?\}/);
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
@@ -442,7 +442,11 @@ export default function ProjectScreen({ navigation, route }) {
             const updated = await updateProject(parsed.id, parsed.changes);
             setProjects(updated);
             const target = updated.find((p) => p.id === parsed.id);
-            const confirmText = `프로젝트를 업데이트했습니다.\n"${target?.title}" → ${JSON.stringify(parsed.changes)}`;
+            const changes = parsed.changes;
+            const changeSummary = Object.entries(changes)
+              .map(([k, v]) => `${k === 'status' ? '상태' : k === 'progress' ? '진행률' : k}: ${v}${k === 'progress' ? '%' : ''}`)
+              .join(', ');
+            const confirmText = `프로젝트를 업데이트했습니다.\n"${target?.title}" — ${changeSummary}`;
             setChatMessages([...history, { role: 'assistant', text: confirmText }]);
           }
         } catch {
