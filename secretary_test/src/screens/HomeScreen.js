@@ -24,6 +24,11 @@ function greeting(h) {
   return '좋은 저녁입니다';
 }
 
+function statusColor(status) {
+  const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
+  return map[status] || C.textSecondary;
+}
+
 function tagColor(tag) {
   const map = { 회의: C.accentBlue, 업무: C.gold, 영업: C.accentTeal, 개인: C.accentPurple, 기타: C.textSecondary };
   return map[tag] || C.textSecondary;
@@ -46,6 +51,7 @@ export default function HomeScreen({ navigation, user }) {
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [activeProjectCount, setActiveProjectCount] = useState(0);
   const [delayedProjectCount, setDelayedProjectCount] = useState(0);
+  const [activeProjects, setActiveProjects] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -57,12 +63,20 @@ export default function HomeScreen({ navigation, user }) {
         ]);
         const today = todayStr();
         const todays = schedules
-          .filter((s) => s.date === today)
+          .filter((s) => {
+            if (s.startDate && s.endDate) {
+              const start = s.startDate.split(' ')[0];
+              const end = s.endDate.split(' ')[0];
+              return start <= today && today <= end;
+            }
+            return s.date === today;
+          })
           .sort((a, b) => a.time.localeCompare(b.time));
         setTodaySchedules(todays);
         setClientCount(clients.length);
         const active = projects.filter((p) => p.status !== '완료' && p.status !== '취소');
         setActiveProjectCount(active.length);
+        setActiveProjects(active);
         setDelayedProjectCount(projects.filter((p) => p.status === '지연' || p.status === '위험').length);
       }
       load();
@@ -151,6 +165,44 @@ export default function HomeScreen({ navigation, user }) {
           {todaySchedules.length > 4 && (
             <TouchableOpacity style={s.agendaMore} onPress={() => navigation.navigate('일정')}>
               <Text style={s.agendaMoreText}>+{todaySchedules.length - 4}건 더 보기</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* ── 진행중 프로젝트 ── */}
+      <View style={s.section}>
+        <Text style={s.sectionLabel}>ACTIVE PROJECTS</Text>
+        <View style={s.card}>
+          {activeProjects.length === 0 ? (
+            <View style={s.agendaEmpty}>
+              <Text style={s.agendaEmptyText}>진행중인 프로젝트가 없습니다</Text>
+            </View>
+          ) : (
+            activeProjects.slice(0, 3).map((item, i) => (
+              <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.7}
+                style={[s.projectRow, i < Math.min(activeProjects.length, 3) - 1 && s.agendaRowBorder]}
+                onPress={() => navigation.navigate('프로젝트')}
+              >
+                <View style={[s.projectStatusDot, { backgroundColor: statusColor(item.status) }]} />
+                <View style={s.projectMiddle}>
+                  <Text style={s.projectTitle} numberOfLines={1}>{item.title}</Text>
+                  <View style={s.progressBarBg}>
+                    <View style={[s.progressBarFill, { width: `${item.progress}%`, backgroundColor: statusColor(item.status) }]} />
+                  </View>
+                </View>
+                <View style={s.projectRight}>
+                  <Text style={[s.projectStatus, { color: statusColor(item.status) }]}>{item.status}</Text>
+                  <Text style={s.projectDeadline}>{item.deadline}</Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+          {activeProjects.length > 3 && (
+            <TouchableOpacity style={s.agendaMore} onPress={() => navigation.navigate('프로젝트')}>
+              <Text style={s.agendaMoreText}>+{activeProjects.length - 3}건 더 보기</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -316,4 +368,13 @@ const s = StyleSheet.create({
   flex1: { flex: 1 },
   sectionLast: { marginBottom: 48 },
   aiRowBordered: { borderTopWidth: 1, borderTopColor: C.border },
+  projectRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+  projectStatusDot: { width: 8, height: 8, borderRadius: 4 },
+  projectMiddle: { flex: 1, gap: 6 },
+  projectTitle: { color: C.textPrimary, fontSize: 13 },
+  progressBarBg: { height: 3, backgroundColor: C.border, borderRadius: 2 },
+  progressBarFill: { height: 3, borderRadius: 2 },
+  projectRight: { alignItems: 'flex-end', gap: 3 },
+  projectStatus: { fontSize: 10, fontWeight: '600', letterSpacing: 0.5 },
+  projectDeadline: { color: C.textDim, fontSize: 10 },
 });

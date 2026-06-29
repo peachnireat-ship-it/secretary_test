@@ -325,6 +325,33 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ## 세션 작업 이력
 
+### 2026-06-24 (2차)
+
+#### 홈 화면 오늘 일정 기간 일정 포함 (`HomeScreen.js`)
+
+**변경 내용**
+- `load()` 내 `todaySchedules` 필터 수정
+  - 기존: `s.date === today` (시작일이 오늘인 일정만)
+  - 변경: `startDate`/`endDate`가 있는 기간 일정은 `start <= today <= end` 범위로 판단
+  - 단일 날짜 일정은 기존대로 `s.date === today`
+
+---
+
+#### 홈 화면 ACTIVE PROJECTS 섹션 추가 (`HomeScreen.js`)
+
+**변경 내용**
+- `statusColor(status)` 헬퍼 함수 추가 (CLAUDE.md 상태 색상 매핑 일치)
+- `activeProjects` state 추가 — 기존 `activeProjectCount`(숫자)와 별개로 실제 배열 저장
+- `load()` 에서 `setActiveProjects(active)` 추가
+- TODAY'S AGENDA 아래, QUICK ACTIONS 위에 ACTIVE PROJECTS 섹션 삽입
+  - 완료·취소 제외 프로젝트 최대 3건 표시
+  - 각 행: 상태 점(색상) + 제목 + 진행률 바(3px) + 상태 텍스트 + 마감일
+  - 3건 초과 시 "+N건 더 보기" → 프로젝트 탭 이동
+  - 0건: "진행중인 프로젝트가 없습니다" 빈 상태 텍스트
+- 신규 스타일 9종 추가: `projectRow`, `projectStatusDot`, `projectMiddle`, `projectTitle`, `progressBarBg`, `progressBarFill`, `projectRight`, `projectStatus`, `projectDeadline`
+
+---
+
 ### 2026-06-24
 
 #### 회의록 저장 시 업무 주제 분석 자동 갱신 (`MeetingScreen.js`)
