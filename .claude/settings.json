@@ -1,5 +1,4 @@
 {
-  "theme": "dark",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -29,8 +28,8 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git commit*)",
             "command": "bash C:/Users/user/.claude/hooks/pre-commit-lint.sh",
+            "if": "Bash(git commit*)",
             "timeout": 60,
             "statusMessage": "린트 검사 중..."
           }
@@ -47,5 +46,18 @@
         ]
       }
     ]
-  }
+  },
+  "enabledPlugins": {
+    "harness@harness-marketplace": true
+  },
+  "extraKnownMarketplaces": {
+    "harness-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "revfactory/harness"
+      }
+    }
+  },
+  "tui": "fullscreen",
+  "theme": "dark"
 }
