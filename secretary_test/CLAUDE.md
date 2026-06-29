@@ -1,5 +1,16 @@
 @AGENTS.md
 
+## 🚀 프로젝트 플러그인 설치 안내
+
+이 프로젝트에서는 `harness` 플러그인을 사용합니다. Claude Code를 켜신 후 아래 명령어를 입력해 주세요.
+
+```bash
+/plugin install harness@harness-marketplace --scope project
+/reload-plugins
+```
+
+---
+
 # secretary_test 프로젝트 개요
 
 ## 앱 개요
@@ -320,6 +331,19 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 - 기간 일정 달력 바 표시 (startDate~endDate 범위)
 - 긴급도 Animated 테두리 깜빡임 (마감 3일 이내 = gold, 초과 = red)
 - 일정·프로젝트 카드 통합 UI (동일 스타일 itemCard)
+
+---
+
+## 하네스: secretary_test 개발 자동화
+
+**목표:** 기능 구현·버그 수정·스타일 정리·QA 검증을 developer/style-guard/qa 에이전트 팀이 자동 처리
+
+**트리거:** secretary_test 개발 작업(기능 추가, 버그 수정, 스타일 정리, 검증) 요청 시 `secretary-orchestrator` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-06-29 | 초기 구성 | 전체 | - |
 
 ---
 
