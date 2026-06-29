@@ -349,6 +349,33 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ## 세션 작업 이력
 
+### 2026-06-29
+
+#### ADR 5개 작성 (`docs/adr/`)
+
+- `0001-asyncstorage-not-sqlite.md` — SQLite 대신 AsyncStorage 선택 근거
+- `0002-groq-grok-switchable-ai.md` — Groq/Grok 전환 가능한 AI 공급자 추상화
+- `0003-expo-managed-no-custom-native.md` — Expo 관리형 워크플로우, 네이티브 모듈 없음
+- `0004-asyncstorage-key-versioning.md` — `{type}_v{n}_${userId}` 키 버전 패턴
+- `0005-hardcoded-local-accounts.md` — 하드코딩된 로컬 테스트 계정 (인증 서버 없음)
+
+---
+
+#### 회의록 화자 구분 심화 (`MeetingScreen.js`, `groqStt.js`)
+
+**참석자 수 힌트 (녹음 탭)**
+- 변환 전 화면에 참석자 수 +/− 컨트롤 추가 (자동 / 2~10명)
+- 설정 시 `diarizeSegments()` 프롬프트에 `"※ 총 N명. 반드시 N명으로만 구분"` 힌트 전달
+
+**화자 재분리 (기록 탭)**
+- 각 회의록 버튼 행에 "화자 재분리" 버튼 추가
+- 클릭 → 참석자 수 입력 모달 → 확인 시 `rediarizeTranscript()` 호출
+- `groqStt.rediarizeTranscript(transcriptText, speakerCount)`: `[화자 N]` 라벨 제거 후 LLM 재분석
+- 재분리 완료 후 SUMMARY 자동 재생성 (2 API 호출)
+- 재분리 진행 중 외국어 수정 · 삭제 버튼 비활성화
+
+---
+
 ### 2026-06-24 (2차)
 
 #### 홈 화면 오늘 일정 기간 일정 포함 (`HomeScreen.js`)
