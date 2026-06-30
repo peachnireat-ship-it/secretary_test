@@ -345,6 +345,9 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 |------|----------|------|------|
 | 2026-06-29 | 초기 구성 | 전체 | - |
 | 2026-06-29 | 드라이런 수정: raw:true 가이드 추가, qa 루프 경로 명시, developer 통신 경로 명확화 | feature-dev, qa 스킬, developer.md, orchestrator | 드라이런 테스트 이슈 #1~#4 수정 |
+| 2026-06-30 | 모델 opus→sonnet 변경, qa subagent_type:general-purpose+Bash 추가, 오케스트레이터 Agent 호출 절차 명시 | developer.md, style-guard.md, qa.md, secretary-orchestrator | 하네스 감사 drift 수정 |
+| 2026-06-30 | developer·style-guard subagent_type:general-purpose 추가, 오케스트레이터 Agent 호출 형식에 subagent_type 추가 | developer.md, style-guard.md, secretary-orchestrator | 드라이런 이슈 #1~#2 수정 |
+| 2026-06-30 | 실행 모드 표기 수정(에이전트 팀→서브 에이전트), SendMessage 데드 링크 제거, 통신 프로토콜 반환값 기반으로 정정 | secretary-orchestrator, qa/SKILL.md, developer.md, style-guard.md, qa.md | 드라이런 이슈 #1~#3 수정 |
 
 ---
 
