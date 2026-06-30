@@ -1,7 +1,7 @@
 ---
 name: web-searcher
 description: 웹 검색 전담 에이전트. 뉴스·블로그·공식 사이트에서 최신 정보를 수집한다. research-orchestrator의 Phase 2에서 병렬 호출된다.
-model: opus
+model: sonnet
 subagent_type: general-purpose
 tools:
   - WebSearch

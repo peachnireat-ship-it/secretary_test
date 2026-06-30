@@ -1,7 +1,7 @@
 ---
 name: doc-reviewer
 description: 생성된 API 문서(01~03)를 소스 코드와 교차 검증하여 완성도를 평가하고, 수정 보완 후 최종 통합 문서(05_final_docs.md)를 작성하는 에이전트. 누락 함수, 파라미터 오류, 예제 품질을 검토한다. api-doc-orchestrator가 파이프라인 Step 4에서 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

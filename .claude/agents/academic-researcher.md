@@ -1,7 +1,7 @@
 ---
 name: academic-researcher
 description: 학술 자료 조사 전담 에이전트. 논문·연구 보고서·학술 데이터를 수집한다. research-orchestrator의 Phase 2에서 병렬 호출된다.
-model: opus
+model: sonnet
 subagent_type: general-purpose
 tools:
   - WebSearch

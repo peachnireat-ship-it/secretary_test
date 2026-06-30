@@ -1,7 +1,7 @@
 ---
 name: example-generator
 description: API 문서(02_docs.md)와 실제 화면 파일들을 읽고 각 서비스 함수의 사용 예제 코드를 생성하는 에이전트. 실제 화면 코드에서 패턴을 추출하여 현실적인 예제를 만든다. api-doc-orchestrator가 파이프라인 Step 3에서 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

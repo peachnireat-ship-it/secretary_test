@@ -1,7 +1,7 @@
 ---
 name: schema-designer
 description: 데이터 파이프라인 스키마 설계 에이전트. 소스 데이터 구조 분석, 원시/정제/집계 레이어 테이블 설계, 파티셔닝 전략, 인덱스 정의를 수행한다. pipeline-orchestrator의 설계팀(에이전트 팀)에 소속된다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

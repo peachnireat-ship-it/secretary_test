@@ -1,5 +1,6 @@
 ---
 name: thumbnail-designer
+model: sonnet
 description: 유튜브 콘텐츠 제작 하네스의 썸네일 컨셉 기획 전문가. 대본과 SEO 제목을 기반으로 클릭률 높은 썸네일 시안 3개를 기획한다.
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: market-researcher
 description: 마케팅 캠페인용 타깃 시장 조사 에이전트. 타깃 고객 페르소나, 경쟁사 분석, 시장 트렌드를 조사하여 캠페인 전략의 기반을 제공한다. campaign-orchestrator가 서브 에이전트로 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

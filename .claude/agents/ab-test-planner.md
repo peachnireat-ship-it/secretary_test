@@ -1,7 +1,7 @@
 ---
 name: ab-test-planner
 description: 마케팅 캠페인 A/B 테스트 계획 에이전트. 카피·비주얼 변수를 분리하고 테스트 그룹·KPI·샘플 크기·통계 기준을 설계한다. campaign-orchestrator가 서브 에이전트로 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

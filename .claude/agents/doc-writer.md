@@ -1,7 +1,7 @@
 ---
 name: doc-writer
 description: endpoint-analyzer가 생성한 함수 목록(01_endpoints.md)을 읽고 각 함수에 대한 완전한 한국어 API 문서를 작성하는 에이전트. 목적, 파라미터, 반환값, 에러, 사용 주의사항을 표준 포맷으로 작성한다. api-doc-orchestrator가 파이프라인 Step 2에서 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

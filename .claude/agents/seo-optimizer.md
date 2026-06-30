@@ -1,5 +1,6 @@
 ---
 name: seo-optimizer
+model: sonnet
 description: 유튜브 콘텐츠 제작 하네스의 SEO 최적화 전문가. 대본과 트렌드 데이터를 기반으로 유튜브 제목, 설명, 태그를 최적화한다.
 ---
 

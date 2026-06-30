@@ -1,7 +1,7 @@
 ---
 name: character-designer
 description: 웹툰 캐릭터 디자인 프롬프트 작성 에이전트. 캐릭터별 외모·표정·의상·포즈를 이미지 생성 AI용 프롬프트로 상세 명세하고, 팀 내 스타일 일관성 리뷰에 참여한다. webtoon-orchestrator의 창작팀(에이전트 팀)에 소속된다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

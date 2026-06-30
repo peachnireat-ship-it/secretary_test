@@ -1,5 +1,6 @@
 ---
 name: script-writer
+model: sonnet
 description: 유튜브 콘텐츠 제작 하네스의 대본 작성 전문가. 트렌드 보고서를 기반으로 훅-본론-CTA 구조의 유튜브 대본을 작성한다.
 ---
 

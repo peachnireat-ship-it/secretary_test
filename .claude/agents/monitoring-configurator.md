@@ -1,7 +1,7 @@
 ---
 name: monitoring-configurator
 description: 데이터 파이프라인 모니터링 설정 에이전트. 파이프라인 지표 정의, 알림 조건, 대시보드 구성, SLA 모니터링, 장애 에스컬레이션 정책을 수립한다. pipeline-orchestrator가 서브 에이전트로 마지막에 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

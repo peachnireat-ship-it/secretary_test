@@ -1,7 +1,7 @@
 ---
 name: endpoint-analyzer
 description: secretary_test 코드베이스의 서비스 모듈(storage.js, claude.js, groqStt.js)에서 export된 함수를 분석하는 에이전트. 함수 시그니처, 파라미터, 반환값, 에러 케이스, 의존관계를 추출하여 구조화된 엔드포인트 목록을 생성한다. api-doc-orchestrator가 파이프라인 Step 1에서 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

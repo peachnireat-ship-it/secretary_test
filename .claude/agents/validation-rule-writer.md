@@ -1,7 +1,7 @@
 ---
 name: validation-rule-writer
 description: 데이터 파이프라인 검증 규칙 작성 에이전트. 스키마 기반 무결성 검사, ETL 기반 비즈니스 규칙 검증, 이상값 탐지, 데이터 품질 임계값을 정의한다. pipeline-orchestrator가 서브 에이전트로 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

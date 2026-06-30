@@ -1,7 +1,7 @@
 ---
 name: style-reviewer
 description: 웹툰 스타일 일관성 최종 리뷰 에이전트. 스타일 시트 대비 캐릭터·패널·대사의 경계면 불일치를 교차 검증하고 최종 에피소드 패키지를 통합 생성한다. webtoon-orchestrator가 서브 에이전트로 마지막에 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

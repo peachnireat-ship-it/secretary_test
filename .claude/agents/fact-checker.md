@@ -1,7 +1,7 @@
 ---
 name: fact-checker
 description: 교차 검증 전담 에이전트. 3개 조사(웹/학술/커뮤니티) 결과를 비교하여 모순·과장·출처 신뢰도를 평가한다. research-orchestrator의 Phase 3에서 순차 호출된다.
-model: opus
+model: sonnet
 subagent_type: general-purpose
 tools:
   - Read

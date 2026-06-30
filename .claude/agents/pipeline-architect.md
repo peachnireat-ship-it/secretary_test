@@ -1,7 +1,7 @@
 ---
 name: pipeline-architect
 description: 데이터 파이프라인 전체 아키텍처를 설계하고 하위 에이전트에 위임하는 최상위 감독자 에이전트. 요구사항 분석 → 전체 구조 초안 → 팀 위임 → 최종 통합 순서로 계층적 조율을 수행한다. pipeline-orchestrator가 첫 번째로 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

@@ -1,7 +1,7 @@
 ---
 name: synthesizer
 description: 종합 보고서 작성 전담 에이전트. 교차 검증된 데이터를 바탕으로 구조화된 종합 보고서를 작성한다. research-orchestrator의 Phase 4에서 순차 호출된다.
-model: opus
+model: sonnet
 subagent_type: general-purpose
 tools:
   - Read

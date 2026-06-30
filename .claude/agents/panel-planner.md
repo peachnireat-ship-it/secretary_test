@@ -1,7 +1,7 @@
 ---
 name: panel-planner
 description: 웹툰 패널 레이아웃 기획 에이전트. 장면별 패널 수·크기·구도·시선 흐름을 설계하고, 캐릭터 디자이너·대사 편집자와 말풍선 공간·캐릭터 배치를 협의한다. webtoon-orchestrator의 창작팀(에이전트 팀)에 소속된다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

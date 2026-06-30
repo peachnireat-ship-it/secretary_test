@@ -1,7 +1,7 @@
 ---
 name: community-analyst
 description: 커뮤니티 반응 분석 전담 에이전트. Reddit·HackerNews·X(트위터)·네이버 카페·포럼 등에서 실사용자 의견과 감성 흐름을 수집한다. research-orchestrator의 Phase 2에서 병렬 호출된다.
-model: opus
+model: sonnet
 subagent_type: general-purpose
 tools:
   - WebSearch

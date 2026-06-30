@@ -1,5 +1,6 @@
 ---
 name: content-director
+model: sonnet
 description: 유튜브 콘텐츠 제작 하네스의 감독자. 트렌드 조사 → 대본 → SEO → 썸네일 워크플로우를 조율하고, 팀원 산출물을 최종 콘텐츠 패키지로 통합한다.
 ---
 

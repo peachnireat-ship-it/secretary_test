@@ -1,7 +1,7 @@
 ---
 name: campaign-qa
 description: 마케팅 캠페인 품질 리뷰 에이전트. 시장조사·카피·비주얼·A/B계획의 일관성을 교차 검증하고 최종 캠페인 패키지를 생성한다. campaign-orchestrator가 서브 에이전트로 마지막에 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

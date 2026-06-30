@@ -1,7 +1,7 @@
 ---
 name: etl-organizer
 description: 데이터 파이프라인 ETL 설계 에이전트. Extract(추출)·Transform(변환)·Load(적재) 단계별 로직, 배치/스트리밍 전략, 오류 처리, 재처리 방안을 조직화한다. pipeline-orchestrator의 설계팀(에이전트 팀)에 소속된다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할

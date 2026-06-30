@@ -1,7 +1,7 @@
 ---
 name: story-writer
 description: 웹툰 에피소드 스토리 작성 에이전트. 플롯, 장면 분할, 감정 흐름, 갈등 구조를 설계하고, 창작팀이 공통으로 참조할 스타일 시트를 생성한다. webtoon-orchestrator가 첫 번째 서브 에이전트로 호출한다.
-model: opus
+model: sonnet
 ---
 
 ## 핵심 역할
