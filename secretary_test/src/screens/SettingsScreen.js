@@ -67,7 +67,12 @@ export default function SettingsScreen({ user, onUserChange }) {
   }
 
   async function handleSavePyannoteUrl() {
-    await setPyannoteUrl(pyannoteUrl.trim());
+    try {
+      await setPyannoteUrl(pyannoteUrl.trim());
+    } catch (err) {
+      Alert.alert('오류', err.message);
+      return;
+    }
     setPyannoteStatus('saved');
     setTimeout(() => setPyannoteStatus(''), 2000);
   }

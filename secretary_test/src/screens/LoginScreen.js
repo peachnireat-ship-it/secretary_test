@@ -80,23 +80,25 @@ export default function LoginScreen({ onLogin }) {
           </TouchableOpacity>
         </View>
 
-        <View style={s.testAccountWrap}>
-          <Text style={s.testAccountLabel}>테스트 계정</Text>
-          <TouchableOpacity style={s.testAccountBtn} onPress={fillTest} activeOpacity={0.7}>
-            <View style={s.testAccountRow}>
-              <Text style={s.testAccountEmail}>test@secretary.app</Text>
-              <Text style={s.testAccountPw}>test1234</Text>
-            </View>
-            <Text style={s.testAccountHint}>탭하여 자동 입력</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.testAccountBtn} onPress={() => { setEmail('admin@secretary.app'); setPassword('admin1234'); setError(''); }} activeOpacity={0.7}>
-            <View style={s.testAccountRow}>
-              <Text style={s.testAccountEmail}>admin@secretary.app</Text>
-              <Text style={s.testAccountPw}>admin1234</Text>
-            </View>
-            <Text style={s.testAccountHint}>탭하여 자동 입력</Text>
-          </TouchableOpacity>
-        </View>
+        {__DEV__ && (
+          <View style={s.testAccountWrap}>
+            <Text style={s.testAccountLabel}>테스트 계정 (개발 전용)</Text>
+            <TouchableOpacity style={s.testAccountBtn} onPress={fillTest} activeOpacity={0.7}>
+              <View style={s.testAccountRow}>
+                <Text style={s.testAccountEmail}>test@secretary.app</Text>
+                <Text style={s.testAccountPw}>test1234</Text>
+              </View>
+              <Text style={s.testAccountHint}>탭하여 자동 입력</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.testAccountBtn} onPress={() => { setEmail('admin@secretary.app'); setPassword('admin1234'); setError(''); }} activeOpacity={0.7}>
+              <View style={s.testAccountRow}>
+                <Text style={s.testAccountEmail}>admin@secretary.app</Text>
+                <Text style={s.testAccountPw}>admin1234</Text>
+              </View>
+              <Text style={s.testAccountHint}>탭하여 자동 입력</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </KeyboardAvoidingView>
   );

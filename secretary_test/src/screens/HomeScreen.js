@@ -1,9 +1,11 @@
-import { Text, View, ScrollView, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { Text, View, ScrollView, TouchableOpacity, StyleSheet, Modal, Dimensions, Linking } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getSchedules, getClients, getProjects } from '../services/storage';
+import { watchLocation } from '../services/location';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
@@ -52,6 +54,33 @@ export default function HomeScreen({ navigation, user }) {
   const [activeProjectCount, setActiveProjectCount] = useState(0);
   const [delayedProjectCount, setDelayedProjectCount] = useState(0);
   const [activeProjects, setActiveProjects] = useState([]);
+  const [locationText, setLocationText] = useState('위치 확인 중...');
+  const [coords, setCoords] = useState(null);
+
+  useEffect(() => {
+    const unwatch = watchLocation((loc) => {
+      if (!loc) { setLocationText('위치를 가져올 수 없습니다'); return; }
+      setLocationText(loc.address ?? '');
+      setCoords({ latitude: loc.latitude, longitude: loc.longitude });
+    });
+    return unwatch;
+  }, []);
+
+  async function openMapApp() {
+    if (!coords) return;
+    const { latitude, longitude } = coords;
+    const naverUrl = `nmap://map?lat=${latitude}&lng=${longitude}&zoom=16&appname=com.secretary_test`;
+    const googleUrl = `comgooglemaps://?center=${latitude},${longitude}&zoom=16`;
+    const browserUrl = `https://maps.google.com/?q=${latitude},${longitude}`;
+
+    if (await Linking.canOpenURL(naverUrl)) {
+      Linking.openURL(naverUrl);
+    } else if (await Linking.canOpenURL(googleUrl)) {
+      Linking.openURL(googleUrl);
+    } else {
+      Linking.openURL(browserUrl);
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -111,7 +140,7 @@ export default function HomeScreen({ navigation, user }) {
           )}
         </View>
         <Text style={s.greetingText}>{user?.name ? `${user.name}님 ` : ''}{greeting(now.getHours())}</Text>
-		<Text style={s.dateText}>{dateLabel} {hh}:{mm}</Text>
+        <Text style={s.dateText}>{dateLabel} {hh}:{mm}</Text>
       </View>
 
       <View style={s.rule} />
@@ -230,6 +259,37 @@ export default function HomeScreen({ navigation, user }) {
         </View>
       </View>
 
+      {/* ── 현재 위치 지도 ── */}
+      <View style={s.section}>
+        <Text style={s.sectionLabel}>CURRENT LOCATION</Text>
+        <TouchableOpacity activeOpacity={0.85} onPress={openMapApp} disabled={!coords} style={s.mapCard}>
+          {coords ? (
+            <>
+              <MapView
+                style={s.map}
+                region={{ ...coords, latitudeDelta: 0.005, longitudeDelta: 0.005 }}
+                scrollEnabled={false}
+                zoomEnabled={false}
+                pitchEnabled={false}
+                rotateEnabled={false}
+                userInterfaceStyle="dark"
+                pointerEvents="none"
+              >
+                <Marker coordinate={coords} />
+              </MapView>
+              <View style={s.mapAddressRow}>
+                <Text style={s.mapAddressText} numberOfLines={1}>◎ {locationText || '주소 불러오는 중...'}</Text>
+                <Text style={s.mapOpenHint}>지도 앱으로 열기 ›</Text>
+              </View>
+            </>
+          ) : (
+            <View style={s.mapPlaceholder}>
+              <Text style={s.mapPlaceholderText}>{locationText}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* ── AI 기능 안내 ── */}
       <View style={[s.section, s.sectionLast]}>
         <Text style={s.sectionLabel}>AI FEATURES</Text>
@@ -320,6 +380,13 @@ const s = StyleSheet.create({
   teamBadge: { backgroundColor: C.accentBlue + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   teamBadgeText: { color: C.accentBlue, fontSize: 10, letterSpacing: 1, fontWeight: '600' },
   dateText: { color: C.textDim, fontSize: 17, marginTop: 6, letterSpacing: 0.5 },
+  mapCard: { borderWidth: 1, borderColor: C.border, borderRadius: 12, overflow: 'hidden' },
+  map: { width: '100%', height: 180 },
+  mapAddressRow: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  mapAddressText: { color: C.textSecondary, fontSize: 12, letterSpacing: 0.3, flex: 1 },
+  mapOpenHint: { color: C.accentBlue, fontSize: 11, marginLeft: 8 },
+  mapPlaceholder: { height: 100, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface },
+  mapPlaceholderText: { color: C.textDim, fontSize: 13 },
   greetingText: { color: C.textSecondary, fontSize: 20, marginTop: 4, letterSpacing: 1 },
   rule: { height: 1, backgroundColor: C.border, marginBottom: 32 },
   section: { marginBottom: 32 },

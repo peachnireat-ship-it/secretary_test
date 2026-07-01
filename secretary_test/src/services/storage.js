@@ -1,4 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
+import bcrypt from 'bcryptjs';
+
+// Hermes/Expo Go 환경에는 global.crypto.getRandomValues 도, Node crypto 모듈도 없어
+// bcryptjs가 salt용 난수를 얻지 못하고 모듈 로드 시점(TEST_ACCOUNTS 해싱)에 즉시 throw한다.
+// expo-crypto의 동기 네이티브 난수 API를 fallback으로 등록해 앱 크래시를 방지한다.
+bcrypt.setRandomFallback((len) => Array.from(Crypto.getRandomBytes(len)));
 
 const KEYS = {
   schedules: 'schedules_v1',
@@ -18,23 +26,59 @@ const KEYS = {
 };
 
 const TEST_ACCOUNTS = [
-  { id: 'test', email: 'test@secretary.app', password: 'test1234', name: '테스트 계정', role: 'tester', team: '개발팀' },
-  { id: 'admin', email: 'admin@secretary.app', password: 'admin1234', name: '관리자', role: 'admin', team: '운영팀' },
-  { id: 'kmj', email: 'kmj@secretary.app', password: 'test1234', name: '김민준', role: '구매팀장', team: '삼성물산' },
-  { id: 'lsy', email: 'lsy@secretary.app', password: 'test1234', name: '이서연', role: '기획팀 과장', team: '현대건설' },
-  { id: 'pjh', email: 'pjh@secretary.app', password: 'test1234', name: '박지훈', role: '영업이사', team: 'LG전자' },
-  { id: 'csa', email: 'csa@secretary.app', password: 'test1234', name: '최수아', role: '마케팅 팀장', team: 'SK텔레콤' },
+  { id: 'test', email: 'test@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '테스트 계정', role: 'tester', team: '개발팀' },
+  { id: 'admin', email: 'admin@secretary.app', passwordHash: bcrypt.hashSync('admin1234', 10), name: '관리자', role: 'admin', team: '운영팀' },
+  { id: 'kmj', email: 'kmj@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '김민준', role: '구매팀장', team: '삼성물산' },
+  { id: 'lsy', email: 'lsy@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '이서연', role: '기획팀 과장', team: '현대건설' },
+  { id: 'pjh', email: 'pjh@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '박지훈', role: '영업이사', team: 'LG전자' },
+  { id: 'csa', email: 'csa@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '최수아', role: '마케팅 팀장', team: 'SK텔레콤' },
 ];
 
+let _cachedUser = null;
+
+// ── 로그인 시도 제한 (인메모리, 앱 재시작 시 초기화) ─────────
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCK_MS = 30 * 1000;
+const _loginAttempts = new Map(); // email -> { count, lockedUntil }
+
+function assertNotLocked(email) {
+  const entry = _loginAttempts.get(email);
+  if (entry && entry.lockedUntil && entry.lockedUntil > Date.now()) {
+    const remainingSec = Math.ceil((entry.lockedUntil - Date.now()) / 1000);
+    throw new Error(`너무 많은 시도로 30초간 잠겼습니다. ${remainingSec}초 후 다시 시도하세요.`);
+  }
+}
+
+function recordLoginFailure(email) {
+  const entry = _loginAttempts.get(email) || { count: 0, lockedUntil: 0 };
+  entry.count += 1;
+  if (entry.count >= MAX_LOGIN_ATTEMPTS) {
+    entry.lockedUntil = Date.now() + LOGIN_LOCK_MS;
+    entry.count = 0;
+  }
+  _loginAttempts.set(email, entry);
+}
+
+function resetLoginAttempts(email) {
+  _loginAttempts.delete(email);
+}
+
 export async function login(email, password) {
-  const account = TEST_ACCOUNTS.find((a) => a.email === email && a.password === password);
-  if (!account) throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
+  assertNotLocked(email);
+  const account = TEST_ACCOUNTS.find((a) => a.email === email);
+  if (!account || !bcrypt.compareSync(password, account.passwordHash)) {
+    recordLoginFailure(email);
+    throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
+  }
+  resetLoginAttempts(email);
   const user = { id: account.id, email: account.email, name: account.name, role: account.role, team: account.team };
+  _cachedUser = user;
   await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify(user));
   return user;
 }
 
 export async function logout() {
+  _cachedUser = null;
   await AsyncStorage.removeItem(KEYS.currentUser);
 }
 
@@ -43,36 +87,55 @@ export function getTestAccounts() {
 }
 
 export async function switchAccount(accountId) {
+  if (!__DEV__) throw new Error('계정 전환은 개발 모드에서만 사용 가능합니다.');
   const account = TEST_ACCOUNTS.find((a) => a.id === accountId);
   if (!account) throw new Error('계정을 찾을 수 없습니다.');
   const user = { id: account.id, email: account.email, name: account.name, role: account.role, team: account.team };
+  _cachedUser = user;
   await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify(user));
   return user;
 }
 
 export async function getCurrentUser() {
+  if (_cachedUser) return _cachedUser;
   const raw = await AsyncStorage.getItem(KEYS.currentUser);
-  return raw ? JSON.parse(raw) : null;
+  _cachedUser = raw ? JSON.parse(raw) : null;
+  return _cachedUser;
 }
 
 // ── Groq API Key ──────────────────────────────────────────
 export async function getApiKey() {
-  const stored = await AsyncStorage.getItem(KEYS.apiKey);
-  return stored || process.env.EXPO_PUBLIC_GROQ_API_KEY || null;
+  const stored = await SecureStore.getItemAsync('groq_api_key_secure');
+  if (stored) return stored;
+  // migrate legacy AsyncStorage value on first access
+  const legacy = await AsyncStorage.getItem(KEYS.apiKey);
+  if (legacy) {
+    await SecureStore.setItemAsync('groq_api_key_secure', legacy);
+    await AsyncStorage.removeItem(KEYS.apiKey);
+    return legacy;
+  }
+  return null;
 }
 
 export async function setApiKey(key) {
-  return AsyncStorage.setItem(KEYS.apiKey, key);
+  return SecureStore.setItemAsync('groq_api_key_secure', key);
 }
 
 // ── Grok API Key ──────────────────────────────────────────
 export async function getGrokApiKey() {
-  const stored = await AsyncStorage.getItem(KEYS.grokApiKey);
-  return stored || process.env.EXPO_PUBLIC_GROK_API_KEY || null;
+  const stored = await SecureStore.getItemAsync('grok_api_key_secure');
+  if (stored) return stored;
+  const legacy = await AsyncStorage.getItem(KEYS.grokApiKey);
+  if (legacy) {
+    await SecureStore.setItemAsync('grok_api_key_secure', legacy);
+    await AsyncStorage.removeItem(KEYS.grokApiKey);
+    return legacy;
+  }
+  return null;
 }
 
 export async function setGrokApiKey(key) {
-  return AsyncStorage.setItem(KEYS.grokApiKey, key);
+  return SecureStore.setItemAsync('grok_api_key_secure', key);
 }
 
 // ── AI Provider ───────────────────────────────────────────
@@ -370,7 +433,33 @@ export async function getPyannoteUrl() {
   return AsyncStorage.getItem(KEYS.pyannoteUrl);
 }
 
+function isPrivateOrLocalHost(hostname) {
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+  if (!m) return false;
+  const octets = m.slice(1, 5).map(Number);
+  if (octets.some((o) => o > 255)) return false;
+  const [a, b] = octets;
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+
 export async function setPyannoteUrl(url) {
+  if (url) {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error('올바른 URL 형식이 아닙니다.');
+    }
+    const isHttps = parsed.protocol === 'https:';
+    const isAllowedHttp = parsed.protocol === 'http:' && isPrivateOrLocalHost(parsed.hostname);
+    if (!isHttps && !isAllowedHttp) {
+      throw new Error('보안을 위해 HTTPS만 허용됩니다. (로컬 네트워크 주소는 HTTP 허용)');
+    }
+  }
   return AsyncStorage.setItem(KEYS.pyannoteUrl, url);
 }
 
