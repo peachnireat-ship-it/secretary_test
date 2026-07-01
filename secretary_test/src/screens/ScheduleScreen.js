@@ -10,6 +10,7 @@ import { C } from '../theme';
 import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, getClients, getMeetingRecords, getCurrentUser, addClient } from '../services/storage';
 import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
+import { priorityColor, tagColor } from '../utils/colors';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -1283,15 +1284,6 @@ function daysLabel(days) {
   if (days > 0) return `${days}일 후 마감`;
   if (days === 0) return '오늘 마감';
   return `${Math.abs(days)}일 초과`;
-}
-
-function priorityColor(priority) {
-  return { 높음: '#C45B5B', 보통: C.gold, 낮음: C.accentTeal }[priority] || C.textDim;
-}
-
-function tagColor(tag) {
-  const map = { 회의: C.accentBlue, 업무: C.gold, 영업: C.accentTeal, 개인: C.accentPurple, 기타: C.textSecondary };
-  return map[tag] || C.textSecondary;
 }
 
 function statusColor(status) {

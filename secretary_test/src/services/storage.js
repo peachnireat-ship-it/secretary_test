@@ -63,6 +63,14 @@ function resetLoginAttempts(email) {
   _loginAttempts.delete(email);
 }
 
+// login/switchAccount 공통 로직: 계정 정보를 유저 객체로 변환해 캐시·저장 후 반환
+async function saveAndReturnUser(account) {
+  const user = { id: account.id, email: account.email, name: account.name, role: account.role, team: account.team };
+  _cachedUser = user;
+  await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify(user));
+  return user;
+}
+
 export async function login(email, password) {
   assertNotLocked(email);
   const account = TEST_ACCOUNTS.find((a) => a.email === email);
@@ -71,10 +79,7 @@ export async function login(email, password) {
     throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
   }
   resetLoginAttempts(email);
-  const user = { id: account.id, email: account.email, name: account.name, role: account.role, team: account.team };
-  _cachedUser = user;
-  await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify(user));
-  return user;
+  return saveAndReturnUser(account);
 }
 
 export async function logout() {
@@ -90,10 +95,7 @@ export async function switchAccount(accountId) {
   if (!__DEV__) throw new Error('계정 전환은 개발 모드에서만 사용 가능합니다.');
   const account = TEST_ACCOUNTS.find((a) => a.id === accountId);
   if (!account) throw new Error('계정을 찾을 수 없습니다.');
-  const user = { id: account.id, email: account.email, name: account.name, role: account.role, team: account.team };
-  _cachedUser = user;
-  await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify(user));
-  return user;
+  return saveAndReturnUser(account);
 }
 
 export async function getCurrentUser() {

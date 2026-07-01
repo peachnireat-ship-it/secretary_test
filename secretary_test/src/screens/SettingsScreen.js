@@ -4,6 +4,33 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getTestAccounts, switchAccount, getUserProfile, saveUserProfile } from '../services/storage';
 
+// API 키 마스킹 표시 (앞 6자 + ••• + 뒤 4자), 9자 이하 또는 masked=false면 원문 그대로
+function maskApiKey(key, masked) {
+  return masked && key.length > 8
+    ? key.slice(0, 6) + '•••••••••••••••' + key.slice(-4)
+    : key;
+}
+
+// Groq/Grok 공통 API 키 저장·삭제 핸들러 팩토리
+function createApiKeyHandlers({ label, key, setKeyState, saveKey, setSavedState }) {
+  async function handleSave() {
+    const trimmed = key.trim();
+    if (!trimmed) { Alert.alert('오류', 'API 키를 입력해주세요.'); return; }
+    await saveKey(trimmed);
+    setSavedState(true);
+    setTimeout(() => setSavedState(false), 2000);
+  }
+
+  async function handleClear() {
+    Alert.alert('API 키 삭제', `${label} API 키를 삭제하면 AI 기능을 사용할 수 없습니다.`, [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: async () => { await saveKey(''); setKeyState(''); } },
+    ]);
+  }
+
+  return { handleSave, handleClear };
+}
+
 export default function SettingsScreen({ user, onUserChange }) {
   const insets = useSafeAreaInsets();
   const [provider, setProviderState] = useState('groq');
@@ -36,35 +63,21 @@ export default function SettingsScreen({ user, onUserChange }) {
     await setAiProvider(p);
   }
 
-  async function handleSave() {
-    const trimmed = apiKey.trim();
-    if (!trimmed) { Alert.alert('오류', 'API 키를 입력해주세요.'); return; }
-    await setApiKey(trimmed);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
+  const { handleSave, handleClear } = createApiKeyHandlers({
+    label: 'Groq',
+    key: apiKey,
+    setKeyState: setApiKeyState,
+    saveKey: setApiKey,
+    setSavedState: setSaved,
+  });
 
-  async function handleClear() {
-    Alert.alert('API 키 삭제', 'Groq API 키를 삭제하면 AI 기능을 사용할 수 없습니다.', [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: async () => { await setApiKey(''); setApiKeyState(''); } },
-    ]);
-  }
-
-  async function handleSaveGrok() {
-    const trimmed = grokApiKey.trim();
-    if (!trimmed) { Alert.alert('오류', 'API 키를 입력해주세요.'); return; }
-    await setGrokApiKey(trimmed);
-    setGrokSaved(true);
-    setTimeout(() => setGrokSaved(false), 2000);
-  }
-
-  async function handleClearGrok() {
-    Alert.alert('API 키 삭제', 'Grok API 키를 삭제하면 AI 기능을 사용할 수 없습니다.', [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: async () => { await setGrokApiKey(''); setGrokApiKeyState(''); } },
-    ]);
-  }
+  const { handleSave: handleSaveGrok, handleClear: handleClearGrok } = createApiKeyHandlers({
+    label: 'Grok',
+    key: grokApiKey,
+    setKeyState: setGrokApiKeyState,
+    saveKey: setGrokApiKey,
+    setSavedState: setGrokSaved,
+  });
 
   async function handleSavePyannoteUrl() {
     try {
@@ -98,13 +111,9 @@ export default function SettingsScreen({ user, onUserChange }) {
     }
   }
 
-  const displayKey = masked && apiKey.length > 8
-    ? apiKey.slice(0, 6) + '•••••••••••••••' + apiKey.slice(-4)
-    : apiKey;
+  const displayKey = maskApiKey(apiKey, masked);
 
-  const displayGrokKey = grokMasked && grokApiKey.length > 8
-    ? grokApiKey.slice(0, 6) + '•••••••••••••••' + grokApiKey.slice(-4)
-    : grokApiKey;
+  const displayGrokKey = maskApiKey(grokApiKey, grokMasked);
 
   return (
     <View style={s.root}>

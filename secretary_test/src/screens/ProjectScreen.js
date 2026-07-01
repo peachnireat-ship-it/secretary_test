@@ -11,6 +11,7 @@ import { C } from '../theme';
 import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
+import { statusColor, priorityColor } from '../utils/colors';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
 
@@ -145,20 +146,6 @@ function daysLabel(days) {
   return `${Math.abs(days)}일 초과`;
 }
 
-function statusColor(status) {
-  const map = {
-    진행중: C.accentBlue,
-    위험: C.gold,
-    지연: C.red,
-    완료: C.accentTeal,
-    취소: C.textDim,
-  };
-  return map[status] || C.textSecondary;
-}
-
-function priorityColor(priority) {
-  return { 높음: C.red, 보통: C.gold, 낮음: C.accentTeal }[priority] || C.textDim;
-}
 
 function isAtRisk(project) {
   if (project.status === '완료' || project.status === '취소') return false;

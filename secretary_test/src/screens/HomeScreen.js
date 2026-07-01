@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getSchedules, getClients, getProjects } from '../services/storage';
 import { watchLocation } from '../services/location';
+import { statusColor, tagColor } from '../utils/colors';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
@@ -38,16 +39,6 @@ function ClockDisplay({ userName }) {
       <Text style={s.dateText}>{dateLabel} {hh}:{mm}</Text>
     </>
   );
-}
-
-function statusColor(status) {
-  const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
-  return map[status] || C.textSecondary;
-}
-
-function tagColor(tag) {
-  const map = { 회의: C.accentBlue, 업무: C.gold, 영업: C.accentTeal, 개인: C.accentPurple, 기타: C.textSecondary };
-  return map[tag] || C.textSecondary;
 }
 
 function todayStr() {

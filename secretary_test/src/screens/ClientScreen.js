@@ -11,6 +11,7 @@ import { C } from '../theme';
 import { getClients, addClient, updateClient, saveClients, getHistories, addHistory, updateHistory, deleteHistory, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, getCurrentUser } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
+import { typeColor, priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
 
 const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
 
@@ -1053,25 +1054,11 @@ export default function ClientScreen({ navigation, route }) {
   );
 }
 
-function typeColor(type) {
-  const map = { 미팅: C.accentBlue, 통화: C.gold, 이메일: C.accentTeal, 계약: C.accentPurple, 기타: C.textSecondary };
-  return map[type] || C.textSecondary;
-}
-
-function priorityColorClient(priority) {
-  return { 높음: C.red, 보통: C.gold, 낮음: C.accentTeal }[priority] || C.textDim;
-}
-
 function projDaysUntil(deadlineStr) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const d = new Date(deadlineStr);
   return Math.round((d - today) / 86400000);
-}
-
-function projectStatusColor(status) {
-  const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
-  return map[status] || C.textDim;
 }
 
 function formatDate(ms) {

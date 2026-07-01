@@ -13,6 +13,7 @@ import * as FileSystem from 'expo-file-system';
 import { transcribeAudio, diarizeSegments, diarizeWithPyannote, convertToMonoViaServer, rediarizeTranscript } from '../services/groqStt';
 import { askClaude, buildTaskExtractionSystem, buildMeetingSummarySystem, buildWorkTopicsSystem, fixForeignWordsInText } from '../services/claude';
 import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects, getHistories } from '../services/storage';
+import { projectStatusColor as statusColor, typeColor as histTypeColor } from '../utils/colors';
 
 function formatTime(sec) {
   const m = String(Math.floor(sec / 60)).padStart(2, '0');
@@ -1901,16 +1902,6 @@ function taskToProject(task) {
     priority: task.priority,
     notes: task.assignee && task.assignee !== '미지정' ? `담당자: ${task.assignee}` : '',
   };
-}
-
-function statusColor(status) {
-  const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
-  return map[status] || C.textDim;
-}
-
-function histTypeColor(type) {
-  const map = { 미팅: C.accentBlue, 통화: C.gold, 이메일: C.accentTeal, 계약: C.accentPurple, 기타: C.textSecondary };
-  return map[type] || C.textSecondary;
 }
 
 function priorityColor(priority) {
