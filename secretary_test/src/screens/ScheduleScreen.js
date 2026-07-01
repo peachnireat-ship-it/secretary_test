@@ -110,10 +110,12 @@ export default function ScheduleScreen({ navigation, route }) {
   const swipePerson = useSwipeClose(() => setShowPersonView(false));
   const swipeSchedule = useSwipeClose(() => { setShowScheduleView(false); setEditMode(false); });
 
+  // eslint-disable-next-line react-hooks/refs -- Animated.Value는 최초 렌더에서 한 번만 생성되는 안전한 패턴
   const calTranslateX = useRef(new Animated.Value(0)).current;
   const urgencyAnim = useRef(new Animated.Value(0)).current;
   const moveMonthRef = useRef(null);
   const calPanResponder = useRef(
+    // eslint-disable-next-line react-hooks/refs -- PanResponder는 마운트 시 한 번만 생성됨
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5 && Math.abs(gs.dx) > 8,
@@ -208,6 +210,7 @@ export default function ScheduleScreen({ navigation, route }) {
       if (sy !== y || sm !== m) setSelectedDate(null);
     }
   }
+  // eslint-disable-next-line react-hooks/refs -- 렌더마다 최신 moveMonth를 ref에 동기화하는 안전한 패턴(panResponder 콜백에서 최신 함수 참조용)
   moveMonthRef.current = moveMonth;
 
   async function handleAdd() {
@@ -356,6 +359,7 @@ export default function ScheduleScreen({ navigation, route }) {
 
       {/* ── 캘린더 그리드 ── */}
       <View style={s.gridClip}>
+        {/* eslint-disable-next-line react-hooks/refs -- calPanResponder/calTranslateX는 최초 렌더에서 한 번만 생성되는 안전한 ref */}
         <Animated.View style={[s.grid, { transform: [{ translateX: calTranslateX }] }]} {...calPanResponder.panHandlers}>
         {buildMonthGrid(calYear, calMonth).map((cell, i) => {
           if (!cell) return <View key={`e-${i}`} style={s.gridCell} />;
@@ -458,6 +462,7 @@ export default function ScheduleScreen({ navigation, route }) {
           </View>
         ) : selectedDate ? (
           <>
+            {/* eslint-disable-next-line react-hooks/refs -- urgencyAnim은 최초 렌더에서 한 번만 생성되는 Animated.Value ref */}
             {dayProjects.map((proj) => {
               const urgency = getUrgency(proj.deadline, proj.status);
               const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
@@ -484,6 +489,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 </View>
               );
             })}
+            {/* eslint-disable-next-line react-hooks/refs -- urgencyAnim은 최초 렌더에서 한 번만 생성되는 Animated.Value ref */}
             {daySchedules.map((item) => {
               const urgency = getUrgency(item.endDate || item.date);
               const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
@@ -524,6 +530,7 @@ export default function ScheduleScreen({ navigation, route }) {
             ...daySchedules.map((sc) => ({ _type: 'schedule', _date: sc.date, _time: sc.time, ...sc })),
           ]
             .sort((a, b) => a._date.localeCompare(b._date) || a._time.localeCompare(b._time))
+            // eslint-disable-next-line react-hooks/refs -- urgencyAnim은 최초 렌더에서 한 번만 생성되는 Animated.Value ref
             .map((item) => {
               if (item._type === 'project') {
                 const urgency = getUrgency(item.deadline, item.status);

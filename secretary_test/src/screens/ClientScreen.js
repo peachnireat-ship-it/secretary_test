@@ -330,6 +330,7 @@ export default function ClientScreen({ navigation, route }) {
 
   useEffect(() => {
     if (!showHistoryAI || historySummary || historySummaryLoading) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 가드가 무한루프를 방지하는 조건부 데이터 페치 패턴
     fetchHistorySummary();
   }, [showHistoryAI]);
 

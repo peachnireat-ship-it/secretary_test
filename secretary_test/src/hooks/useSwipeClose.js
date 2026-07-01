@@ -8,8 +8,10 @@ import { Animated, PanResponder } from 'react-native';
  * @returns {{ panHandlers: object, animStyle: object }}
  */
 export function useSwipeClose(onClose) {
+  // eslint-disable-next-line react-hooks/refs -- Animated.Value는 최초 렌더에서 한 번만 생성되는 안전한 패턴
   const translateY = useRef(new Animated.Value(0)).current;
   const panResponder = useRef(
+    // eslint-disable-next-line react-hooks/refs -- PanResponder는 마운트 시 한 번만 생성됨
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, gs) => gs.dy > 2,
@@ -28,5 +30,6 @@ export function useSwipeClose(onClose) {
       },
     })
   ).current;
+  // eslint-disable-next-line react-hooks/refs -- panResponder/translateY는 최초 렌더에서 한 번만 생성되는 안전한 ref
   return { panHandlers: panResponder.panHandlers, animStyle: { transform: [{ translateY }] } };
 }
