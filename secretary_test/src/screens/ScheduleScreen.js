@@ -3,7 +3,7 @@ import {
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
   Animated, PanResponder, Linking,
 } from 'react-native';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
@@ -176,29 +176,66 @@ export default function ScheduleScreen({ navigation, route }) {
   const monthPrefix = `${calYear}-${String(calMonth).padStart(2, '0')}`;
   const monthEnd = `${monthPrefix}-${String(new Date(calYear, calMonth, 0).getDate()).padStart(2, '0')}`;
   const monthStart = `${monthPrefix}-01`;
-  const daySchedules = selectedDate
-    ? schedules.filter((s) => {
-        const sd = (s.startDate || '').split(' ')[0] || s.date;
-        const ed = (s.endDate || '').split(' ')[0] || s.date;
-        return sd <= selectedDate && ed >= selectedDate;
-      }).sort((a, b) => getScheduleTime(a).localeCompare(getScheduleTime(b)))
-    : schedules.filter((s) => {
-        const sd = (s.startDate || '').split(' ')[0] || s.date;
-        const ed = (s.endDate || '').split(' ')[0] || s.date;
-        return sd <= monthEnd && ed >= monthStart;
-      }).sort((a, b) => a.date.localeCompare(b.date) || getScheduleTime(a).localeCompare(getScheduleTime(b)));
 
-  const dayProjects = selectedDate
-    ? projects.filter((p) => {
-        const sd = (p.startDate || '').split(' ')[0];
+  // 선택 날짜/월에 해당하는 일정 목록 — schedules나 selectedDate가 바뀔 때만 재계산 (매 렌더 재필터링 방지)
+  const daySchedules = useMemo(() => (
+    selectedDate
+      ? schedules.filter((s) => {
+          const sd = (s.startDate || '').split(' ')[0] || s.date;
+          const ed = (s.endDate || '').split(' ')[0] || s.date;
+          return sd <= selectedDate && ed >= selectedDate;
+        }).sort((a, b) => getScheduleTime(a).localeCompare(getScheduleTime(b)))
+      : schedules.filter((s) => {
+          const sd = (s.startDate || '').split(' ')[0] || s.date;
+          const ed = (s.endDate || '').split(' ')[0] || s.date;
+          return sd <= monthEnd && ed >= monthStart;
+        }).sort((a, b) => a.date.localeCompare(b.date) || getScheduleTime(a).localeCompare(getScheduleTime(b)))
+  ), [schedules, selectedDate, monthStart, monthEnd]);
+
+  // 선택 날짜/월에 해당하는 프로젝트 목록 — projects나 selectedDate가 바뀔 때만 재계산
+  const dayProjects = useMemo(() => (
+    selectedDate
+      ? projects.filter((p) => {
+          const sd = (p.startDate || '').split(' ')[0];
+          const dl = (p.deadline || '').split(' ')[0];
+          return sd ? sd <= selectedDate && dl >= selectedDate : dl === selectedDate;
+        })
+      : projects.filter((p) => {
+          const sd = (p.startDate || '').split(' ')[0];
+          const dl = (p.deadline || '').split(' ')[0];
+          return sd ? sd <= monthEnd && dl >= monthStart : dl >= monthStart && dl <= monthEnd;
+        })
+  ), [projects, selectedDate, monthStart, monthEnd]);
+
+  // 달력 그리드 — calYear/calMonth가 바뀔 때만 재계산 (매 렌더 재계산 방지)
+  const monthGrid = useMemo(() => buildMonthGrid(calYear, calMonth), [calYear, calMonth]);
+
+  // 프로젝트/일정을 날짜별로 사전 인덱싱 — 캘린더 셀(최대 42개)마다 전체 배열을 재순회하지 않도록 함
+  const { rangeProjectList, deadlineProjectsByDate, rangeScheduleList, scheduleListByDate } = useMemo(() => {
+    const deadlineMap = new Map(); // date -> project[] (startDate 없는 프로젝트의 마감일 표시용)
+    const rangeProjects = [];
+    for (const p of projects) {
+      if (p.startDate) {
+        rangeProjects.push(p);
+      } else {
         const dl = (p.deadline || '').split(' ')[0];
-        return sd ? sd <= selectedDate && dl >= selectedDate : dl === selectedDate;
-      })
-    : projects.filter((p) => {
-        const sd = (p.startDate || '').split(' ')[0];
-        const dl = (p.deadline || '').split(' ')[0];
-        return sd ? sd <= monthEnd && dl >= monthStart : dl >= monthStart && dl <= monthEnd;
-      });
+        if (dl) {
+          const arr = deadlineMap.get(dl);
+          if (arr) arr.push(p); else deadlineMap.set(dl, [p]);
+        }
+      }
+    }
+    const scheduleMap = new Map(); // date -> schedule[] (sc.date 기준)
+    const rangeSchedules = [];
+    for (const sc of schedules) {
+      const sd = (sc.startDate || '').split(' ')[0];
+      const ed = (sc.endDate || '').split(' ')[0];
+      if (sd && ed && sd !== ed) rangeSchedules.push(sc);
+      const arr = scheduleMap.get(sc.date);
+      if (arr) arr.push(sc); else scheduleMap.set(sc.date, [sc]);
+    }
+    return { rangeProjectList: rangeProjects, deadlineProjectsByDate: deadlineMap, rangeScheduleList: rangeSchedules, scheduleListByDate: scheduleMap };
+  }, [projects, schedules]);
 
   function moveMonth(dir) {
     let m = calMonth + dir, y = calYear;
@@ -361,28 +398,25 @@ export default function ScheduleScreen({ navigation, route }) {
       <View style={s.gridClip}>
         {/* eslint-disable-next-line react-hooks/refs -- calPanResponder/calTranslateX는 최초 렌더에서 한 번만 생성되는 안전한 ref */}
         <Animated.View style={[s.grid, { transform: [{ translateX: calTranslateX }] }]} {...calPanResponder.panHandlers}>
-        {buildMonthGrid(calYear, calMonth).map((cell, i) => {
+        {monthGrid.map((cell, i) => {
           if (!cell) return <View key={`e-${i}`} style={s.gridCell} />;
           const isSelected = selectedDate === cell.str;
           const isToday = cell.str === TODAY_STR;
           const isSun = i % 7 === 0;
           const isSat = i % 7 === 6;
-          const rangeProjs = projects.filter((p) => {
+          const rangeProjs = rangeProjectList.filter((p) => {
             const sd = (p.startDate || '').split(' ')[0];
             const dl = (p.deadline || '').split(' ')[0];
-            return sd && sd <= cell.str && dl >= cell.str;
+            return sd <= cell.str && dl >= cell.str;
           });
-          const rangeSchedules = schedules.filter((sc) => {
+          const rangeSchedules = rangeScheduleList.filter((sc) => {
             const sd = (sc.startDate || '').split(' ')[0];
             const ed = (sc.endDate || '').split(' ')[0];
-            return sd && ed && sd !== ed && sd <= cell.str && ed >= cell.str;
+            return sd <= cell.str && ed >= cell.str;
           });
           const rangeScheduleIds = new Set(rangeSchedules.map((sc) => sc.id));
-          const cellSchedules = schedules.filter((sc) => sc.date === cell.str && !rangeScheduleIds.has(sc.id));
-          const deadlineProjs = projects.filter((p) => {
-            const dl = (p.deadline || '').split(' ')[0];
-            return !p.startDate && dl === cell.str;
-          });
+          const cellSchedules = (scheduleListByDate.get(cell.str) || []).filter((sc) => !rangeScheduleIds.has(sc.id));
+          const deadlineProjs = deadlineProjectsByDate.get(cell.str) || [];
           const cellDots = [
             ...cellSchedules.map((sc) => tagColor(sc.tag)),
             ...deadlineProjs.map(() => C.gold),

@@ -26,6 +26,20 @@ function greeting(h) {
   return '좋은 저녁입니다';
 }
 
+// 1초 인터벌 시계 표시 전용 컴포넌트 — 이 컴포넌트만 매초 재렌더되고 HomeScreen 본체는 영향받지 않음
+function ClockDisplay({ userName }) {
+  const now = useNow();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const dateLabel = `${now.getFullYear()}년 ${MONTHS[now.getMonth()]} ${now.getDate()}일 ${DAYS[now.getDay()]}요일`;
+  return (
+    <>
+      <Text style={s.greetingText}>{userName ? `${userName}님 ` : ''}{greeting(now.getHours())}</Text>
+      <Text style={s.dateText}>{dateLabel} {hh}:{mm}</Text>
+    </>
+  );
+}
+
 function statusColor(status) {
   const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
   return map[status] || C.textSecondary;
@@ -43,10 +57,6 @@ function todayStr() {
 
 export default function HomeScreen({ navigation, user }) {
   const insets = useSafeAreaInsets();
-  const now = useNow();
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
-  const dateLabel = `${now.getFullYear()}년 ${MONTHS[now.getMonth()]} ${now.getDate()}일 ${DAYS[now.getDay()]}요일`;
 
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [clientCount, setClientCount] = useState(0);
@@ -139,8 +149,7 @@ export default function HomeScreen({ navigation, user }) {
             </View>
           )}
         </View>
-        <Text style={s.greetingText}>{user?.name ? `${user.name}님 ` : ''}{greeting(now.getHours())}</Text>
-        <Text style={s.dateText}>{dateLabel} {hh}:{mm}</Text>
+        <ClockDisplay userName={user?.name} />
       </View>
 
       <View style={s.rule} />

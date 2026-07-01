@@ -104,47 +104,72 @@ export async function getCurrentUser() {
 }
 
 // ── Groq API Key ──────────────────────────────────────────
+// 인메모리 캐시: undefined = 아직 조회 안 함, null = 조회 완료·키 없음, string = 키 값
+// (매 askClaude() 호출마다 SecureStore/AsyncStorage 재조회하는 것을 방지 — _cachedUser와 동일한 패턴)
+let _cachedApiKey;
+
 export async function getApiKey() {
+  if (_cachedApiKey !== undefined) return _cachedApiKey;
   const stored = await SecureStore.getItemAsync('groq_api_key_secure');
-  if (stored) return stored;
+  if (stored) {
+    _cachedApiKey = stored;
+    return stored;
+  }
   // migrate legacy AsyncStorage value on first access
   const legacy = await AsyncStorage.getItem(KEYS.apiKey);
   if (legacy) {
     await SecureStore.setItemAsync('groq_api_key_secure', legacy);
     await AsyncStorage.removeItem(KEYS.apiKey);
+    _cachedApiKey = legacy;
     return legacy;
   }
+  _cachedApiKey = null;
   return null;
 }
 
 export async function setApiKey(key) {
+  _cachedApiKey = key;
   return SecureStore.setItemAsync('groq_api_key_secure', key);
 }
 
 // ── Grok API Key ──────────────────────────────────────────
+let _cachedGrokApiKey;
+
 export async function getGrokApiKey() {
+  if (_cachedGrokApiKey !== undefined) return _cachedGrokApiKey;
   const stored = await SecureStore.getItemAsync('grok_api_key_secure');
-  if (stored) return stored;
+  if (stored) {
+    _cachedGrokApiKey = stored;
+    return stored;
+  }
   const legacy = await AsyncStorage.getItem(KEYS.grokApiKey);
   if (legacy) {
     await SecureStore.setItemAsync('grok_api_key_secure', legacy);
     await AsyncStorage.removeItem(KEYS.grokApiKey);
+    _cachedGrokApiKey = legacy;
     return legacy;
   }
+  _cachedGrokApiKey = null;
   return null;
 }
 
 export async function setGrokApiKey(key) {
+  _cachedGrokApiKey = key;
   return SecureStore.setItemAsync('grok_api_key_secure', key);
 }
 
 // ── AI Provider ───────────────────────────────────────────
+let _cachedAiProvider;
+
 export async function getAiProvider() {
+  if (_cachedAiProvider !== undefined) return _cachedAiProvider;
   const stored = await AsyncStorage.getItem(KEYS.aiProvider);
-  return stored || 'groq';
+  _cachedAiProvider = stored || 'groq';
+  return _cachedAiProvider;
 }
 
 export async function setAiProvider(provider) {
+  _cachedAiProvider = provider;
   return AsyncStorage.setItem(KEYS.aiProvider, provider);
 }
 

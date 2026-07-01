@@ -73,6 +73,10 @@ export default function ClientScreen({ navigation, route }) {
 
   const swipeClient = useSwipeClose(() => setSelectedClient(null));
 
+  // load() 최초 완료 여부 — clients/histories state를 재조회 없이 그대로 쓰는
+  // fetchHistorySummary가 빈 배열([]) 상태로 실행되지 않도록 가드하는 데 사용
+  const [loaded, setLoaded] = useState(false);
+
   async function load() {
     const [c, h, m, p, favs, me] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects(), getClientFavorites(), getCurrentUser()]);
     const filtered = me ? c.filter((cl) => !(cl.name === me.name && cl.company === me.team)) : c;
@@ -81,6 +85,7 @@ export default function ClientScreen({ navigation, route }) {
     setMeetingRecords(m);
     setProjects(p);
     setFavorites(favs);
+    setLoaded(true);
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -274,6 +279,9 @@ export default function ClientScreen({ navigation, route }) {
   // AI 요약 for selected client
   const [clientSummary, setClientSummary] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
+  // clientId -> 마지막으로 받은 AI 요약 텍스트 캐시 — 모달을 다시 열 때마다 API 재호출 방지
+  // 히스토리 추가/수정/삭제 시 fetchClientSummary가 다시 호출되어 해당 clientId 캐시가 최신값으로 갱신됨
+  const clientSummaryCache = useRef({});
 
   const [showHistoryAI, setShowHistoryAI] = useState(false);
   const [historySummary, setHistorySummary] = useState('');
@@ -289,7 +297,9 @@ export default function ClientScreen({ navigation, route }) {
       const particle = josa과와(lastWord);
       const nameWithRole = client.role?.trim() ? `${client.name} ${client.role}` : client.name;
       const reply = await askClaude([{ role: 'user', content: `${client.company} ${nameWithRole}${particle}의 관계를 3~4문장으로 자연스럽게 요약해줘. 마지막 연락 날짜, 현재 상황, 다음 필요한 액션을 포함해줘. 반드시 한국어로만 작성해줘.` }], systemPrompt);
-      setClientSummary(normalizeAIDates(reply));
+      const normalized = normalizeAIDates(reply);
+      clientSummaryCache.current[client.id] = normalized;
+      setClientSummary(normalized);
     } catch (e) {
       setClientSummary(e.message === 'API_KEY_MISSING' ? '설정 탭에서 API 키를 입력하면 AI 요약을 볼 수 있습니다.' : `오류: ${e.message}`);
     } finally {
@@ -299,16 +309,22 @@ export default function ClientScreen({ navigation, route }) {
 
   function openClient(client) {
     setSelectedClient(client);
-    setClientSummary('');
-    fetchClientSummary(client);
+    const cached = clientSummaryCache.current[client.id];
+    if (cached) {
+      setClientSummary(cached);
+      setSummaryLoading(false);
+    } else {
+      setClientSummary('');
+      fetchClientSummary(client);
+    }
   }
 
   async function fetchHistorySummary() {
     setHistorySummary('');
     setHistorySummaryLoading(true);
     try {
-      const [clientList, histList] = await Promise.all([getClients(), getHistories()]);
-      const systemPrompt = buildClientSystem(clientList, histList);
+      // clients/histories는 이미 컴포넌트 state에 로드되어 있으므로 재조회하지 않고 그대로 사용
+      const systemPrompt = buildClientSystem(clients, histories);
       const reply = await askClaude(
         [{ role: 'user', content: `등록된 모든 거래처 인원의 관계 히스토리를 종합해서 보고서 형식으로 작성해줘. 각 거래처별로 현재 관계 상태, 마지막 연락 시점, 주요 히스토리 요약, 다음에 필요한 액션을 포함해줘. 히스토리가 없는 거래처는 간략히 언급만 해줘. 반드시 한국어로만 작성해줘.` }],
         systemPrompt
@@ -329,10 +345,12 @@ export default function ClientScreen({ navigation, route }) {
   }, [route?.params?.openHistoryAI]);
 
   useEffect(() => {
-    if (!showHistoryAI || historySummary || historySummaryLoading) return;
+    // loaded가 false면(최초 load() 완료 전) 대기 — clients/histories가 아직 빈 배열인
+    // 상태로 fetchHistorySummary가 실행되어 부정확한 AI 요약이 생성되는 것을 방지
+    if (!showHistoryAI || !loaded || historySummary || historySummaryLoading) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 가드가 무한루프를 방지하는 조건부 데이터 페치 패턴
     fetchHistorySummary();
-  }, [showHistoryAI]);
+  }, [showHistoryAI, loaded]);
 
   return (
     <View style={s.root}>
