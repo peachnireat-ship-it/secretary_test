@@ -11,7 +11,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
 import * as FileSystem from 'expo-file-system';
 import { transcribeAudio, diarizeSegments, diarizeWithPyannote, convertToMonoViaServer, rediarizeTranscript } from '../services/groqStt';
-import { askClaude, buildTaskExtractionSystem, fixForeignWordsInText } from '../services/claude';
+import { askClaude, buildTaskExtractionSystem, buildMeetingSummarySystem, buildWorkTopicsSystem, fixForeignWordsInText } from '../services/claude';
 import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects, getHistories } from '../services/storage';
 
 function formatTime(sec) {
@@ -331,22 +331,7 @@ export default function MeetingScreen({ navigation }) {
     try {
       const sum = await askClaude(
         [{ role: 'user', content: text }],
-        `[언어 규칙] 반드시 한국어로만 응답하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.
-
-회의 내용을 아래 형식으로 간결하게 요약하세요.
-화자가 구분된 경우, 주요 논의 내용·결정 사항·액션 아이템에 화자 이름을 명시하세요.
-
-## 핵심 주제
-(회의의 주요 목적이나 주제)
-
-## 주요 논의 내용
-(핵심 포인트를 간결하게 bullet로, 화자 이름 포함)
-
-## 결정 사항
-(회의에서 결정된 사항 및 주도한 화자, 없으면 "없음")
-
-## 액션 아이템
-(후속 조치 및 담당자/기한, 없으면 "없음")`,
+        buildMeetingSummarySystem(),
         { raw: true }
       );
       setSummary(sum);
@@ -688,22 +673,7 @@ export default function MeetingScreen({ navigation }) {
       const newTranscript = await rediarizeTranscript(item.transcript, count);
       const newSummary = await askClaude(
         [{ role: 'user', content: newTranscript }],
-        `[언어 규칙] 반드시 한국어로만 응답하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.
-
-회의 내용을 아래 형식으로 간결하게 요약하세요.
-화자가 구분된 경우, 주요 논의 내용·결정 사항·액션 아이템에 화자 이름을 명시하세요.
-
-## 핵심 주제
-(회의의 주요 목적이나 주제)
-
-## 주요 논의 내용
-(핵심 포인트를 간결하게 bullet로, 화자 이름 포함)
-
-## 결정 사항
-(회의에서 결정된 사항 및 주도한 화자, 없으면 "없음")
-
-## 액션 아이템
-(후속 조치 및 담당자/기한, 없으면 "없음")`,
+        buildMeetingSummarySystem(),
         { raw: true }
       );
       const updated = await updateMeetingRecord(item.id, {
@@ -767,18 +737,7 @@ export default function MeetingScreen({ navigation }) {
         .join('\n\n---\n\n');
       const result = await askClaude(
         [{ role: 'user', content: summaries }],
-        `[언어 규칙] 반드시 한국어로만 응답하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.
-
-다음은 여러 회의의 요약입니다. 이 회의들에서 반복·공통으로 등장하는 업무 주제와 키워드를 추출해주세요.
-
-## 주요 업무 주제
-(반복 논의된 업무 영역을 bullet로 나열)
-
-## 핵심 키워드
-(자주 언급된 주제어, 프로젝트명, 이슈 등)
-
-## 인사이트
-(전체 회의를 통해 파악할 수 있는 업무 패턴이나 특이사항, 1~2문장)`,
+        buildWorkTopicsSystem(),
         { raw: true }
       );
       setWorkTopics(result);

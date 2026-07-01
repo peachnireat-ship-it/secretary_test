@@ -1,39 +1,16 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Linking,
-  Animated, PanResponder,
+  Animated,
 } from 'react-native';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { getClients, addClient, updateClient, saveClients, getHistories, addHistory, updateHistory, deleteHistory, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, getCurrentUser } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates } from '../services/claude';
-
-function useSwipeClose(onClose) {
-  const translateY = useRef(new Animated.Value(0)).current;
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 2,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) translateY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80 || (gs.vy > 0.8 && gs.dy > 10)) {
-          Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }).start(() => {
-            translateY.setValue(0);
-            onClose();
-          });
-        } else {
-          Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
-        }
-      },
-    })
-  ).current;
-  return { panHandlers: panResponder.panHandlers, animStyle: { transform: [{ translateY }] } };
-}
+import { useSwipeClose } from '../hooks/useSwipeClose';
 
 const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
 
@@ -107,6 +84,18 @@ export default function ClientScreen({ navigation, route }) {
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
+
+  // clientId -> history[] (createdAt desc) 사전 인덱싱 — O(n×m) 목록 렌더링 방지
+  const historiesByClient = useMemo(() => {
+    const map = new Map();
+    for (const h of histories) {
+      const arr = map.get(h.clientId);
+      if (arr) arr.push(h);
+      else map.set(h.clientId, [h]);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => b.createdAt - a.createdAt);
+    return map;
+  }, [histories]);
 
   const filteredClients = clients.filter((c) => {
     const matchesSearch = !search || c.name.includes(search) || c.company.includes(search);
@@ -266,7 +255,7 @@ export default function ClientScreen({ navigation, route }) {
 
     try {
       const apiMessages = history
-        .filter((m) => m.role !== 'assistant' || history.indexOf(m) > 0)
+        .filter((m, idx) => m.role !== 'assistant' || idx > 0)
         .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
       const systemPrompt = buildClientSystem(clients, histories);
       const reply = await askClaude(apiMessages, systemPrompt);
@@ -384,8 +373,9 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 거래처 목록 ── */}
       <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
         {filteredClients.map((client) => {
-          const lastH = histories.filter((h) => h.clientId === client.id).sort((a, b) => b.createdAt - a.createdAt)[0];
-          const hCount = histories.filter((h) => h.clientId === client.id).length;
+          const clientHist = historiesByClient.get(client.id) || [];
+          const lastH = clientHist[0];
+          const hCount = clientHist.length;
           return (
             <TouchableOpacity key={client.id} style={[s.clientCard, favorites.includes(client.id) && s.clientCardFav]} activeOpacity={0.7} onPress={() => openClient(client)}>
               <View style={s.clientAvatar}>

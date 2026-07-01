@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, getClients, getMeetingRecords, getCurrentUser, addClient } from '../services/storage';
 import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/claude';
+import { useSwipeClose } from '../hooks/useSwipeClose';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -35,30 +36,6 @@ function buildMonthGrid(year, month) {
     cells.push({ str: dateStr(dt), date: d, day: DAYS[dt.getDay()] });
   }
   return cells;
-}
-
-function useSwipeClose(onClose) {
-  const translateY = useRef(new Animated.Value(0)).current;
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 2,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) translateY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80 || (gs.vy > 0.8 && gs.dy > 10)) {
-          Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }).start(() => {
-            translateY.setValue(0);
-            onClose();
-          });
-        } else {
-          Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
-        }
-      },
-    })
-  ).current;
-  return { panHandlers: panResponder.panHandlers, animStyle: { transform: [{ translateY }] } };
 }
 
 export default function ScheduleScreen({ navigation, route }) {
@@ -174,16 +151,15 @@ export default function ScheduleScreen({ navigation, route }) {
     setCurrentUser(user);
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, []);
-
   useEffect(() => {
-    Animated.loop(
+    const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(urgencyAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
         Animated.timing(urgencyAnim, { toValue: 0.1, duration: 600, useNativeDriver: true }),
       ])
-    ).start();
+    );
+    animation.start();
+    return () => animation.stop();
   }, []);
 
   useEffect(() => {
@@ -310,7 +286,7 @@ export default function ScheduleScreen({ navigation, route }) {
 
     try {
       const apiMessages = history
-        .filter((m) => m.role !== 'assistant' || history.indexOf(m) > 0)
+        .filter((m, idx) => m.role !== 'assistant' || idx > 0)
         .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
 
       const systemPrompt = buildScheduleSystem(schedules);

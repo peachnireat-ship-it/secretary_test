@@ -1,7 +1,7 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
-  Animated, PanResponder,
+  Animated,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -10,30 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
 import { askClaude, buildProjectDelaySystem } from '../services/claude';
-
-function useSwipeClose(onClose) {
-  const translateY = useRef(new Animated.Value(0)).current;
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 2,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) translateY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80 || (gs.vy > 0.8 && gs.dy > 10)) {
-          Animated.timing(translateY, { toValue: 600, duration: 220, useNativeDriver: true }).start(() => {
-            translateY.setValue(0);
-            onClose();
-          });
-        } else {
-          Animated.spring(translateY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
-        }
-      },
-    })
-  ).current;
-  return { panHandlers: panResponder.panHandlers, animStyle: { transform: [{ translateY }] } };
-}
+import { useSwipeClose } from '../hooks/useSwipeClose';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
 
