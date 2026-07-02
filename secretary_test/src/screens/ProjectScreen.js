@@ -4,13 +4,14 @@ import {
   Animated,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
-import { askClaude, buildProjectDelaySystem } from '../services/claude';
+import { getProjects, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
+import { useProjectAI } from '../hooks/useProjectAI';
+import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectForm';
 import { statusColor, priorityColor } from '../utils/colors';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
@@ -59,79 +60,6 @@ const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
 const PRIORITIES = ['높음', '보통', '낮음'];
 const FILTERS = ['전체', '진행중', '위험', '지연', '완료'];
 
-function getDaysInMonth(year, month) {
-  return new Date(year, month, 0).getDate();
-}
-
-function formatDeadline(text) {
-  const digits = text.replace(/\D/g, '').slice(0, 8);
-  if (digits.length <= 4) return digits;
-
-  const year = parseInt(digits.slice(0, 4), 10);
-
-  if (digits.length <= 6) {
-    if (digits.length === 6) {
-      const month = Math.min(12, Math.max(1, parseInt(digits.slice(4), 10)));
-      return `${digits.slice(0, 4)}-${String(month).padStart(2, '0')}`;
-    }
-    return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  }
-
-  const month = Math.min(12, Math.max(1, parseInt(digits.slice(4, 6), 10)));
-  if (digits.length === 8) {
-    const maxDay = getDaysInMonth(year, month);
-    const day = Math.min(maxDay, Math.max(1, parseInt(digits.slice(6), 10)));
-    return `${digits.slice(0, 4)}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  }
-  return `${digits.slice(0, 4)}-${String(month).padStart(2, '0')}-${digits.slice(6)}`;
-}
-
-function isValidDeadline(str) {
-  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return false;
-  const [, y, m, d] = match.map(Number);
-  if (m < 1 || m > 12) return false;
-  const maxDay = getDaysInMonth(y, m);
-  return d >= 1 && d <= maxDay;
-}
-
-function normalizeDeadline(str) {
-  if (!str || str === '미정') return str;
-  const match = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (!match) return str;
-  const [, y, m, d] = match;
-  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-}
-
-function fmtTime12(text) {
-  const d = text.replace(/\D/g, '').slice(0, 4);
-  if (d.length <= 1) return d;
-  const hRaw = parseInt(d.slice(0, 2), 10);
-  const h = Math.min(Math.max(hRaw, 1), 12);
-  const hStr = String(h).padStart(2, '0');
-  if (d.length === 2) return hStr;
-  const mStr = d.slice(2);
-  if (d.length === 3) return `${hStr}:${mStr}`;
-  const mRaw = parseInt(mStr, 10);
-  return `${hStr}:${String(Math.min(mRaw, 59)).padStart(2, '0')}`;
-}
-function to24h(ampm, time12) {
-  const parts = time12.split(':');
-  let h = parseInt(parts[0], 10) || 0;
-  const m = parseInt(parts[1], 10) || 0;
-  if (ampm === '오후' && h !== 12) h += 12;
-  if (ampm === '오전' && h === 12) h = 0;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-function from24h(time24) {
-  const parts = (time24 || '09:00').split(':');
-  const h = parseInt(parts[0], 10) || 0;
-  const mStr = parts[1] || '00';
-  const ampm = h < 12 ? '오전' : '오후';
-  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-  return { ampm, time12: `${String(h12).padStart(2, '0')}:${mStr}` };
-}
-
 function daysUntil(deadlineStr) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -161,43 +89,13 @@ export default function ProjectScreen({ navigation, route }) {
   const [histories, setHistories] = useState([]);
   const [showPersonDetail, setShowPersonDetail] = useState(false);
   const [personDetailClient, setPersonDetailClient] = useState(null);
-  const [pendingMeetingRecordId, setPendingMeetingRecordId] = useState(null);
   const [filter, setFilter] = useState('전체');
-
-  const [showAdd, setShowAdd] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newStartDate, setNewStartDate] = useState('');
-  const [newStartTime, setNewStartTime] = useState('09:00');
-  const [newStartAmPm, setNewStartAmPm] = useState('오전');
-  const [newDeadline, setNewDeadline] = useState('');
-  const [newDeadlineTime, setNewDeadlineTime] = useState('06:00');
-  const [newDeadlineAmPm, setNewDeadlineAmPm] = useState('오후');
-  const [newStatus, setNewStatus] = useState('진행중');
-  const [newProgress, setNewProgress] = useState('0');
-  const [newPriority, setNewPriority] = useState('보통');
-  const [newNotes, setNewNotes] = useState('');
-
-  const [showDetail, setShowDetail] = useState(false);
-  const [detailProject, setDetailProject] = useState(null);
-  const [showProjectView, setShowProjectView] = useState(false);
-  const [viewProject, setViewProject] = useState(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editStartDate, setEditStartDate] = useState('');
-  const [editStartTime, setEditStartTime] = useState('09:00');
-  const [editStartAmPm, setEditStartAmPm] = useState('오전');
-  const [editDeadline, setEditDeadline] = useState('');
-  const [editDeadlineTime, setEditDeadlineTime] = useState('06:00');
-  const [editDeadlineAmPm, setEditDeadlineAmPm] = useState('오후');
-  const [editStatus, setEditStatus] = useState('진행중');
-  const [editProgress, setEditProgress] = useState(0);
-  const [quickSlider, setQuickSlider] = useState(null);
 
   const [showMeetingDetail, setShowMeetingDetail] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [contentEditRecordId, setContentEditRecordId] = useState(null);
   const [contentEditSummary, setContentEditSummary] = useState('');
   const [contentEditTranscript, setContentEditTranscript] = useState('');
-  const [editPriority, setEditPriority] = useState('보통');
 
   const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
   const [speakerEditNames, setSpeakerEditNames] = useState({});
@@ -211,18 +109,31 @@ export default function ProjectScreen({ navigation, route }) {
 
   const [clientPickerSpeaker, setClientPickerSpeaker] = useState(null);
   const [clientPickerSearch, setClientPickerSearch] = useState('');
-  const [editNotes, setEditNotes] = useState('');
-  const [editClientIds, setEditClientIds] = useState([]);
-  const [detailPersonPickerVisible, setDetailPersonPickerVisible] = useState(false);
-  const [detailPersonPickerSearch, setDetailPersonPickerSearch] = useState('');
 
-  const [showAI, setShowAI] = useState(false);
-  const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', text: '안녕하세요! 프로젝트 지연 분석 AI입니다.\n\n"전체 지연 분석해줘", "가장 위험한 프로젝트가 뭐야?", "이번 주 조치 계획 세워줘" 와 같이 물어보세요.' },
-  ]);
-  const [chatInput, setChatInput] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const chatScrollRef = useRef(null);
+  const {
+    showAI, setShowAI, chatMessages, chatInput, setChatInput, aiLoading, chatScrollRef,
+    handleAIChat, handleQuickAnalysis,
+  } = useProjectAI({ projects, setProjects });
+
+  const {
+    showAdd, setShowAdd, newTitle, setNewTitle, newStartDate, setNewStartDate,
+    newStartTime, setNewStartTime, newStartAmPm, setNewStartAmPm, newDeadline, setNewDeadline,
+    newDeadlineTime, setNewDeadlineTime, newDeadlineAmPm, setNewDeadlineAmPm, newStatus, setNewStatus,
+    newProgress, setNewProgress, newPriority, setNewPriority, newNotes, setNewNotes,
+    setPendingMeetingRecordId,
+
+    showDetail, setShowDetail, detailProject, showProjectView, setShowProjectView,
+    viewProject, setViewProject, editTitle, setEditTitle, editStartDate, setEditStartDate,
+    editStartTime, setEditStartTime, editStartAmPm, setEditStartAmPm, editDeadline, setEditDeadline,
+    editDeadlineTime, setEditDeadlineTime, editDeadlineAmPm, setEditDeadlineAmPm, editStatus, setEditStatus,
+    editProgress, setEditProgress, editPriority, setEditPriority, editNotes, setEditNotes,
+    editClientIds, setEditClientIds, quickSlider, setQuickSlider,
+
+    detailPersonPickerVisible, setDetailPersonPickerVisible,
+    detailPersonPickerSearch, setDetailPersonPickerSearch,
+
+    handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail,
+  } = useProjectForm({ meetingRecords, setProjects });
 
   const swipeDetail = useSwipeClose(() => setShowDetail(false));
   const swipeAdd = useSwipeClose(() => setShowAdd(false));
@@ -280,179 +191,11 @@ export default function ProjectScreen({ navigation, route }) {
 
   const delayedCount = projects.filter((p) => p.status === '지연' || p.status === '위험').length;
 
-  async function handleAdd() {
-    if (!newTitle.trim() || !newDeadline.trim()) return;
-    if (!isValidDeadline(newDeadline.trim())) {
-      Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
-      return;
-    }
-    const meetingRecord = pendingMeetingRecordId ? meetingRecords.find((r) => r.id === pendingMeetingRecordId) : null;
-    const startDateNorm = normalizeDeadline(newStartDate.trim());
-    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(newStartAmPm, newStartTime)}` : '';
-    const deadlineStr = `${normalizeDeadline(newDeadline.trim())} ${to24h(newDeadlineAmPm, newDeadlineTime)}`;
-    const updated = await addProject({
-      title: newTitle.trim(),
-      startDate: startDateStr,
-      deadline: deadlineStr,
-      status: newStatus,
-      progress: parseInt(newProgress) || 0,
-      priority: newPriority,
-      notes: newNotes.trim(),
-      meetingRecordIds: pendingMeetingRecordId ? [pendingMeetingRecordId] : [],
-      clientIds: meetingRecord?.clientIds || [],
-    });
-    setProjects(updated);
-    setShowAdd(false);
-    setNewTitle(''); setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전');
-    setNewDeadline(''); setNewDeadlineTime('06:00'); setNewDeadlineAmPm('오후');
-    setNewStatus('진행중'); setNewProgress('0'); setNewPriority('보통'); setNewNotes('');
-    setPendingMeetingRecordId(null);
-  }
-
   async function handleDelete(id, title) {
     Alert.alert('삭제', `"${title}" 프로젝트를 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
       { text: '삭제', style: 'destructive', onPress: async () => { setProjects(await deleteProject(id)); } },
     ]);
-  }
-
-  function openDetail(project) {
-    setDetailProject(project);
-    setEditTitle(project.title);
-
-    const startParts = (project.startDate || '').split(' ');
-    setEditStartDate(startParts[0] || '');
-    if (startParts[1]) {
-      const { ampm, time12 } = from24h(startParts[1]);
-      setEditStartAmPm(ampm);
-      setEditStartTime(time12);
-    } else {
-      setEditStartAmPm('오전');
-      setEditStartTime('09:00');
-    }
-
-    const deadlineParts = (project.deadline || '').split(' ');
-    setEditDeadline(deadlineParts[0] || '');
-    if (deadlineParts[1]) {
-      const { ampm, time12 } = from24h(deadlineParts[1]);
-      setEditDeadlineAmPm(ampm);
-      setEditDeadlineTime(time12);
-    } else {
-      setEditDeadlineAmPm('오후');
-      setEditDeadlineTime('06:00');
-    }
-
-    setEditStatus(project.status);
-    setEditProgress(project.progress ?? 0);
-    setEditPriority(project.priority);
-    setEditNotes(project.notes || '');
-    setEditClientIds(project.clientIds || []);
-    setShowDetail(true);
-  }
-
-  async function handleEditSave() {
-    if (!editTitle.trim() || !editDeadline.trim()) return;
-    if (!isValidDeadline(editDeadline.trim())) {
-      Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
-      return;
-    }
-    const startDateNorm = normalizeDeadline(editStartDate.trim());
-    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(editStartAmPm, editStartTime)}` : '';
-    const deadlineStr = `${normalizeDeadline(editDeadline.trim())} ${to24h(editDeadlineAmPm, editDeadlineTime)}`;
-    const updated = await updateProject(detailProject.id, {
-      title: editTitle.trim(),
-      startDate: startDateStr,
-      deadline: deadlineStr,
-      status: editStatus,
-      progress: editProgress,
-      priority: editPriority,
-      notes: editNotes.trim(),
-      clientIds: editClientIds,
-    });
-    setProjects(updated);
-    const refreshed = updated.find((p) => p.id === detailProject.id);
-    setDetailProject(refreshed);
-    setShowDetail(false);
-  }
-
-  async function handleProgressUpdate(id, newProg) {
-    const updated = await updateProject(id, { progress: newProg });
-    setProjects(updated);
-  }
-
-  async function handleAIChat() {
-    const text = chatInput.trim();
-    if (!text || aiLoading) return;
-    setChatInput('');
-
-    const userMsg = { role: 'user', text };
-    const history = [...chatMessages, userMsg];
-    setChatMessages(history);
-    setAiLoading(true);
-
-    try {
-      const apiMessages = history
-        .filter((m, i) => !(m.role === 'assistant' && i === 0))
-        .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
-
-      const systemPrompt = buildProjectDelaySystem(projects, []);
-      const reply = await askClaude(apiMessages, systemPrompt, { raw: true });
-
-      const jsonMatch = reply.match(/\{[\s\S]*?"action"\s*:\s*"update_project"[\s\S]*?\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.action === 'update_project' && parsed.id && parsed.changes) {
-            const updated = await updateProject(parsed.id, parsed.changes);
-            setProjects(updated);
-            const target = updated.find((p) => p.id === parsed.id);
-            const changes = parsed.changes;
-            const changeSummary = Object.entries(changes)
-              .map(([k, v]) => `${k === 'status' ? '상태' : k === 'progress' ? '진행률' : k}: ${v}${k === 'progress' ? '%' : ''}`)
-              .join(', ');
-            const confirmText = `프로젝트를 업데이트했습니다.\n"${target?.title}" — ${changeSummary}`;
-            setChatMessages([...history, { role: 'assistant', text: confirmText }]);
-          }
-        } catch {
-          setChatMessages([...history, { role: 'assistant', text: reply }]);
-        }
-      } else {
-        setChatMessages([...history, { role: 'assistant', text: reply }]);
-      }
-    } catch (e) {
-      const errText = e.message === 'API_KEY_MISSING'
-        ? 'API 키가 설정되지 않았습니다. 설정 탭에서 API 키를 입력해주세요.'
-        : `오류: ${e.message}`;
-      setChatMessages([...history, { role: 'assistant', text: errText }]);
-    } finally {
-      setAiLoading(false);
-      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
-    }
-  }
-
-  async function handleQuickAnalysis() {
-    setShowAI(true);
-    if (chatMessages.length > 1) return;
-    setChatInput('');
-    const userMsg = { role: 'user', text: '전체 프로젝트 지연 원인을 분석하고 우선 조치 계획을 알려줘.' };
-    const history = [...chatMessages, userMsg];
-    setChatMessages(history);
-    setAiLoading(true);
-
-    try {
-      const apiMessages = [{ role: 'user', content: userMsg.text }];
-      const systemPrompt = buildProjectDelaySystem(projects, []);
-      const reply = await askClaude(apiMessages, systemPrompt);
-      setChatMessages([...history, { role: 'assistant', text: reply }]);
-    } catch (e) {
-      const errText = e.message === 'API_KEY_MISSING'
-        ? 'API 키가 설정되지 않았습니다. 설정 탭에서 API 키를 입력해주세요.'
-        : `오류: ${e.message}`;
-      setChatMessages([...history, { role: 'assistant', text: errText }]);
-    } finally {
-      setAiLoading(false);
-      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
-    }
   }
 
   function openClientPicker(speaker) {
@@ -472,14 +215,6 @@ export default function ProjectScreen({ navigation, route }) {
     setSpeakerEditNames((prev) => ({ ...prev, [clientPickerSpeaker]: client.name }));
     if (client.id) setSpeakerClientEditMap((prev) => ({ ...prev, [clientPickerSpeaker]: client.id }));
     setClientPickerSpeaker(null);
-  }
-
-  function addClientToDetail(client) {
-    if (client.id && !editClientIds.includes(client.id)) {
-      setEditClientIds((prev) => [...prev, client.id]);
-    }
-    setDetailPersonPickerVisible(false);
-    setDetailPersonPickerSearch('');
   }
 
   function openSpeakerEditModal(item) {
