@@ -6,20 +6,12 @@ import {
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
-import * as DocumentPicker from 'expo-document-picker';
 import { C } from '../theme';
-import * as FileSystem from 'expo-file-system';
-import { transcribeAudio, diarizeSegments, diarizeWithPyannote, convertToMonoViaServer, rediarizeTranscript } from '../services/groqStt';
-import { askClaude, buildTaskExtractionSystem, buildMeetingSummarySystem, buildWorkTopicsSystem, fixForeignWordsInText } from '../services/claude';
+import { askClaude, buildWorkTopicsSystem, fixForeignWordsInText } from '../services/claude';
 import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects, getHistories } from '../services/storage';
 import { projectStatusColor as statusColor, typeColor as histTypeColor } from '../utils/colors';
-
-function formatTime(sec) {
-  const m = String(Math.floor(sec / 60)).padStart(2, '0');
-  const s = String(sec % 60).padStart(2, '0');
-  return `${m}:${s}`;
-}
+import { useAudioRecording, formatTime } from '../hooks/useAudioRecording';
+import { useDiarization, applyNames, parseTranscriptSegments, mergeConsecutiveSegments } from '../hooks/useDiarization';
 
 function formatDate(ms) {
   const d = new Date(ms);
@@ -31,98 +23,11 @@ function formatDateTime(ms) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function extractSpeakers(text) {
-  const found = new Set();
-  const regex = /(?:^|\n)\[([^\]\n]+)\]/g;
-  let m;
-  while ((m = regex.exec(text)) !== null) found.add(m[1]);
-  return [...found];
-}
-
-function applyNames(text, nameMap) {
-  return Object.entries(nameMap).reduce((t, [orig, name]) => {
-    const replacement = name.trim() || orig;
-    return t.split(`[${orig}]`).join(`[${replacement}]`);
-  }, text);
-}
-
-function deleteSpeakers(text, toDelete) {
-  if (toDelete.length === 0) return text;
-  const deleteSet = new Set(toDelete);
-  const segments = parseTranscriptSegments(text);
-  return segments
-    .map((s) => (deleteSet.has(s.speaker) ? s.text : `[${s.speaker}]\n${s.text}`))
-    .filter(Boolean)
-    .join('\n\n');
-}
-
-function parseTranscriptSegments(text) {
-  if (!text) return [];
-  const regex = /\[([^\]\n]+)\]([\s\S]*?)(?=\n*\[|$)/g;
-  const segments = [];
-  let m;
-  while ((m = regex.exec(text)) !== null) {
-    segments.push({ speaker: m[1], text: m[2].trim() });
-  }
-  if (segments.length > 0) return segments;
-
-  // 대괄호 없는 "화자 N" 형식 폴백 (stripNonKorean 버그로 저장된 데이터 대응)
-  const lines = text.split('\n');
-  let currentSpeaker = null;
-  let currentLines = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const sm = trimmed.match(/^(화자\s*\d+)\s*(.*)/);
-    if (sm) {
-      if (currentSpeaker !== null && currentLines.length > 0) {
-        segments.push({ speaker: currentSpeaker, text: currentLines.join(' ').trim() });
-      }
-      currentSpeaker = sm[1];
-      currentLines = sm[2] ? [sm[2]] : [];
-    } else if (currentSpeaker !== null) {
-      currentLines.push(trimmed);
-    }
-  }
-  if (currentSpeaker !== null && currentLines.length > 0) {
-    segments.push({ speaker: currentSpeaker, text: currentLines.join(' ').trim() });
-  }
-  return segments;
-}
-
-function mergeConsecutiveSegments(segments) {
-  if (segments.length === 0) return [];
-  const merged = [{ ...segments[0] }];
-  for (let i = 1; i < segments.length; i++) {
-    const last = merged[merged.length - 1];
-    if (last.speaker === segments[i].speaker) {
-      last.text = last.text + '\n' + segments[i].text;
-    } else {
-      merged.push({ ...segments[i] });
-    }
-  }
-  return merged;
-}
-
-function buildTranscriptFromSegments(segments) {
-  return segments.map((s) => `[${s.speaker}]\n${s.text}`).join('\n\n');
-}
-
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
 
 export default function MeetingScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('record');
-  const [elapsed, setElapsed] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState('');
-  const [transcript, setTranscript] = useState('');
-  const [summary, setSummary] = useState('');
-  const [transcriptSource, setTranscriptSource] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [pickedFile, setPickedFile] = useState(null);
-  const [recording, setRecording] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const [meetingRecords, setMeetingRecords] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
@@ -130,26 +35,7 @@ export default function MeetingScreen({ navigation }) {
   const [titleInput, setTitleInput] = useState('');
   const [editingRecordId, setEditingRecordId] = useState(null);
 
-  const [rawTranscript, setRawTranscript] = useState('');
-  const [speakerNames, setSpeakerNames] = useState({});
-
-  const [tasks, setTasks] = useState([]);
-  const [tasksLoading, setTasksLoading] = useState(false);
-  const [selectedTaskIndices, setSelectedTaskIndices] = useState(new Set());
   const [historySelectedTasks, setHistorySelectedTasks] = useState({});
-
-  const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
-  const [speakerEditNames, setSpeakerEditNames] = useState({});
-  const [speakerEditDeleted, setSpeakerEditDeleted] = useState(new Set());
-  const [speakerEditCustom, setSpeakerEditCustom] = useState([]);
-  const [speakerClientMap, setSpeakerClientMap] = useState({});
-
-  const [segmentEditRecordId, setSegmentEditRecordId] = useState(null);
-  const [editableSegments, setEditableSegments] = useState([]);
-  const [segmentPickerIdx, setSegmentPickerIdx] = useState(null);
-  const [segTextEditIdx, setSegTextEditIdx] = useState(null);
-  const [segTextEditValue, setSegTextEditValue] = useState('');
-  const [speakerClientEditMap, setSpeakerClientEditMap] = useState({});
 
   const [contentEditRecordId, setContentEditRecordId] = useState(null);
   const [contentEditSummary, setContentEditSummary] = useState('');
@@ -175,25 +61,42 @@ export default function MeetingScreen({ navigation }) {
   const [workTopics, setWorkTopics] = useState('');
   const [workTopicsLoading, setWorkTopicsLoading] = useState(false);
 
-  const [pickedAfterTranscript, setPickedAfterTranscript] = useState(false);
   const [fixingForeignId, setFixingForeignId] = useState(null);
 
-  const [speakerCount, setSpeakerCount] = useState(null);
-  const [rediarizingId, setRediarizingId] = useState(null);
-  const [showRediarizeModal, setShowRediarizeModal] = useState(false);
-  const [rediarizeTarget, setRediarizeTarget] = useState(null);
-  const [rediarizeCountInput, setRediarizeCountInput] = useState('');
-
-  const timerRef = useRef(null);
   const scrollRef = useRef(null);
   const scrollToTopOnPickRef = useRef(false);
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
+  const diarization = useDiarization({
+    meetingRecords,
+    setMeetingRecords,
+    onError: (e) => handleApiError(e),
+  });
+  const {
+    rawTranscript, speakerNames, speakerEditRecordId, speakerEditNames, speakerEditDeleted,
+    speakerEditCustom, speakerClientMap, segmentEditRecordId,
+    editableSegments, segmentPickerIdx, segTextEditIdx, segTextEditValue, speakerCount,
+    rediarizingId, showRediarizeModal, rediarizeCountInput,
+    setSpeakerNames, setSpeakerClientMap, setSpeakerEditRecordId, setSpeakerEditNames,
+    setSpeakerEditDeleted, setSpeakerEditCustom, setSpeakerClientEditMap,
+    setSegmentEditRecordId, setEditableSegments, setSegmentPickerIdx, setSegTextEditIdx,
+    setSegTextEditValue, setSpeakerCount, setShowRediarizeModal,
+    setRediarizeCountInput,
+    openSpeakerEditModal, confirmSpeakerEdit,
+    openSegmentEditModal, openSegTextEdit, confirmSegTextEdit, confirmSegmentEdit,
+    openRediarizeModal, confirmRediarize,
+  } = diarization;
+
+  const {
+    elapsed, loading, loadingMsg, transcript, summary, transcriptSource, errorMsg,
+    pickedFile, recording, saved, tasks, tasksLoading, selectedTaskIndices, pickedAfterTranscript,
+    setTranscript, setSummary, setSaved, setErrorMsg, setSelectedTaskIndices,
+    startRecording, stopAndTranscribe, pickFile, transcribeFile, toggleTaskSelect, runExtractTasks,
+  } = useAudioRecording({
+    diarize: diarization.diarize,
+    resetDiarization: diarization.resetDiarization,
+    onFileReplace: () => { scrollToTopOnPickRef.current = true; },
+    onError: (e) => handleApiError(e),
+  });
 
   const loadRecords = useCallback(async () => {
     const records = await getMeetingRecords();
@@ -242,75 +145,6 @@ export default function MeetingScreen({ navigation }) {
     }
   }, [pickedFile]);
 
-  async function startRecording() {
-    setErrorMsg('');
-    setTranscript('');
-    setSummary('');
-    setTranscriptSource('');
-    setSaved(false);
-    const perm = await AudioModule.requestRecordingPermissionsAsync();
-    if (!perm.granted) {
-      setErrorMsg('마이크 권한이 필요합니다.');
-      return;
-    }
-    setElapsed(0);
-    await audioRecorder.prepareToRecordAsync();
-    audioRecorder.record();
-    setRecording(true);
-    timerRef.current = setInterval(() => setElapsed((p) => p + 1), 1000);
-  }
-
-  async function stopAndTranscribe() {
-    setRecording(false);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    await audioRecorder.stop();
-    let uri = audioRecorder.uri;
-    if (!uri) {
-      await new Promise((r) => setTimeout(r, 500));
-      uri = audioRecorder.uri;
-    }
-    if (!uri) {
-      setErrorMsg('녹음 파일을 찾을 수 없습니다.');
-      return;
-    }
-    await runTranscribe(uri, 'audio/m4a', '직접 녹음');
-  }
-
-  const AUDIO_EXTS = ['mp3', 'mp4', 'm4a', 'wav', 'aac', 'ogg', 'flac', 'wma', 'opus', 'webm', 'amr', '3gp'];
-
-  async function pickFile() {
-    setErrorMsg('');
-    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    const mime = asset.mimeType ?? '';
-    const ext = (asset.name ?? '').split('.').pop().toLowerCase();
-    if (!mime.startsWith('audio/') && !AUDIO_EXTS.includes(ext)) {
-      setErrorMsg('오디오 파일을 선택해 주세요.');
-      return;
-    }
-    if (transcript) {
-      setTranscript('');
-      setSummary('');
-      setTasks([]);
-      setSelectedTaskIndices(new Set());
-      setSaved(false);
-      setRawTranscript('');
-      setSpeakerNames({});
-      setPickedAfterTranscript(true);
-      scrollToTopOnPickRef.current = true;
-    }
-    setPickedFile(asset);
-  }
-
-  async function transcribeFile() {
-    if (!pickedFile) return;
-    await runTranscribe(pickedFile.uri, pickedFile.mimeType || 'audio/m4a', pickedFile.name);
-  }
-
   function handleApiError(e) {
     if (e.message === 'API_KEY_MISSING') {
       Alert.alert(
@@ -326,106 +160,12 @@ export default function MeetingScreen({ navigation }) {
     }
   }
 
-  async function runSummarize(text) {
-    setLoading(true);
-    setLoadingMsg('회의 내용 요약 중…');
-    try {
-      const sum = await askClaude(
-        [{ role: 'user', content: text }],
-        buildMeetingSummarySystem(),
-        { raw: true }
-      );
-      setSummary(sum);
-    } catch (e) {
-      handleApiError(e);
-    } finally {
-      setLoading(false);
-      setLoadingMsg('');
-    }
-  }
-
   function toggleHistoryTask(recordId, index) {
     setHistorySelectedTasks((prev) => {
       const set = new Set(prev[recordId] || []);
       set.has(index) ? set.delete(index) : set.add(index);
       return { ...prev, [recordId]: set };
     });
-  }
-
-  function toggleTaskSelect(i) {
-    setSelectedTaskIndices((prev) => {
-      const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
-      return next;
-    });
-  }
-
-  async function runExtractTasks(text) {
-    setTasksLoading(true);
-    setTasks([]);
-    try {
-      const raw = await askClaude(
-        [{ role: 'user', content: text }],
-        buildTaskExtractionSystem(),
-        { raw: true }
-      );
-      const jsonStr = raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(jsonStr);
-      setTasks(Array.isArray(parsed) ? parsed : []);
-    } catch (e) {
-      if (e.message === 'API_KEY_MISSING') {
-        handleApiError(e);
-      } else {
-        setTasks([]);
-      }
-    } finally {
-      setTasksLoading(false);
-    }
-  }
-
-  async function runTranscribe(uri, mimeType, source) {
-    setLoading(true);
-    setErrorMsg('');
-    setTranscript('');
-    setSummary('');
-    setSaved(false);
-    setRawTranscript('');
-    setSpeakerNames({});
-    setTasks([]);
-    setSelectedTaskIndices(new Set());
-    setPickedAfterTranscript(false);
-    setTranscriptSource(source);
-    let monoUri = null;
-    try {
-      setLoadingMsg('오디오 전처리 중…');
-      monoUri = await convertToMonoViaServer(uri, mimeType);
-      const audioUri = monoUri ?? uri;
-      const audioMime = monoUri ? 'audio/wav' : mimeType;
-
-      setLoadingMsg('음성 변환 중…');
-      const { text, segments } = await transcribeAudio(audioUri, audioMime);
-
-      let diarized = text;
-      if (segments.length > 0) {
-        setLoadingMsg('화자 구분 분석 중…');
-        const pyResult = await diarizeWithPyannote(audioUri, audioMime, segments);
-        diarized = pyResult ?? await diarizeSegments(segments, speakerCount);
-      }
-
-      const speakers = extractSpeakers(diarized);
-      if (speakers.length > 0) {
-        setRawTranscript(diarized);
-        setSpeakerNames(Object.fromEntries(speakers.map((s) => [s, ''])));
-      }
-      setTranscript(diarized);
-      runSummarize(diarized);
-    } catch (e) {
-      handleApiError(e);
-    } finally {
-      if (monoUri) FileSystem.deleteAsync(monoUri, { idempotent: true }).catch(() => {});
-      setLoading(false);
-      setLoadingMsg('');
-    }
   }
 
   function openClientPicker(speaker, context) {
@@ -538,97 +278,6 @@ export default function MeetingScreen({ navigation }) {
     setContentEditRecordId(null);
   }
 
-  function openSpeakerEditModal(item) {
-    const speakers = extractSpeakers(item.transcript || '');
-    setSpeakerEditRecordId(item.id);
-    setSpeakerEditNames(Object.fromEntries(speakers.map((s) => [s, ''])));
-    setSpeakerClientEditMap({});
-    setSpeakerEditDeleted(new Set());
-    setSpeakerEditCustom([]);
-  }
-
-  async function confirmSpeakerEdit() {
-    const record = meetingRecords.find((r) => r.id === speakerEditRecordId);
-    if (!record) return;
-    setSpeakerEditRecordId(null);
-
-    const renames = Object.fromEntries(
-      Object.entries(speakerEditNames).filter(([k]) => !speakerEditDeleted.has(k))
-    );
-    let updatedTranscript = applyNames(record.transcript || '', renames);
-    let updatedSummary = applyNames(record.summary || '', renames);
-
-    const customRenames = Object.fromEntries(
-      speakerEditCustom
-        .filter((c) => c.origKey.trim())
-        .map((c) => [c.origKey.trim(), c.newName.trim()])
-    );
-    updatedTranscript = applyNames(updatedTranscript, customRenames);
-    updatedSummary = applyNames(updatedSummary, customRenames);
-
-    updatedTranscript = deleteSpeakers(updatedTranscript, [...speakerEditDeleted]);
-    updatedSummary = deleteSpeakers(updatedSummary, [...speakerEditDeleted]);
-
-    const newClientIds = Object.values(speakerClientEditMap).filter(Boolean);
-    const mergedClientIds = [...new Set([...(record.clientIds || []), ...newClientIds])];
-    const updated = await updateMeetingRecord(speakerEditRecordId, {
-      transcript: updatedTranscript,
-      summary: updatedSummary,
-      clientIds: mergedClientIds,
-    });
-    setMeetingRecords(updated);
-    setSpeakerEditNames({});
-    setSpeakerClientEditMap({});
-    setSpeakerEditDeleted(new Set());
-    setSpeakerEditCustom([]);
-  }
-
-  function openSegmentEditModal(item) {
-    const segments = parseTranscriptSegments(item.transcript || '');
-    if (segments.length === 0) {
-      Alert.alert('수정 불가', '화자가 구분된 회의록이 아닙니다.');
-      return;
-    }
-    setEditableSegments(segments);
-    setSegmentEditRecordId(item.id);
-    setSegmentPickerIdx(null);
-    setSegTextEditIdx(null);
-    setSegTextEditValue('');
-  }
-
-  function openSegTextEdit(idx) {
-    setSegmentPickerIdx(null);
-    setSegTextEditIdx(idx);
-    setSegTextEditValue(editableSegments[idx].text);
-  }
-
-  function confirmSegTextEdit() {
-    const idx = segTextEditIdx;
-    setSegTextEditIdx(null);
-    const lines = segTextEditValue.split('\n').map((l) => l.trim()).filter(Boolean);
-    if (lines.length <= 1) {
-      setEditableSegments((prev) => prev.map((s, i) => i === idx ? { ...s, text: segTextEditValue.trim() } : s));
-    } else {
-      const speaker = editableSegments[idx].speaker;
-      const newSegs = lines.map((line) => ({ speaker, text: line }));
-      setEditableSegments((prev) => [...prev.slice(0, idx), ...newSegs, ...prev.slice(idx + 1)]);
-    }
-    setSegTextEditValue('');
-  }
-
-  async function confirmSegmentEdit() {
-    const record = meetingRecords.find((r) => r.id === segmentEditRecordId);
-    if (!record) return;
-    setSegmentEditRecordId(null);
-    setSegTextEditIdx(null);
-    setSegTextEditValue('');
-    const updatedTranscript = buildTranscriptFromSegments(editableSegments);
-    const updated = await updateMeetingRecord(segmentEditRecordId, { transcript: updatedTranscript });
-    setMeetingRecords(updated);
-    setEditableSegments([]);
-    setSegmentPickerIdx(null);
-  }
-
   async function confirmSave() {
     const title = titleInput.trim();
     setShowSaveModal(false);
@@ -656,37 +305,6 @@ export default function MeetingScreen({ navigation }) {
   function copyToClipboard(text) {
     Clipboard.setString(text);
     Alert.alert('복사 완료', '클립보드에 복사되었습니다.');
-  }
-
-  function openRediarizeModal(item) {
-    setRediarizeTarget(item);
-    setRediarizeCountInput('');
-    setShowRediarizeModal(true);
-  }
-
-  async function confirmRediarize() {
-    const item = rediarizeTarget;
-    const count = parseInt(rediarizeCountInput) || null;
-    setShowRediarizeModal(false);
-    setRediarizeTarget(null);
-    setRediarizingId(item.id);
-    try {
-      const newTranscript = await rediarizeTranscript(item.transcript, count);
-      const newSummary = await askClaude(
-        [{ role: 'user', content: newTranscript }],
-        buildMeetingSummarySystem(),
-        { raw: true }
-      );
-      const updated = await updateMeetingRecord(item.id, {
-        transcript: newTranscript,
-        summary: newSummary,
-      });
-      setMeetingRecords(updated);
-    } catch (e) {
-      handleApiError(e);
-    } finally {
-      setRediarizingId(null);
-    }
   }
 
   async function runFixForeignWords(item) {
