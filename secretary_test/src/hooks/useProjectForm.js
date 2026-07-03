@@ -118,7 +118,10 @@ export function useProjectForm({ meetingRecords, setProjects }) {
   const [detailPersonPickerSearch, setDetailPersonPickerSearch] = useState('');
 
   async function handleAdd() {
-    if (!newTitle.trim() || !newDeadline.trim()) return;
+    if (!newTitle.trim() || !newDeadline.trim()) {
+      Alert.alert('입력 필요', '제목과 마감일시는 필수 입력 항목입니다.');
+      return;
+    }
     if (!isValidDeadline(newDeadline.trim())) {
       Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
       return;
@@ -181,7 +184,10 @@ export function useProjectForm({ meetingRecords, setProjects }) {
   }
 
   async function handleEditSave() {
-    if (!editTitle.trim() || !editDeadline.trim()) return;
+    if (!editTitle.trim() || !editDeadline.trim()) {
+      Alert.alert('입력 필요', '제목과 마감일시는 필수 입력 항목입니다.');
+      return;
+    }
     if (!isValidDeadline(editDeadline.trim())) {
       Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
       return;
