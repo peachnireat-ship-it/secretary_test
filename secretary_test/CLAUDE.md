@@ -353,6 +353,27 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ## 세션 작업 이력
 
+### 2026-07-01 ~ 2026-07-03
+
+#### 종합 코드 리뷰 리포트 36개 항목 전량 조치 완료
+
+**리뷰 실행 (2026-07-01)**
+- `code-review-orchestrator` 하네스로 아키텍처·보안·성능·스타일 4개 영역 병렬 감사 실행
+- 결과: 종합 44/100(F등급), Critical 2 / High 10 / Medium 14 / Low 10, 총 36개 액션 아이템
+- 리포트 원본: `_review/archive/secretary_test-20260701/` (조치 완료 후 아카이브로 이동, `01_architecture.md`~`05_review_report.md`)
+
+**조치 내역 (커밋 순서대로, `#`는 리포트 항목 번호)**
+1. `f85d193` — **Critical 보안 3건**: 비밀번호 bcrypt 해싱 + 로그인 시도 제한(#2, #26), `expo-secure-store` API 키 마이그레이션(#5), Pyannote HTTPS 강제(#25), LoginScreen 자격증명 UI `__DEV__` 가드(#3), `.env` 실키 제거(#1)
+2. `a1a4c3d` — 성능·아키텍처(#7~12): `ScheduleScreen` 이중 load 제거, `Animated.loop` cleanup, `useSwipeClose` 훅 추출, `MeetingScreen` AI 프롬프트를 `claude.js`로 이동, `ClientScreen` Map 인덱싱
+3. `4bb0e4d` — 성능(#13~18): 달력/일정 `useMemo`, AI 요약 캐시, `ClockDisplay` 분리, API 키·공급자 인메모리 캐싱
+4. `5092772`·`81db1d6`·`b64c187` — 아키텍처(#19~21): `MeetingScreen`→`useAudioRecording`/`useDiarization`, `ProjectScreen`→`useProjectAI`/`useProjectForm`, `ClientScreen`→`ClientHistorySection` 컴포넌트 분리
+5. `6c2efcb` — 스타일(#22~24): `src/utils/colors.js` 색상 함수 통합, `SettingsScreen` API 키 핸들러 팩토리화, `storage.js` `saveAndReturnUser()` 통합
+6. `49e2959` — 보안(#4): `switchAccount()` 전환 전 현재 비밀번호 재인증 추가
+7. `ace1e1b`~`a89290f` — 아키텍처·스타일·성능(#31~36): `src/hooks/`·`src/utils/` 디렉토리 체계 완성, `ClientScreen` 변수명 개선, `todayStr()`/`countHint()` 중복 제거, 매직 넘버 상수화(`ONE_DAY_MS` 등), `App.js` 탭 lazy loading
+8. `b35c0a8`·`8387906`·`56ba632`·`ada28f8` — Low 백로그(#27~30): `storage.js` 세션 만료(24시간, `_sessionStart`), `safeParseJSON()` 헬퍼로 전체 `JSON.parse` 안전화, `buildClientSystem()` 거래처 연락처 PII 토큰화, `src/context/UserContext.js` 신설로 `user` prop 드릴링/`getCurrentUser()` 직접 호출 혼용 해소
+
+**검증 방식**: 각 커밋마다 `npx eslint` 0 errors + `npx expo export --platform android` 번들 컴파일 성공을 확인 후 커밋. 최종적으로 36/36 항목이 실제 코드에 반영되어 있음을 직접 grep 재검증 완료.
+
 ### 2026-06-29
 
 #### ADR 5개 작성 (`docs/adr/`)
