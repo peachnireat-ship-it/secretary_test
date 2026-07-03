@@ -91,8 +91,13 @@ export function getTestAccounts() {
   return TEST_ACCOUNTS.map(({ id, email, name, role, team }) => ({ id, email, name, role, team }));
 }
 
-export async function switchAccount(accountId) {
+export async function switchAccount(accountId, currentPassword) {
   if (!__DEV__) throw new Error('계정 전환은 개발 모드에서만 사용 가능합니다.');
+  const current = await getCurrentUser();
+  const currentAccount = current && TEST_ACCOUNTS.find((a) => a.id === current.id);
+  if (!currentAccount || !bcrypt.compareSync(currentPassword || '', currentAccount.passwordHash)) {
+    throw new Error('현재 계정 비밀번호가 일치하지 않습니다.');
+  }
   const account = TEST_ACCOUNTS.find((a) => a.id === accountId);
   if (!account) throw new Error('계정을 찾을 수 없습니다.');
   return saveAndReturnUser(account);

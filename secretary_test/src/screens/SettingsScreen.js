@@ -50,6 +50,10 @@ export default function SettingsScreen({ user, onUserChange }) {
   const [editContact, setEditContact] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
+  const [switchTarget, setSwitchTarget] = useState(null);
+  const [switchPassword, setSwitchPassword] = useState('');
+  const [switchError, setSwitchError] = useState('');
+
   useEffect(() => {
     getApiKey().then((k) => { if (k) setApiKeyState(k); });
     getGrokApiKey().then((k) => { if (k) setGrokApiKeyState(k); });
@@ -61,6 +65,19 @@ export default function SettingsScreen({ user, onUserChange }) {
   async function handleProviderChange(p) {
     setProviderState(p);
     await setAiProvider(p);
+  }
+
+  async function handleConfirmSwitch() {
+    if (!switchTarget) return;
+    try {
+      const u = await switchAccount(switchTarget.id, switchPassword);
+      setSwitchTarget(null);
+      setSwitchPassword('');
+      setSwitchError('');
+      onUserChange?.(u);
+    } catch (e) {
+      setSwitchError(e.message);
+    }
   }
 
   const { handleSave, handleClear } = createApiKeyHandlers({
@@ -325,10 +342,7 @@ export default function SettingsScreen({ user, onUserChange }) {
                 key={account.id}
                 style={[s.card, s.switchCard]}
                 activeOpacity={0.75}
-                onPress={() => Alert.alert('계정 전환', `${account.name}(${account.email}) 계정으로 전환하시겠습니까?`, [
-                  { text: '취소', style: 'cancel' },
-                  { text: '전환', onPress: async () => { const u = await switchAccount(account.id); onUserChange?.(u); } },
-                ])}
+                onPress={() => { setSwitchTarget(account); setSwitchPassword(''); setSwitchError(''); }}
               >
                 <View style={s.cardHeader}>
                   <View style={[s.accountAvatar, s.accountAvatarAlt]}>
@@ -381,6 +395,38 @@ export default function SettingsScreen({ user, onUserChange }) {
     </ScrollView>
 
       {/* ── 내 정보 수정 모달 ── */}
+      <Modal visible={!!switchTarget} animationType="slide" transparent onRequestClose={() => setSwitchTarget(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>계정 전환</Text>
+            <Text style={s.modalSubTitle}>{switchTarget?.name}({switchTarget?.email}) 계정으로 전환하려면 현재 계정({user?.name})의 비밀번호를 입력하세요.</Text>
+
+            <Text style={s.inputLabel}>현재 계정 비밀번호</Text>
+            <TextInput
+              style={s.profileInput}
+              value={switchPassword}
+              onChangeText={(v) => { setSwitchPassword(v); setSwitchError(''); }}
+              placeholder="비밀번호"
+              placeholderTextColor={C.textDim}
+              secureTextEntry
+              autoFocus
+              onSubmitEditing={handleConfirmSwitch}
+            />
+            {switchError ? <Text style={s.switchErrorText}>{switchError}</Text> : null}
+
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setSwitchTarget(null); setSwitchPassword(''); setSwitchError(''); }}>
+                <Text style={s.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalConfirm} onPress={handleConfirmSwitch}>
+                <Text style={s.modalConfirmText}>전환</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <Modal visible={showProfileEdit} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
           <View style={s.modalSheet}>
@@ -487,6 +533,7 @@ const s = StyleSheet.create({
   modalSubTitle: { color: C.textDim, fontSize: 12, marginBottom: 20 },
   inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 8 },
   profileInput: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12 },
+  switchErrorText: { color: C.red, fontSize: 12, marginTop: 8 },
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 24 },
   modalCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
