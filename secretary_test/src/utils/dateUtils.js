@@ -1,3 +1,5 @@
+export const ONE_DAY_MS = 86400000;
+
 // HomeScreen.todayStr, storage.todayStr 통합 (storage 쪽 offsetDays 파라미터로 흡수, 기본값 0이라 HomeScreen 호출부는 변경 없음)
 export function todayStr(offsetDays = 0) {
   const d = new Date();
@@ -16,7 +18,7 @@ export function daysUntil(deadlineStr) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const datePart = (deadlineStr || '').split(' ')[0];
-  return Math.round((new Date(datePart) - today) / 86400000);
+  return Math.round((new Date(datePart) - today) / ONE_DAY_MS);
 }
 
 // ScheduleScreen.daysLabel, ProjectScreen.daysLabel 통합 (완전 동일 로직)

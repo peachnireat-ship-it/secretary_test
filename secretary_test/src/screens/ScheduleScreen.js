@@ -1282,10 +1282,7 @@ function statusColor(status) {
 function getUrgency(deadlineStr, status) {
   if (status === '완료' || status === '취소') return 0;
   if (!deadlineStr) return 0;
-  const datePart = deadlineStr.split(' ')[0];
-  const t = new Date();
-  t.setHours(0, 0, 0, 0);
-  const days = Math.round((new Date(datePart) - t) / 86400000);
+  const days = daysUntil(deadlineStr);
   if (days < 0 || days > 7) return 0;
   if (days <= 3) return 2;
   return 1;

@@ -12,7 +12,7 @@ import { getClients, addClient, updateClient, saveClients, getHistories, getMeet
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
-import { formatDate } from '../utils/dateUtils';
+import { formatDate, ONE_DAY_MS } from '../utils/dateUtils';
 import { parseTranscriptSegments } from '../utils/transcript';
 import ClientHistorySection from '../components/ClientHistorySection';
 
@@ -877,7 +877,7 @@ function projDaysUntil(deadlineStr) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const d = new Date(deadlineStr);
-  return Math.round((d - today) / 86400000);
+  return Math.round((d - today) / ONE_DAY_MS);
 }
 
 function formatHistoryDate(dateStr) {

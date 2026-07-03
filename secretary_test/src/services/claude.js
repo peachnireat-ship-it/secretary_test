@@ -1,4 +1,5 @@
 import { getApiKey, getGrokApiKey, getAiProvider } from './storage';
+import { ONE_DAY_MS } from '../utils/dateUtils';
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROK_MODEL = 'grok-3';
@@ -111,7 +112,7 @@ export function buildProjectDelaySystem(projects, schedules) {
 
   const projectLines = projects.map((p) => {
     const deadline = new Date(p.deadline);
-    const diffDays = Math.round((deadline - today) / 86400000);
+    const diffDays = Math.round((deadline - today) / ONE_DAY_MS);
     const daysLabel = diffDays > 0 ? `마감 ${diffDays}일 후` : diffDays === 0 ? '오늘 마감' : `마감 ${Math.abs(diffDays)}일 초과`;
     const isAtRisk = p.status !== '완료' && p.status !== '취소' && (diffDays <= 7 && p.progress < 80);
     const riskFlag = isAtRisk ? ' ⚠️ 위험' : '';
@@ -120,7 +121,7 @@ export function buildProjectDelaySystem(projects, schedules) {
 
   const delayedCount = projects.filter((p) => p.status === '지연' || p.status === '위험').length;
   const overdueCount = projects.filter((p) => {
-    const diffDays = Math.round((new Date(p.deadline) - today) / 86400000);
+    const diffDays = Math.round((new Date(p.deadline) - today) / ONE_DAY_MS);
     return p.status !== '완료' && p.status !== '취소' && diffDays < 0;
   }).length;
 
