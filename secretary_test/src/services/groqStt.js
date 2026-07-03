@@ -43,6 +43,12 @@ function isValidSegment(s) {
   return (s.no_speech_prob ?? 0) < 0.6 && (s.avg_logprob ?? 0) > -1.0;
 }
 
+function buildCountHint(speakerCount) {
+  return speakerCount
+    ? `\n\n※ 이 회의 참석자는 총 ${speakerCount}명입니다. 반드시 ${speakerCount}명의 화자로만 구분하세요.`
+    : '';
+}
+
 export async function diarizeSegments(segments, speakerCount = null) {
   if (!segments?.length) return '';
 
@@ -52,9 +58,7 @@ export async function diarizeSegments(segments, speakerCount = null) {
     .filter((l) => l)
     .join('\n');
 
-  const countHint = speakerCount
-    ? `\n\n※ 이 회의 참석자는 총 ${speakerCount}명입니다. 반드시 ${speakerCount}명의 화자로만 구분하세요.`
-    : '';
+  const countHint = buildCountHint(speakerCount);
 
   return askClaude(
     [{ role: 'user', content: input }],
@@ -83,9 +87,7 @@ export async function rediarizeTranscript(transcriptText, speakerCount = null) {
 
   if (!rawText) return transcriptText;
 
-  const countHint = speakerCount
-    ? `\n\n※ 이 회의 참석자는 총 ${speakerCount}명입니다. 반드시 ${speakerCount}명의 화자로만 구분하세요.`
-    : '';
+  const countHint = buildCountHint(speakerCount);
 
   return askClaude(
     [{ role: 'user', content: rawText }],
