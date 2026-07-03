@@ -3,10 +3,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { Text, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useEffect } from 'react';
 import { C } from './src/theme';
 import LoginScreen from './src/screens/LoginScreen';
-import { getCurrentUser } from './src/services/storage';
+import { UserProvider, useUser } from './src/context/UserContext';
 
 const Tab = createBottomTabNavigator();
 
@@ -20,7 +19,7 @@ const ICONS = {
   설정: { active: '◎', inactive: '◎' },
 };
 
-function TabNavigator({ user, onUserChange }) {
+function TabNavigator() {
   const insets = useSafeAreaInsets();
 
   return (
@@ -45,23 +44,19 @@ function TabNavigator({ user, onUserChange }) {
       })}
     >
       {/* getComponent/require()로 실제 탭 방문 시점까지 화면 모듈 로딩을 미룬다 (eager import 시 앱 시작 시 8개 화면 전부 즉시 실행됨) */}
-      <Tab.Screen name="홈">{(props) => { const Screen = require('./src/screens/HomeScreen').default; return <Screen {...props} user={user} />; }}</Tab.Screen>
+      <Tab.Screen name="홈" getComponent={() => require('./src/screens/HomeScreen').default} />
       <Tab.Screen name="일정" getComponent={() => require('./src/screens/ScheduleScreen').default} />
       <Tab.Screen name="거래처" getComponent={() => require('./src/screens/ClientScreen').default} />
       <Tab.Screen name="프로젝트" getComponent={() => require('./src/screens/ProjectScreen').default} />
-      <Tab.Screen name="메세지">{(props) => { const Screen = require('./src/screens/MessageScreen').default; return <Screen {...props} user={user} />; }}</Tab.Screen>
+      <Tab.Screen name="메세지" getComponent={() => require('./src/screens/MessageScreen').default} />
       <Tab.Screen name="회의록" getComponent={() => require('./src/screens/MeetingScreen').default} />
-      <Tab.Screen name="설정">{(props) => { const Screen = require('./src/screens/SettingsScreen').default; return <Screen {...props} user={user} onUserChange={onUserChange} />; }}</Tab.Screen>
+      <Tab.Screen name="설정" getComponent={() => require('./src/screens/SettingsScreen').default} />
     </Tab.Navigator>
   );
 }
 
-export default function App() {
-  const [user, setUser] = useState(undefined);
-
-  useEffect(() => {
-    getCurrentUser().then((u) => setUser(u || null));
-  }, []);
+function AppContent() {
+  const { user, setUser } = useUser();
 
   if (user === undefined) {
     return (
@@ -86,9 +81,17 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer>
         <StatusBar style="light" />
-        <TabNavigator key={user?.id} user={user} onUserChange={(u) => setUser(u)} />
+        <TabNavigator key={user.id} />
       </NavigationContainer>
     </SafeAreaProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <UserProvider>
+      <AppContent />
+    </UserProvider>
   );
 }
 

@@ -74,14 +74,14 @@ const [loading, setLoading] = useState(false);
 useFocusEffect(useCallback(() => { load(); }, []));
 
 async function load() {
-  const user = await getCurrentUser();
-  const items = await getItems(user.id);
+  const items = await getItems();
   setData(items);
 }
 ```
 
 - `useFocusEffect` 사용 — 탭 전환 시 최신 데이터 재조회
-- `getCurrentUser()` → `user.id` 로 사용자별 격리
+- 사용자별 데이터 격리는 `storage.js` 내부 `userKey()`가 자동 처리 — 화면에서 `user.id`를 직접 넘길 필요 없음
+- 화면에서 현재 로그인 사용자 정보(`name`/`team`/`id` 등)가 필요하면 `getCurrentUser()`를 직접 호출하지 말고 `src/context/UserContext.js`의 `useUser()` 훅을 사용 (`const { user, setUser } = useUser();`)
 
 ---
 

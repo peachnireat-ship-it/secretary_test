@@ -8,6 +8,7 @@ import { getSchedules, getClients, getProjects } from '../services/storage';
 import { watchLocation } from '../services/location';
 import { statusColor, tagColor } from '../utils/colors';
 import { todayStr } from '../utils/dateUtils';
+import { useUser } from '../context/UserContext';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
@@ -42,8 +43,9 @@ function ClockDisplay({ userName }) {
   );
 }
 
-export default function HomeScreen({ navigation, user }) {
+export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
 
   const [todaySchedules, setTodaySchedules] = useState([]);
   const [clientCount, setClientCount] = useState(0);

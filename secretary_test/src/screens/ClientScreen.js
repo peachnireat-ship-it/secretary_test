@@ -8,9 +8,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
-import { getClients, addClient, updateClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, getCurrentUser } from '../services/storage';
+import { getClients, addClient, updateClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
+import { useUser } from '../context/UserContext';
 import { priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
 import { formatDate, ONE_DAY_MS } from '../utils/dateUtils';
 import { parseTranscriptSegments } from '../utils/transcript';
@@ -20,6 +21,7 @@ const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '
 
 export default function ClientScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  const { user: currentUser } = useUser();
   const [clients, setClients] = useState([]);
   const [histories, setHistories] = useState([]);
   const [meetingRecords, setMeetingRecords] = useState([]);
@@ -62,7 +64,7 @@ export default function ClientScreen({ navigation, route }) {
   const [loaded, setLoaded] = useState(false);
 
   async function load() {
-    const [allClients, allHistories, allMeetingRecords, allProjects, favoriteIds, currentUser] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects(), getClientFavorites(), getCurrentUser()]);
+    const [allClients, allHistories, allMeetingRecords, allProjects, favoriteIds] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects(), getClientFavorites()]);
     const filtered = currentUser ? allClients.filter((cl) => !(cl.name === currentUser.name && cl.company === currentUser.team)) : allClients;
     setClients(filtered);
     setHistories(allHistories);

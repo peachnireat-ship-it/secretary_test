@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getTestAccounts, switchAccount, getUserProfile, saveUserProfile } from '../services/storage';
+import { useUser } from '../context/UserContext';
 
 // API 키 마스킹 표시 (앞 6자 + ••• + 뒤 4자), 9자 이하 또는 masked=false면 원문 그대로
 function maskApiKey(key, masked) {
@@ -31,8 +32,9 @@ function createApiKeyHandlers({ label, key, setKeyState, saveKey, setSavedState 
   return { handleSave, handleClear };
 }
 
-export default function SettingsScreen({ user, onUserChange }) {
+export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const { user, setUser } = useUser();
   const [provider, setProviderState] = useState('groq');
   const [apiKey, setApiKeyState] = useState('');
   const [saved, setSaved] = useState(false);
@@ -74,7 +76,7 @@ export default function SettingsScreen({ user, onUserChange }) {
       setSwitchTarget(null);
       setSwitchPassword('');
       setSwitchError('');
-      onUserChange?.(u);
+      setUser(u);
     } catch (e) {
       setSwitchError(e.message);
     }
@@ -361,7 +363,7 @@ export default function SettingsScreen({ user, onUserChange }) {
             style={[s.logoutBtn, s.mt10]}
             onPress={() => Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
               { text: '취소', style: 'cancel' },
-              { text: '로그아웃', style: 'destructive', onPress: async () => { await logout(); onUserChange?.(null); } },
+              { text: '로그아웃', style: 'destructive', onPress: async () => { await logout(); setUser(null); } },
             ])}
             activeOpacity={0.8}
           >

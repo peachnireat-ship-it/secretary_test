@@ -7,9 +7,10 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, getClients, getMeetingRecords, getCurrentUser, addClient } from '../services/storage';
+import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, getClients, getMeetingRecords, addClient } from '../services/storage';
 import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
+import { useUser } from '../context/UserContext';
 import { priorityColor, tagColor } from '../utils/colors';
 import { daysUntil, daysLabel } from '../utils/dateUtils';
 
@@ -50,7 +51,7 @@ export default function ScheduleScreen({ navigation, route }) {
   const [calMonth, setCalMonth] = useState(today.getMonth() + 1);
 
   const [clients, setClients] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useUser();
   const [meetingRecords, setMeetingRecords] = useState([]);
   const [showProjectView, setShowProjectView] = useState(false);
   const [viewProject, setViewProject] = useState(null);
@@ -147,12 +148,11 @@ export default function ScheduleScreen({ navigation, route }) {
   ).current;
 
   async function load() {
-    const [allSchedules, allProjects, allClients, allRecords, user] = await Promise.all([getSchedules(), getProjects(), getClients(), getMeetingRecords(), getCurrentUser()]);
+    const [allSchedules, allProjects, allClients, allRecords] = await Promise.all([getSchedules(), getProjects(), getClients(), getMeetingRecords()]);
     setSchedules(allSchedules);
     setProjects(allProjects);
     setClients(allClients);
     setMeetingRecords(allRecords);
-    setCurrentUser(user);
   }
 
   useEffect(() => {

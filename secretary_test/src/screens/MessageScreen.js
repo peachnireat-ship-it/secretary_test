@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getMessages, addMessage, addMessageForUser, updateMessage, updateMessageForUser, deleteMessage, getTestAccounts, getClients } from '../services/storage';
+import { useUser } from '../context/UserContext';
 
 const PRIORITIES = ['긴급', '일반', '낮음'];
 const STATUSES = ['미확인', '확인', '처리중', '완료'];
@@ -33,8 +34,9 @@ function timeAgo(ts) {
   return `${Math.floor(h / 24)}일 전`;
 }
 
-export default function MessageScreen({ user }) {
+export default function MessageScreen() {
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
   const [messages, setMessages] = useState([]);
   const [box, setBox] = useState('received');
   const [filter, setFilter] = useState('전체');
