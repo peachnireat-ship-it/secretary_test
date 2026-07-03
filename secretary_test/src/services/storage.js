@@ -37,6 +37,9 @@ const TEST_ACCOUNTS = [
 
 let _cachedUser = null;
 
+// 세션 만료: 마지막 로그인/전환 시점 기준 24시간 경과 시 자동 로그아웃 처리
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
 // ── 로그인 시도 제한 (인메모리, 앱 재시작 시 초기화) ─────────
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 30 * 1000;
@@ -68,7 +71,7 @@ function resetLoginAttempts(email) {
 async function saveAndReturnUser(account) {
   const user = { id: account.id, email: account.email, name: account.name, role: account.role, team: account.team };
   _cachedUser = user;
-  await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify(user));
+  await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify({ ...user, _sessionStart: Date.now() }));
   return user;
 }
 
@@ -107,7 +110,13 @@ export async function switchAccount(accountId, currentPassword) {
 export async function getCurrentUser() {
   if (_cachedUser) return _cachedUser;
   const raw = await AsyncStorage.getItem(KEYS.currentUser);
-  _cachedUser = raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+  const { _sessionStart, ...user } = JSON.parse(raw);
+  if (_sessionStart && Date.now() - _sessionStart > SESSION_TTL_MS) {
+    await logout();
+    return null;
+  }
+  _cachedUser = user;
   return _cachedUser;
 }
 
