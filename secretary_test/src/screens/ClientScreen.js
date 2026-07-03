@@ -8,12 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
-import { getClients, addClient, updateClient, saveClients, getHistories, addHistory, updateHistory, deleteHistory, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, getCurrentUser } from '../services/storage';
+import { getClients, addClient, updateClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, getCurrentUser } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
-import { typeColor, priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
-
-const HISTORY_TYPES = ['미팅', '통화', '이메일', '계약', '기타'];
+import { priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
+import ClientHistorySection from '../components/ClientHistorySection';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
 
@@ -49,13 +48,6 @@ export default function ClientScreen({ navigation, route }) {
   const [newContact, setNewContact] = useState('');
   const [newWorkContact, setNewWorkContact] = useState('');
   const [newNotes, setNewNotes] = useState('');
-
-  const [showAddHistory, setShowAddHistory] = useState(false);
-  const [editingHistory, setEditingHistory] = useState(null);
-  const [hType, setHType] = useState('미팅');
-  const [hTitle, setHTitle] = useState('');
-  const [hContent, setHContent] = useState('');
-  const [hResult, setHResult] = useState('');
 
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
@@ -130,10 +122,6 @@ export default function ClientScreen({ navigation, route }) {
     !contactSearch || c.name?.includes(contactSearch)
   );
 
-  const clientHistories = selectedClient
-    ? histories.filter((h) => h.clientId === selectedClient.id).sort((a, b) => b.createdAt - a.createdAt)
-    : [];
-
   async function handlePickFromContacts() {
     setShowSourcePicker(false);
     setContactLoading(true);
@@ -204,49 +192,9 @@ export default function ClientScreen({ navigation, route }) {
     setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewNotes('');
   }
 
-  async function handleAddHistory() {
-    if (!hTitle.trim() || !selectedClient) return;
-    const today = new Date().toISOString().split('T')[0];
-    const updated = await addHistory({ clientId: selectedClient.id, date: today, type: hType, title: hTitle.trim(), content: hContent.trim(), result: hResult.trim() });
+  function handleHistoriesChange(updated) {
     setHistories(updated);
-    setShowAddHistory(false);
-    setHTitle(''); setHContent(''); setHResult(''); setHType('미팅');
     fetchClientSummary(selectedClient, updated);
-  }
-
-  function openEditHistory(h) {
-    setEditingHistory(h);
-    setHType(h.type);
-    setHTitle(h.title);
-    setHContent(h.content || '');
-    setHResult(h.result || '');
-  }
-
-  async function handleEditHistory() {
-    if (!hTitle.trim() || !editingHistory) return;
-    const updated = await updateHistory(editingHistory.id, { type: hType, title: hTitle.trim(), content: hContent.trim(), result: hResult.trim() });
-    setHistories(updated);
-    setEditingHistory(null);
-    setHTitle(''); setHContent(''); setHResult(''); setHType('미팅');
-    fetchClientSummary(selectedClient, updated);
-  }
-
-  function confirmDeleteHistory(h) {
-    Alert.alert(
-      '히스토리 삭제',
-      `"${h.title}" 기록을 삭제하시겠습니까?`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '삭제', style: 'destructive',
-          onPress: async () => {
-            const updated = await deleteHistory(h.id);
-            setHistories(updated);
-            fetchClientSummary(selectedClient, updated);
-          },
-        },
-      ]
-    );
   }
 
   async function handleAIChat() {
@@ -438,7 +386,7 @@ export default function ClientScreen({ navigation, route }) {
               <Text style={s.sourceIcon}>✏️</Text>
               <Text style={s.sourceOptionText}>직접 입력</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[s.sourceOption, { borderBottomWidth: 0 }]} onPress={handlePickFromContacts}>
+            <TouchableOpacity style={[s.sourceOption, s.noBorderBottom]} onPress={handlePickFromContacts}>
               <Text style={s.sourceIcon}>📱</Text>
               <Text style={s.sourceOptionText}>연락처에서 가져오기</Text>
             </TouchableOpacity>
@@ -594,51 +542,7 @@ export default function ClientScreen({ navigation, route }) {
               );
             })()}
 
-            {/* 히스토리 */}
-            <View style={s.historyHeader}>
-              <Text style={s.historyTitle}>히스토리 {clientHistories.length}건</Text>
-              <TouchableOpacity style={s.addHistoryBtn} onPress={() => setShowAddHistory(true)}>
-                <Text style={s.addHistoryText}>+ 추가</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={s.flex1} showsVerticalScrollIndicator={false}>
-              {clientHistories.length === 0 ? (
-                <Text style={s.emptyText}>기록된 히스토리가 없습니다</Text>
-              ) : (
-                clientHistories.map((h, i) => (
-                  <View key={h.id} style={s.historyItem}>
-                    <View style={s.historyLeft}>
-                      <Text style={s.historyDate}>{formatHistoryDate(h.date)}</Text>
-                      {i < clientHistories.length - 1 && <View style={s.historyLine} />}
-                    </View>
-                    <View style={s.historyRight}>
-                      <View style={s.historyMeta}>
-                        <View style={[s.typeBadge, { backgroundColor: typeColor(h.type) + '22', borderColor: typeColor(h.type) + '55' }]}>
-                          <Text style={[s.typeText, { color: typeColor(h.type) }]}>{h.type}</Text>
-                        </View>
-                        <Text style={s.historyTitleText}>{h.title}</Text>
-                        <View style={s.historyActionRow}>
-                          <TouchableOpacity onPress={() => openEditHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                            <Text style={s.editHistoryBtn}>편집</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={() => confirmDeleteHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                            <Text style={s.deleteHistoryBtn}>삭제</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                      {h.content ? <Text style={s.historyContent}>{h.content}</Text> : null}
-                      {h.result ? (
-                        <View style={s.resultRow}>
-                          <Text style={s.resultLabel}>결과</Text>
-                          <Text style={s.resultText}>{h.result}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </View>
-                ))
-              )}
-
+            <ClientHistorySection client={selectedClient} histories={histories} onHistoriesChange={handleHistoriesChange}>
               {/* 연결된 회의록 */}
               {(() => {
                 const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));
@@ -658,85 +562,9 @@ export default function ClientScreen({ navigation, route }) {
                   </View>
                 );
               })()}
-            </ScrollView>
+            </ClientHistorySection>
           </Animated.View>
         </View>
-      </Modal>
-
-      {/* ── 히스토리 추가 모달 ── */}
-      <Modal visible={showAddHistory} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>히스토리 추가</Text>
-            <Text style={s.modalSubTitle}>{selectedClient?.company} — {selectedClient?.name}</Text>
-
-            <Text style={s.inputLabel}>유형</Text>
-            <View style={s.tagRow}>
-              {HISTORY_TYPES.map((t) => (
-                <TouchableOpacity key={t} style={[s.tagOption, hType === t && s.tagOptionActive]} onPress={() => setHType(t)}>
-                  <Text style={[s.tagOptionText, hType === t && s.tagOptionTextActive]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={s.inputLabel}>제목</Text>
-            <TextInput style={s.input} value={hTitle} onChangeText={setHTitle} placeholder="미팅/연락 제목" placeholderTextColor={C.textDim} />
-
-            <Text style={s.inputLabel}>내용</Text>
-            <TextInput style={[s.input, { height: 72 }]} value={hContent} onChangeText={setHContent} placeholder="논의 내용" placeholderTextColor={C.textDim} multiline />
-
-            <Text style={s.inputLabel}>결과</Text>
-            <TextInput style={s.input} value={hResult} onChangeText={setHResult} placeholder="결과 또는 다음 액션" placeholderTextColor={C.textDim} />
-
-            <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => setShowAddHistory(false)}>
-                <Text style={s.modalCancelText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalConfirm} onPress={handleAddHistory}>
-                <Text style={s.modalConfirmText}>저장</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ── 히스토리 수정 모달 ── */}
-      <Modal visible={!!editingHistory} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>히스토리 수정</Text>
-            <Text style={s.modalSubTitle}>{selectedClient?.company} — {selectedClient?.name}</Text>
-
-            <Text style={s.inputLabel}>유형</Text>
-            <View style={s.tagRow}>
-              {HISTORY_TYPES.map((t) => (
-                <TouchableOpacity key={t} style={[s.tagOption, hType === t && s.tagOptionActive]} onPress={() => setHType(t)}>
-                  <Text style={[s.tagOptionText, hType === t && s.tagOptionTextActive]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={s.inputLabel}>제목</Text>
-            <TextInput style={s.input} value={hTitle} onChangeText={setHTitle} placeholder="미팅/연락 제목" placeholderTextColor={C.textDim} />
-
-            <Text style={s.inputLabel}>내용</Text>
-            <TextInput style={[s.input, { height: 72 }]} value={hContent} onChangeText={setHContent} placeholder="논의 내용" placeholderTextColor={C.textDim} multiline />
-
-            <Text style={s.inputLabel}>결과</Text>
-            <TextInput style={s.input} value={hResult} onChangeText={setHResult} placeholder="결과 또는 다음 액션" placeholderTextColor={C.textDim} />
-
-            <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => { setEditingHistory(null); setHTitle(''); setHContent(''); setHResult(''); setHType('미팅'); }}>
-                <Text style={s.modalCancelText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalConfirm} onPress={handleEditHistory}>
-                <Text style={s.modalConfirmText}>저장</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── 거래처 수정 모달 ── */}
@@ -1112,6 +940,7 @@ const s = StyleSheet.create({
   fabText: { color: '#fff', fontSize: 26, lineHeight: 30 },
   sourceSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
   sourceOption: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+  noBorderBottom: { borderBottomWidth: 0 },
   sourceIcon: { fontSize: 20, width: 28, textAlign: 'center' },
   sourceOptionText: { color: C.textPrimary, fontSize: 16 },
   contactItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
@@ -1157,26 +986,7 @@ const s = StyleSheet.create({
   projectChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10 },
   projectChipDot: { width: 5, height: 5, borderRadius: 3 },
   projectChipText: { fontSize: 11, fontWeight: '500', maxWidth: 160 },
-  historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  historyTitle: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600' },
-  addHistoryBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: C.accentTeal + '55', backgroundColor: C.accentTeal + '11' },
-  addHistoryText: { color: C.accentTeal, fontSize: 11 },
   emptyText: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingTop: 20 },
-  historyItem: { flexDirection: 'row', gap: 14, marginBottom: 4 },
-  historyLeft: { alignItems: 'center', width: 72 },
-  historyDate: { color: C.textDim, fontSize: 10, textAlign: 'center', lineHeight: 16 },
-  historyLine: { width: 1, flex: 1, backgroundColor: C.border, marginTop: 6 },
-  historyRight: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, marginBottom: 10, gap: 6 },
-  historyMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
-  typeText: { fontSize: 10, fontWeight: '500' },
-  historyTitleText: { color: C.textPrimary, fontSize: 13, flex: 1 },
-  editHistoryBtn: { color: C.textDim, fontSize: 11 },
-  deleteHistoryBtn: { color: C.red, fontSize: 11 },
-  historyContent: { color: C.textSecondary, fontSize: 12, lineHeight: 18 },
-  resultRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
-  resultLabel: { color: C.gold, fontSize: 10, fontWeight: '600', marginTop: 1 },
-  resultText: { color: C.textDim, fontSize: 12, flex: 1 },
 
   // Project detail modal
   projDetailHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
@@ -1197,16 +1007,10 @@ const s = StyleSheet.create({
 
   // Add modals
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
-  modalSubTitle: { color: C.textDim, fontSize: 12, marginBottom: 16 },
   inputLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 16, marginBottom: 8 },
   inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5 },
   requiredMark: { color: C.accentTeal, fontSize: 12, lineHeight: 14 },
   input: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tagOption: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-  tagOptionActive: { borderColor: C.accentTeal + '88', backgroundColor: C.accentTeal + '22' },
-  tagOptionText: { color: C.textDim, fontSize: 12 },
-  tagOptionTextActive: { color: C.accentTeal },
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 24 },
   modalCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
@@ -1254,7 +1058,6 @@ const s = StyleSheet.create({
   // Row layouts
   nameStarRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   editCloseRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  historyActionRow: { marginLeft: 'auto', flexDirection: 'row', gap: 10 },
   projDeadlineRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   // Borders
   borderBottom: { borderBottomWidth: 1, borderBottomColor: C.border },
