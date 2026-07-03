@@ -26,6 +26,16 @@ const KEYS = {
   userProfile: 'user_profile_v1',
 };
 
+// 손상된 저장 데이터(수동 편집, 앱 강제 종료 중 쓰기 실패 등)로 인한 크래시 방지
+function safeParseJSON(raw) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 const TEST_ACCOUNTS = [
   { id: 'test', email: 'test@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '테스트 계정', role: 'tester', team: '개발팀' },
   { id: 'admin', email: 'admin@secretary.app', passwordHash: bcrypt.hashSync('admin1234', 10), name: '관리자', role: 'admin', team: '운영팀' },
@@ -110,8 +120,9 @@ export async function switchAccount(accountId, currentPassword) {
 export async function getCurrentUser() {
   if (_cachedUser) return _cachedUser;
   const raw = await AsyncStorage.getItem(KEYS.currentUser);
-  if (!raw) return null;
-  const { _sessionStart, ...user } = JSON.parse(raw);
+  const stored = safeParseJSON(raw);
+  if (!stored) return null;
+  const { _sessionStart, ...user } = stored;
   if (_sessionStart && Date.now() - _sessionStart > SESSION_TTL_MS) {
     await logout();
     return null;
@@ -200,7 +211,8 @@ async function userKey(base) {
 export async function getSchedules() {
   const key = await userKey(KEYS.schedules);
   const raw = await AsyncStorage.getItem(key);
-  if (raw) return JSON.parse(raw);
+  const parsed = safeParseJSON(raw);
+  if (parsed) return parsed;
   const sample = getSampleSchedules();
   await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
@@ -236,7 +248,8 @@ export async function updateSchedule(id, fields) {
 export async function getClients() {
   const key = await userKey(KEYS.clients);
   const raw = await AsyncStorage.getItem(key);
-  if (raw) return JSON.parse(raw);
+  const parsed = safeParseJSON(raw);
+  if (parsed) return parsed;
   const sample = getSampleClients();
   await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
@@ -265,7 +278,8 @@ export async function updateClient(id, fields) {
 export async function getHistories() {
   const key = await userKey(KEYS.histories);
   const raw = await AsyncStorage.getItem(key);
-  if (raw) return JSON.parse(raw);
+  const parsed = safeParseJSON(raw);
+  if (parsed) return parsed;
   const sample = getSampleHistories();
   await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
@@ -306,7 +320,8 @@ export async function getHistoriesByClient(clientId) {
 export async function getProjects() {
   const key = await userKey(KEYS.projects);
   const raw = await AsyncStorage.getItem(key);
-  if (raw) return JSON.parse(raw);
+  const parsed = safeParseJSON(raw);
+  if (parsed) return parsed;
   const sample = getSampleProjects();
   await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
@@ -342,7 +357,8 @@ export async function deleteProject(id) {
 export async function getMessages() {
   const key = await userKey(KEYS.messages);
   const raw = await AsyncStorage.getItem(key);
-  if (raw) return JSON.parse(raw);
+  const parsed = safeParseJSON(raw);
+  if (parsed) return parsed;
   const sample = getSampleMessages();
   await AsyncStorage.setItem(key, JSON.stringify(sample));
   return sample;
@@ -363,7 +379,7 @@ export async function addMessage(message) {
 export async function addMessageForUser(userId, message) {
   const key = `${KEYS.messages}_${userId}`;
   const raw = await AsyncStorage.getItem(key);
-  const list = raw ? JSON.parse(raw) : getSampleMessages();
+  const list = safeParseJSON(raw) || getSampleMessages();
   if (!raw) await AsyncStorage.setItem(key, JSON.stringify(list));
   const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...message }, ...list];
   await AsyncStorage.setItem(key, JSON.stringify(updated));
@@ -380,8 +396,8 @@ export async function updateMessage(id, changes) {
 export async function updateMessageForUser(userId, id, changes) {
   const key = `${KEYS.messages}_${userId}`;
   const raw = await AsyncStorage.getItem(key);
-  if (!raw) return;
-  const list = JSON.parse(raw);
+  const list = safeParseJSON(raw);
+  if (!list) return;
   const updated = list.map((m) => (m.id === id ? { ...m, ...changes, updatedAt: Date.now() } : m));
   await AsyncStorage.setItem(key, JSON.stringify(updated));
 }
@@ -397,7 +413,7 @@ export async function deleteMessage(id) {
 export async function getMeetingRecords() {
   const key = await userKey(KEYS.meetingRecords);
   const raw = await AsyncStorage.getItem(key);
-  return raw ? JSON.parse(raw) : [];
+  return safeParseJSON(raw) || [];
 }
 
 export async function saveMeetingRecords(records) {
@@ -438,7 +454,7 @@ export async function saveWorkTopics(text) {
 export async function getClientFavorites() {
   const key = await userKey(KEYS.clientFavorites);
   const raw = await AsyncStorage.getItem(key);
-  return raw ? JSON.parse(raw) : [];
+  return safeParseJSON(raw) || [];
 }
 
 export async function toggleClientFavorite(clientId) {
@@ -457,7 +473,7 @@ export async function getUserProfile() {
   if (!user) return null;
   const key = `${KEYS.userProfile}_${user.id}`;
   const raw = await AsyncStorage.getItem(key);
-  const ext = raw ? JSON.parse(raw) : {};
+  const ext = safeParseJSON(raw) || {};
   return { contact: '', notes: '', ...user, ...ext };
 }
 
@@ -466,7 +482,7 @@ export async function saveUserProfile(fields) {
   if (!user) return;
   const key = `${KEYS.userProfile}_${user.id}`;
   const raw = await AsyncStorage.getItem(key);
-  const current = raw ? JSON.parse(raw) : {};
+  const current = safeParseJSON(raw) || {};
   await AsyncStorage.setItem(key, JSON.stringify({ ...current, ...fields }));
 }
 
