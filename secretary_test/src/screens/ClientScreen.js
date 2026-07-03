@@ -62,13 +62,13 @@ export default function ClientScreen({ navigation, route }) {
   const [loaded, setLoaded] = useState(false);
 
   async function load() {
-    const [c, h, m, p, favs, me] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects(), getClientFavorites(), getCurrentUser()]);
-    const filtered = me ? c.filter((cl) => !(cl.name === me.name && cl.company === me.team)) : c;
+    const [allClients, allHistories, allMeetingRecords, allProjects, favoriteIds, currentUser] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects(), getClientFavorites(), getCurrentUser()]);
+    const filtered = currentUser ? allClients.filter((cl) => !(cl.name === currentUser.name && cl.company === currentUser.team)) : allClients;
     setClients(filtered);
-    setHistories(h);
-    setMeetingRecords(m);
-    setProjects(p);
-    setFavorites(favs);
+    setHistories(allHistories);
+    setMeetingRecords(allMeetingRecords);
+    setProjects(allProjects);
+    setFavorites(favoriteIds);
     setLoaded(true);
   }
 
