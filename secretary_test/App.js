@@ -5,13 +5,6 @@ import { Text, View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { C } from './src/theme';
-import HomeScreen from './src/screens/HomeScreen';
-import ScheduleScreen from './src/screens/ScheduleScreen';
-import ClientScreen from './src/screens/ClientScreen';
-import ProjectScreen from './src/screens/ProjectScreen';
-import MessageScreen from './src/screens/MessageScreen';
-import MeetingScreen from './src/screens/MeetingScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import { getCurrentUser } from './src/services/storage';
 
@@ -34,6 +27,7 @@ function TabNavigator({ user, onUserChange }) {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        lazy: true,
         tabBarStyle: {
           backgroundColor: C.surface,
           borderTopColor: C.border,
@@ -50,13 +44,14 @@ function TabNavigator({ user, onUserChange }) {
         ),
       })}
     >
-      <Tab.Screen name="홈">{(props) => <HomeScreen {...props} user={user} />}</Tab.Screen>
-      <Tab.Screen name="일정" component={ScheduleScreen} />
-      <Tab.Screen name="거래처" component={ClientScreen} />
-      <Tab.Screen name="프로젝트" component={ProjectScreen} />
-      <Tab.Screen name="메세지">{(props) => <MessageScreen {...props} user={user} />}</Tab.Screen>
-      <Tab.Screen name="회의록" component={MeetingScreen} />
-      <Tab.Screen name="설정">{(props) => <SettingsScreen {...props} user={user} onUserChange={onUserChange} />}</Tab.Screen>
+      {/* getComponent/require()로 실제 탭 방문 시점까지 화면 모듈 로딩을 미룬다 (eager import 시 앱 시작 시 8개 화면 전부 즉시 실행됨) */}
+      <Tab.Screen name="홈">{(props) => { const Screen = require('./src/screens/HomeScreen').default; return <Screen {...props} user={user} />; }}</Tab.Screen>
+      <Tab.Screen name="일정" getComponent={() => require('./src/screens/ScheduleScreen').default} />
+      <Tab.Screen name="거래처" getComponent={() => require('./src/screens/ClientScreen').default} />
+      <Tab.Screen name="프로젝트" getComponent={() => require('./src/screens/ProjectScreen').default} />
+      <Tab.Screen name="메세지">{(props) => { const Screen = require('./src/screens/MessageScreen').default; return <Screen {...props} user={user} />; }}</Tab.Screen>
+      <Tab.Screen name="회의록" getComponent={() => require('./src/screens/MeetingScreen').default} />
+      <Tab.Screen name="설정">{(props) => { const Screen = require('./src/screens/SettingsScreen').default; return <Screen {...props} user={user} onUserChange={onUserChange} />; }}</Tab.Screen>
     </Tab.Navigator>
   );
 }
