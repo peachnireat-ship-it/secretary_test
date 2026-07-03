@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
 import bcrypt from 'bcryptjs';
+import { todayStr } from '../utils/dateUtils';
 
 // Hermes/Expo Go 환경에는 global.crypto.getRandomValues 도, Node crypto 모듈도 없어
 // bcryptjs가 salt용 난수를 얻지 못하고 모듈 로드 시점(TEST_ACCOUNTS 해싱)에 즉시 throw한다.
@@ -496,12 +497,6 @@ export async function setPyannoteUrl(url) {
 }
 
 // ── Sample Data ───────────────────────────────────────────
-function todayStr(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function getSampleSchedules() {
   return [
     { id: '1', date: todayStr(0), time: '10:00', title: '팀 스탠드업', tag: '회의', notes: '주간 진행 상황 공유', createdAt: Date.now() },

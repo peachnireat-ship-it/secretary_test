@@ -7,6 +7,7 @@ import { C } from '../theme';
 import { getSchedules, getClients, getProjects } from '../services/storage';
 import { watchLocation } from '../services/location';
 import { statusColor, tagColor } from '../utils/colors';
+import { todayStr } from '../utils/dateUtils';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
@@ -39,11 +40,6 @@ function ClockDisplay({ userName }) {
       <Text style={s.dateText}>{dateLabel} {hh}:{mm}</Text>
     </>
   );
-}
-
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export default function HomeScreen({ navigation, user }) {

@@ -1,3 +1,10 @@
+// HomeScreen.todayStr, storage.todayStr 통합 (storage 쪽 offsetDays 파라미터로 흡수, 기본값 0이라 HomeScreen 호출부는 변경 없음)
+export function todayStr(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ClientScreen.formatDate, MeetingScreen.formatDate 통합 (완전 동일 로직)
 export function formatDate(ms) {
   const d = new Date(ms);
