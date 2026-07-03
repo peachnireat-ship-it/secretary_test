@@ -238,6 +238,11 @@ export function normalizeAIDates(text) {
   return text.replace(/(\d{4})[-./](\d{2})[-./](\d{2})/g, '$1년 $2월 $3일');
 }
 
+// 연락처는 AI 응답 생성에 실제 값이 필요 없으므로(존재 여부만 유의미) 토큰으로 치환 후 전송
+function tokenizeContact(contact) {
+  return contact ? '[연락처 등록됨]' : '[연락처 없음]';
+}
+
 export function buildClientSystem(clients, histories) {
   const clientList = clients
     .map((c) => {
@@ -245,7 +250,7 @@ export function buildClientSystem(clients, histories) {
         .filter((h) => h.clientId === c.id)
         .sort((a, b) => b.createdAt - a.createdAt);
       const lastContact = cHistory[0]?.date ? fmtDate(cHistory[0].date) : '기록 없음';
-      return `## ${c.company} — ${c.name} (${c.role})\n연락처: ${c.contact}\n메모: ${c.notes}\n마지막 연락: ${lastContact}\n히스토리:\n${cHistory.map((h) => `  - [${fmtDate(h.date)}] ${h.type}: ${h.title} → 결과: ${h.result}`).join('\n') || '  (없음)'}`;
+      return `## ${c.company} — ${c.name} (${c.role})\n연락처: ${tokenizeContact(c.contact)}\n메모: ${c.notes}\n마지막 연락: ${lastContact}\n히스토리:\n${cHistory.map((h) => `  - [${fmtDate(h.date)}] ${h.type}: ${h.title} → 결과: ${h.result}`).join('\n') || '  (없음)'}`;
     })
     .join('\n\n');
 
