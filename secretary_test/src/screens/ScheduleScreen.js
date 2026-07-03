@@ -254,9 +254,15 @@ export default function ScheduleScreen({ navigation, route }) {
 
   async function handleAdd() {
     if (!newTitle.trim()) return;
-    const scheduleDate = newStartDate.trim().length === 10 ? newStartDate.trim() : selectedDate;
-    const startDateStr = newStartDate.trim() ? `${newStartDate.trim()} ${to24h(newStartAmPm, newStartTime)}` : '';
-    const endDateStr = newEndDate.trim() ? `${newEndDate.trim()} ${to24h(newEndAmPm, newEndTime)}` : '';
+    const startTrim = newStartDate.trim();
+    const endTrim = newEndDate.trim();
+    if (startTrim.length === 10 && endTrim.length === 10 && endTrim < startTrim) {
+      Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
+      return;
+    }
+    const scheduleDate = startTrim.length === 10 ? startTrim : selectedDate;
+    const startDateStr = startTrim ? `${startTrim} ${to24h(newStartAmPm, newStartTime)}` : '';
+    const endDateStr = endTrim ? `${endTrim} ${to24h(newEndAmPm, newEndTime)}` : '';
     const updated = await addSchedule({ date: scheduleDate, time: to24h(newStartAmPm, newStartTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: startDateStr, endDate: endDateStr });
     setSchedules(updated);
     setShowAdd(false);
@@ -297,10 +303,16 @@ export default function ScheduleScreen({ navigation, route }) {
 
   async function handleEditSave() {
     if (!editTitle.trim()) return;
-    const scheduleDate = editStartDate.trim().length === 10 ? editStartDate.trim() : viewSchedule.date;
-    const saved24h = editStartDate.trim() ? to24h(editStartAmPm, editStartTime) : to24h(editAmPm, editTime);
-    const startDateStr = editStartDate.trim() ? `${editStartDate.trim()} ${to24h(editStartAmPm, editStartTime)}` : '';
-    const endDateStr = editEndDate.trim() ? `${editEndDate.trim()} ${to24h(editEndAmPm, editEndTime)}` : '';
+    const editStartTrim = editStartDate.trim();
+    const editEndTrim = editEndDate.trim();
+    if (editStartTrim.length === 10 && editEndTrim.length === 10 && editEndTrim < editStartTrim) {
+      Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
+      return;
+    }
+    const scheduleDate = editStartTrim.length === 10 ? editStartTrim : viewSchedule.date;
+    const saved24h = editStartTrim ? to24h(editStartAmPm, editStartTime) : to24h(editAmPm, editTime);
+    const startDateStr = editStartTrim ? `${editStartTrim} ${to24h(editStartAmPm, editStartTime)}` : '';
+    const endDateStr = editEndTrim ? `${editEndTrim} ${to24h(editEndAmPm, editEndTime)}` : '';
     const updated = await updateSchedule(viewSchedule.id, {
       date: scheduleDate,
       title: editTitle.trim(),
