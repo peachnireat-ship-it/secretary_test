@@ -12,20 +12,11 @@ import { getClients, addClient, updateClient, saveClients, getHistories, getMeet
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
+import { formatDate } from '../utils/dateUtils';
+import { parseTranscriptSegments } from '../utils/transcript';
 import ClientHistorySection from '../components/ClientHistorySection';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
-
-function parseTranscriptSegments(text) {
-  if (!text) return [];
-  const regex = /\[([^\]\n]+)\]([\s\S]*?)(?=\n*\[|$)/g;
-  const segments = [];
-  let m;
-  while ((m = regex.exec(text)) !== null) {
-    segments.push({ speaker: m[1], text: m[2].trim() });
-  }
-  return segments;
-}
 
 export default function ClientScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -887,11 +878,6 @@ function projDaysUntil(deadlineStr) {
   today.setHours(0, 0, 0, 0);
   const d = new Date(deadlineStr);
   return Math.round((d - today) / 86400000);
-}
-
-function formatDate(ms) {
-  const d = new Date(ms);
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatHistoryDate(dateStr) {

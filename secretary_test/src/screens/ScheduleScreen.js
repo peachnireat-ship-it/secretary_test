@@ -11,6 +11,7 @@ import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects,
 import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { priorityColor, tagColor } from '../utils/colors';
+import { daysUntil, daysLabel } from '../utils/dateUtils';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -1271,19 +1272,6 @@ function projDayLabel(proj, date) {
   if (dl === date) return { text: '마감', color: C.gold };
   const days = daysUntil(proj.deadline);
   return { text: `D-${days}`, color: C.accentBlue };
-}
-
-function daysUntil(deadlineStr) {
-  const t = new Date();
-  t.setHours(0, 0, 0, 0);
-  const datePart = (deadlineStr || '').split(' ')[0];
-  return Math.round((new Date(datePart) - t) / 86400000);
-}
-
-function daysLabel(days) {
-  if (days > 0) return `${days}일 후 마감`;
-  if (days === 0) return '오늘 마감';
-  return `${Math.abs(days)}일 초과`;
 }
 
 function statusColor(status) {

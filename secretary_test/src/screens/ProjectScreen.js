@@ -13,19 +13,10 @@ import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
 import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectForm';
 import { statusColor, priorityColor } from '../utils/colors';
+import { daysUntil, daysLabel } from '../utils/dateUtils';
+import { parseTranscriptSegments } from '../utils/transcript';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
-
-function parseTranscriptSegments(text) {
-  if (!text) return [];
-  const regex = /\[([^\]\n]+)\]([\s\S]*?)(?=\n*\[|$)/g;
-  const segments = [];
-  let m;
-  while ((m = regex.exec(text)) !== null) {
-    segments.push({ speaker: m[1], text: m[2].trim() });
-  }
-  return segments;
-}
 
 function extractSpeakers(text) {
   const found = new Set();
@@ -59,21 +50,6 @@ function buildTranscriptFromSegments(segments) {
 const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
 const PRIORITIES = ['높음', '보통', '낮음'];
 const FILTERS = ['전체', '진행중', '위험', '지연', '완료'];
-
-function daysUntil(deadlineStr) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const datePart = (deadlineStr || '').split(' ')[0];
-  const d = new Date(datePart);
-  return Math.round((d - today) / 86400000);
-}
-
-function daysLabel(days) {
-  if (days > 0) return `${days}일 후 마감`;
-  if (days === 0) return '오늘 마감';
-  return `${Math.abs(days)}일 초과`;
-}
-
 
 function isAtRisk(project) {
   if (project.status === '완료' || project.status === '취소') return false;

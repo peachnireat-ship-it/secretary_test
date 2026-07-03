@@ -12,11 +12,7 @@ import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeeting
 import { projectStatusColor as statusColor, typeColor as histTypeColor } from '../utils/colors';
 import { useAudioRecording, formatTime } from '../hooks/useAudioRecording';
 import { useDiarization, applyNames, parseTranscriptSegments, mergeConsecutiveSegments } from '../hooks/useDiarization';
-
-function formatDate(ms) {
-  const d = new Date(ms);
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
-}
+import { formatDate } from '../utils/dateUtils';
 
 function formatDateTime(ms) {
   const d = new Date(ms);
