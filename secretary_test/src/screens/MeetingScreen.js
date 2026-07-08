@@ -1617,9 +1617,14 @@ const s = StyleSheet.create({
   copyBtn: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
   transcriptText: { color: C.textPrimary, fontSize: 14, lineHeight: 24, padding: 18 },
   // 제목 입력 모달
+  // 웹에서 Modal은 document.body로 포탈되어 App.js의 480px 폭 제한을 벗어나므로 여기서 다시 맞춘다
   modalOverlay: { flex: 1, backgroundColor: '#000000AA' },
-  modalScrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 40 },
-  modalBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16 },
+  modalScrollContent: Platform.OS === 'web'
+    ? { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 40 }
+    : { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 40 },
+  modalBox: Platform.OS === 'web'
+    ? { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16, width: '100%', maxWidth: 480 }
+    : { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16 },
   modalTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '500', letterSpacing: 0.3 },
   modalInput: {
     backgroundColor: C.bg, borderWidth: 1, borderColor: C.borderHigh,
@@ -1679,8 +1684,12 @@ const s = StyleSheet.create({
   linkedPersonDeleteBtn: { width: 22, height: 22, borderRadius: 11, backgroundColor: C.border, alignItems: 'center', justifyContent: 'center' },
   linkedPersonDeleteText: { color: C.textDim, fontSize: 14, lineHeight: 20 },
   // 인물 상세 모달
-  personModalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  personModalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, height: '90%' },
+  personModalOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center' }
+    : { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  personModalSheet: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, height: '90%', width: '100%', maxWidth: 480 }
+    : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, height: '90%' },
   personModalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   personDetailHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   personDetailAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
@@ -1729,8 +1738,12 @@ const s = StyleSheet.create({
     borderRadius: 8, paddingVertical: 11, alignItems: 'center',
   },
   newClientRegBtnText: { color: C.accentTeal, fontSize: 13, fontWeight: '500' },
-  newClientModalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  newClientModalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, maxHeight: '90%' },
+  newClientModalOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center' }
+    : { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  newClientModalSheet: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, maxHeight: '90%', width: '100%', maxWidth: 480 }
+    : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, maxHeight: '90%' },
   newClientModalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   newClientModalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
   newClientInputLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 16, marginBottom: 8 },
@@ -1821,11 +1834,19 @@ const s = StyleSheet.create({
     paddingVertical: 5, paddingHorizontal: 6,
   },
   segmentEditBtnText: { color: C.gold, fontSize: 11, fontWeight: '500' },
-  segModalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
-  segModalBox: {
-    backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    borderWidth: 1, borderColor: C.borderHigh, maxHeight: '88%', paddingTop: 20,
-  },
+  segModalOverlay: Platform.OS === 'web'
+    ? { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end', alignItems: 'center' }
+    : { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
+  segModalBox: Platform.OS === 'web'
+    ? {
+        backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        borderWidth: 1, borderColor: C.borderHigh, maxHeight: '88%', paddingTop: 20,
+        width: '100%', maxWidth: 480,
+      }
+    : {
+        backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        borderWidth: 1, borderColor: C.borderHigh, maxHeight: '88%', paddingTop: 20,
+      },
   segModalHeader: { paddingHorizontal: 24, paddingBottom: 16, gap: 6 },
   segModalScroll: { flexGrow: 0 },
   segModalFooter: { paddingHorizontal: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: C.border },
@@ -1905,7 +1926,9 @@ const s = StyleSheet.create({
   opacity40: { opacity: 0.4 },
   speakerInputFixed: { width: 64, flex: 0 },
   flex1: { flex: 1 },
-  modalOverlayCentered: { justifyContent: 'center', paddingHorizontal: 32 },
+  modalOverlayCentered: Platform.OS === 'web'
+    ? { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }
+    : { justifyContent: 'center', paddingHorizontal: 32 },
   mb4: { marginBottom: 4 },
   addPersonBtnRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   cancelBtnCompact: { flex: 0, marginTop: 4 },

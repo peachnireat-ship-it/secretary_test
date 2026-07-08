@@ -1383,8 +1383,12 @@ const s = StyleSheet.create({
   segmentEditBtn: { borderWidth: 1, borderColor: C.gold + '55', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 8, marginLeft: 6, marginTop: 2 },
   segmentEditBtnText: { color: C.gold, fontSize: 12, fontWeight: '500' },
 
-  speakerModalScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 40 },
-  speakerModalBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16 },
+  speakerModalScroll: Platform.OS === 'web'
+    ? { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 40 }
+    : { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 40 },
+  speakerModalBox: Platform.OS === 'web'
+    ? { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16, width: '100%', maxWidth: 480 }
+    : { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16 },
   speakerModalTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '500', letterSpacing: 0.3 },
   speakerModalSubtitle: { color: C.textDim, fontSize: 12, letterSpacing: 0.3, marginTop: -8 },
   speakerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1411,8 +1415,12 @@ const s = StyleSheet.create({
   clientRegBtnText: { color: C.textDim, fontSize: 11, fontWeight: '500' },
   clientRegBtnTextActive: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
 
-  segModalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
-  segModalBox: { backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: C.borderHigh, maxHeight: '88%', paddingTop: 20 },
+  segModalOverlay: Platform.OS === 'web'
+    ? { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end', alignItems: 'center' }
+    : { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
+  segModalBox: Platform.OS === 'web'
+    ? { backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: C.borderHigh, maxHeight: '88%', paddingTop: 20, width: '100%', maxWidth: 480 }
+    : { backgroundColor: C.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: C.borderHigh, maxHeight: '88%', paddingTop: 20 },
   segModalHeader: { paddingHorizontal: 24, paddingBottom: 16, gap: 6 },
   segModalScroll: { flexGrow: 0 },
   segModalFooter: { paddingHorizontal: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: C.border },
@@ -1434,9 +1442,15 @@ const s = StyleSheet.create({
   clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },
   clientAddBtn: { backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 8, paddingVertical: 11, alignItems: 'center' },
   clientAddBtnText: { color: C.accentBlue, fontSize: 13, fontWeight: '500' },
-  contentEditOverlay: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },
-  contentEditScroll: { flexGrow: 1, justifyContent: 'center' },
-  contentEditBox: { backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 24 },
+  contentEditOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 }
+    : { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },
+  contentEditScroll: Platform.OS === 'web'
+    ? { flexGrow: 1, justifyContent: 'center', alignItems: 'center' }
+    : { flexGrow: 1, justifyContent: 'center' },
+  contentEditBox: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 24, width: '100%', maxWidth: 480 }
+    : { backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 24 },
   contentEditInput: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: C.textPrimary, fontSize: 13, lineHeight: 20, minHeight: 100, maxHeight: 220 },
   meetingDetailDate: { color: C.textDim, fontSize: 11, marginTop: 4 },
   meetingDetailSection: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 14, marginBottom: 4 },
@@ -1450,8 +1464,13 @@ const s = StyleSheet.create({
   fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
   fabText: { color: '#09090E', fontSize: 26, lineHeight: 30, fontWeight: '300' },
 
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  modalSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
+  // 웹에서 Modal은 document.body로 포탈되어 App.js의 480px 폭 제한을 벗어나므로 여기서 다시 맞춘다
+  modalOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center' }
+    : { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalSheet: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, width: '100%', maxWidth: 480 }
+    : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
   modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 2 },
@@ -1520,8 +1539,12 @@ const s = StyleSheet.create({
   ampmBtnText: { color: C.textDim, fontSize: 13 },
   ampmBtnTextActive: { color: C.gold, fontWeight: '600' },
 
-  qsOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  qsSheet: { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 24, alignItems: 'center' },
+  qsOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center' }
+    : { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  qsSheet: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 24, alignItems: 'center', width: '100%', maxWidth: 480 }
+    : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 24, alignItems: 'center' },
   qsValue: { color: C.textPrimary, fontSize: 48, fontWeight: '200', letterSpacing: -2, marginBottom: 4 },
   qsSlider: { width: '100%', height: 44, marginBottom: 12 },
 
@@ -1549,7 +1572,9 @@ const s = StyleSheet.create({
   mt20: { marginTop: 20 },
   spacerH20: { height: 20 },
   speakerInputFixed: { width: 64, flex: 0 },
-  modalOverlayCentered: { justifyContent: 'center', paddingHorizontal: 32 },
+  modalOverlayCentered: Platform.OS === 'web'
+    ? { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }
+    : { justifyContent: 'center', paddingHorizontal: 32 },
   borderBottom: { borderBottomWidth: 1, borderBottomColor: C.border },
   ml12: { marginLeft: 12 },
   progressLabelSpacing: { marginTop: 4, marginBottom: 12 },
