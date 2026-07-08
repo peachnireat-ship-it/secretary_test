@@ -374,6 +374,14 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 **검증 방식**: 각 커밋마다 `npx eslint` 0 errors + `npx expo export --platform android` 번들 컴파일 성공을 확인 후 커밋. 최종적으로 36/36 항목이 실제 코드에 반영되어 있음을 직접 grep 재검증 완료.
 
+### 2026-07-03
+
+#### 프로젝트·일정 폼 입력 검증 버그 수정
+
+- `eef6e6f` — `useProjectForm.js`: `handleAdd()`/`handleEditSave()`에서 제목·마감일시 미입력 시 저장 버튼을 눌러도 조용히 무시되던 문제 수정, Alert로 필수 입력 항목 안내
+- `7d78ad6` — `useProjectForm.js`: 시작일시가 입력된 경우 마감일시 날짜가 시작일시보다 이전이면 저장 차단 + Alert 안내
+- `7b86e08` — `ScheduleScreen.js`: 기간 일정도 동일하게 시작일시·마감일시가 모두 완전한 날짜로 입력된 경우 마감일시가 시작일시보다 이전이면 저장 차단(ProjectScreen과 동일 검증 적용)
+
 ### 2026-06-29
 
 #### ADR 5개 작성 (`docs/adr/`)
