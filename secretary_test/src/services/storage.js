@@ -1,27 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import * as Crypto from 'expo-crypto';
-import bcrypt from 'bcryptjs';
-import { todayStr } from '../utils/dateUtils';
-
-// Hermes/Expo Go 환경에는 global.crypto.getRandomValues 도, Node crypto 모듈도 없어
-// bcryptjs가 salt용 난수를 얻지 못하고 모듈 로드 시점(TEST_ACCOUNTS 해싱)에 즉시 throw한다.
-// expo-crypto의 동기 네이티브 난수 API를 fallback으로 등록해 앱 크래시를 방지한다.
-bcrypt.setRandomFallback((len) => Array.from(Crypto.getRandomBytes(len)));
+import { supabase } from './supabaseClient';
 
 const KEYS = {
+  apiKey: 'claude_api_key',
+  grokApiKey: 'grok_api_key',
+  aiProvider: 'ai_provider',
+  pyannoteUrl: 'pyannote_url',
+};
+
+// 마이그레이션 전 기기 로컬(AsyncStorage)에 남아있던 예전 키 — migrateLocalDataToCloud()에서만 참조
+const LEGACY_KEYS = {
   schedules: 'schedules_v1',
   clients: 'clients_v1',
   histories: 'histories_v1',
   projects: 'projects_v1',
   messages: 'messages_v3',
-  apiKey: 'claude_api_key',
-  grokApiKey: 'grok_api_key',
-  aiProvider: 'ai_provider',
   meetingRecords: 'meeting_records_v1',
   workTopics: 'work_topics_v1',
-  pyannoteUrl: 'pyannote_url',
-  currentUser: 'current_user_v1',
   clientFavorites: 'client_favorites_v1',
   userProfile: 'user_profile_v1',
 };
@@ -36,19 +32,38 @@ function safeParseJSON(raw) {
   }
 }
 
-const TEST_ACCOUNTS = [
-  { id: 'test', email: 'test@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '테스트 계정', role: 'tester', team: '개발팀' },
-  { id: 'admin', email: 'admin@secretary.app', passwordHash: bcrypt.hashSync('admin1234', 10), name: '관리자', role: 'admin', team: '운영팀' },
-  { id: 'kmj', email: 'kmj@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '김민준', role: '구매팀장', team: '삼성물산' },
-  { id: 'lsy', email: 'lsy@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '이서연', role: '기획팀 과장', team: '현대건설' },
-  { id: 'pjh', email: 'pjh@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '박지훈', role: '영업이사', team: 'LG전자' },
-  { id: 'csa', email: 'csa@secretary.app', passwordHash: bcrypt.hashSync('test1234', 10), name: '최수아', role: '마케팅 팀장', team: 'SK텔레콤' },
+// Supabase Auth의 UUID는 계정마다 새로 발급되므로, seed 스크립트 실행 후 나온 값을 붙여넣어 둔다.
+// legacyId는 마이그레이션(migrateLocalDataToCloud)에서 예전 AsyncStorage 키(`_${legacyId}`)를 찾을 때만 사용.
+const ROSTER = [
+  { id: 'f42080f8-343f-42d5-9377-0efa8701fed3', legacyId: 'test', email: 'test@secretary.app', name: '테스트 계정', role: 'tester', team: '개발팀' },
+  { id: '6309db8f-0c79-4773-b4b0-ae3ae4b33c84', legacyId: 'admin', email: 'admin@secretary.app', name: '관리자', role: 'admin', team: '운영팀' },
+  { id: '20ac9bc4-efef-45ed-b091-b204eba4e231', legacyId: 'kmj', email: 'kmj@secretary.app', name: '김민준', role: '구매팀장', team: '삼성물산' },
+  { id: 'f9ebdb42-0273-4753-bdf7-d78b48455cf9', legacyId: 'lsy', email: 'lsy@secretary.app', name: '이서연', role: '기획팀 과장', team: '현대건설' },
+  { id: '55dc6288-622b-464e-a1e2-25f683394fb9', legacyId: 'pjh', email: 'pjh@secretary.app', name: '박지훈', role: '영업이사', team: 'LG전자' },
+  { id: '356c2bca-09c1-4b25-8aab-a71f532e974a', legacyId: 'csa', email: 'csa@secretary.app', name: '최수아', role: '마케팅 팀장', team: 'SK텔레콤' },
 ];
+
+// __DEV__ 전용 계정 전환(switchAccount)에서만 사용 — 이미 LoginScreen __DEV__ 자동입력 버튼과
+// CLAUDE.md에 공개된 고정 테스트 비밀번호라 노출 위험이 없다.
+const DEV_PASSWORDS = {
+  test: 'test1234', admin: 'admin1234', kmj: 'test1234', lsy: 'test1234', pjh: 'test1234', csa: 'test1234',
+};
+
+function findRoster({ id, legacyId }) {
+  return ROSTER.find((r) => (id ? r.id === id : r.legacyId === legacyId));
+}
+
+function rosterToUser({ id, email, name, role, team }) {
+  return { id, email, name, role, team };
+}
 
 let _cachedUser = null;
 
-// 세션 만료: 마지막 로그인/전환 시점 기준 24시간 경과 시 자동 로그아웃 처리
-const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+async function hydrateUserFromSession(session) {
+  if (!session?.user) return null;
+  const entry = findRoster({ id: session.user.id });
+  return entry ? rosterToUser(entry) : null;
+}
 
 // ── 로그인 시도 제한 (인메모리, 앱 재시작 시 초기화) ─────────
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -77,63 +92,51 @@ function resetLoginAttempts(email) {
   _loginAttempts.delete(email);
 }
 
-// login/switchAccount 공통 로직: 계정 정보를 유저 객체로 변환해 캐시·저장 후 반환
-async function saveAndReturnUser(account) {
-  const user = { id: account.id, email: account.email, name: account.name, role: account.role, team: account.team };
-  _cachedUser = user;
-  await AsyncStorage.setItem(KEYS.currentUser, JSON.stringify({ ...user, _sessionStart: Date.now() }));
-  return user;
-}
-
 export async function login(email, password) {
   assertNotLocked(email);
-  const account = TEST_ACCOUNTS.find((a) => a.email === email);
-  if (!account || !bcrypt.compareSync(password, account.passwordHash)) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
     recordLoginFailure(email);
     throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
   }
   resetLoginAttempts(email);
-  return saveAndReturnUser(account);
+  _cachedUser = await hydrateUserFromSession(data.session);
+  return _cachedUser;
 }
 
 export async function logout() {
+  await supabase.auth.signOut();
   _cachedUser = null;
-  await AsyncStorage.removeItem(KEYS.currentUser);
 }
 
 export function getTestAccounts() {
-  return TEST_ACCOUNTS.map(({ id, email, name, role, team }) => ({ id, email, name, role, team }));
+  return ROSTER.map(rosterToUser);
 }
 
 export async function switchAccount(accountId, currentPassword) {
   if (!__DEV__) throw new Error('계정 전환은 개발 모드에서만 사용 가능합니다.');
   const current = await getCurrentUser();
-  const currentAccount = current && TEST_ACCOUNTS.find((a) => a.id === current.id);
-  if (!currentAccount || !bcrypt.compareSync(currentPassword || '', currentAccount.passwordHash)) {
-    throw new Error('현재 계정 비밀번호가 일치하지 않습니다.');
-  }
-  const account = TEST_ACCOUNTS.find((a) => a.id === accountId);
-  if (!account) throw new Error('계정을 찾을 수 없습니다.');
-  return saveAndReturnUser(account);
+  const currentEntry = current && findRoster({ id: current.id });
+  if (!currentEntry) throw new Error('현재 계정 비밀번호가 일치하지 않습니다.');
+  const { error: verifyErr } = await supabase.auth.signInWithPassword({ email: currentEntry.email, password: currentPassword || '' });
+  if (verifyErr) throw new Error('현재 계정 비밀번호가 일치하지 않습니다.');
+  const target = findRoster({ id: accountId });
+  if (!target) throw new Error('계정을 찾을 수 없습니다.');
+  await supabase.auth.signOut();
+  const { data, error } = await supabase.auth.signInWithPassword({ email: target.email, password: DEV_PASSWORDS[target.legacyId] });
+  if (error) throw error;
+  _cachedUser = await hydrateUserFromSession(data.session);
+  return _cachedUser;
 }
 
 export async function getCurrentUser() {
   if (_cachedUser) return _cachedUser;
-  const raw = await AsyncStorage.getItem(KEYS.currentUser);
-  const stored = safeParseJSON(raw);
-  if (!stored) return null;
-  const { _sessionStart, ...user } = stored;
-  if (_sessionStart && Date.now() - _sessionStart > SESSION_TTL_MS) {
-    await logout();
-    return null;
-  }
-  _cachedUser = user;
+  const { data: { session } } = await supabase.auth.getSession();
+  _cachedUser = await hydrateUserFromSession(session);
   return _cachedUser;
 }
 
-// ── Groq API Key ──────────────────────────────────────────
-// 인메모리 캐시: undefined = 아직 조회 안 함, null = 조회 완료·키 없음, string = 키 값
-// (매 askClaude() 호출마다 SecureStore/AsyncStorage 재조회하는 것을 방지 — _cachedUser와 동일한 패턴)
+// ── Groq API Key (기기별 설정 — 마이그레이션 범위 밖, 변경 없음) ──
 let _cachedApiKey;
 
 export async function getApiKey() {
@@ -143,7 +146,6 @@ export async function getApiKey() {
     _cachedApiKey = stored;
     return stored;
   }
-  // migrate legacy AsyncStorage value on first access
   const legacy = await AsyncStorage.getItem(KEYS.apiKey);
   if (legacy) {
     await SecureStore.setItemAsync('groq_api_key_secure', legacy);
@@ -201,292 +203,346 @@ export async function setAiProvider(provider) {
   return AsyncStorage.setItem(KEYS.aiProvider, provider);
 }
 
-// ── Per-user key helper ──────────────────────────────────
-async function userKey(base) {
-  const user = await getCurrentUser();
-  return user ? `${base}_${user.id}` : base;
+// ── camelCase(JS) <-> snake_case(DB) 매핑 헬퍼 ────────────
+// defaults: bulk upsert(여러 행을 한 번에 insert)에서는 PostgREST가 각 행에 없는 키를
+// 컬럼 기본값이 아니라 NULL로 채우므로, NOT NULL 컬럼은 배치 전체에서 항상 값을 명시해야 한다.
+function toRow(obj, keymap, defaults = {}) {
+  const row = {};
+  for (const [jsKey, dbKey] of Object.entries(keymap)) {
+    if (obj[jsKey] !== undefined) row[dbKey] = obj[jsKey];
+    else if (Object.prototype.hasOwnProperty.call(defaults, dbKey)) row[dbKey] = defaults[dbKey];
+  }
+  return row;
 }
+
+function fromRow(row, keymap) {
+  const obj = { id: row.id };
+  for (const [jsKey, dbKey] of Object.entries(keymap)) {
+    obj[jsKey] = row[dbKey];
+  }
+  return obj;
+}
+
+const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', createdAt: 'created_at' };
+const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', notes: 'notes', createdAt: 'created_at' };
+const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', createdAt: 'created_at' };
+const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', createdAt: 'created_at', updatedAt: 'updated_at' };
+const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', createdAt: 'created_at' };
+const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'company', subject: 'subject', content: 'content', priority: 'priority', status: 'status', fromId: 'sender_id', toId: 'to_id', linkedReceivedId: 'linked_received_id', editHistory: 'edit_history', createdAt: 'created_at', updatedAt: 'updated_at' };
+
+// NOT NULL 컬럼 기본값 — 벌크 upsert 시 toRow()의 defaults 인자로 전달한다.
+const SCHEDULE_DEFAULTS = { notes: '', client_ids: [] };
+const CLIENT_DEFAULTS = { role: '', work_contact: '', notes: '' };
+const HISTORY_DEFAULTS = { content: '', result: '' };
+const PROJECT_DEFAULTS = { status: '진행중', priority: '보통', notes: '', progress: 0, client_ids: [], meeting_record_ids: [] };
+const MEETING_DEFAULTS = { transcript: '', summary: '', client_ids: [], tasks: [] };
+const MESSAGE_DEFAULTS = { sender: '', company: '', subject: '', content: '', priority: '일반', status: '미확인', edit_history: [] };
 
 // ── Schedules ────────────────────────────────────────────
 export async function getSchedules() {
-  const key = await userKey(KEYS.schedules);
-  const raw = await AsyncStorage.getItem(key);
-  const parsed = safeParseJSON(raw);
-  if (parsed) return parsed;
-  const sample = getSampleSchedules();
-  await AsyncStorage.setItem(key, JSON.stringify(sample));
-  return sample;
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('schedules').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map((r) => fromRow(r, SCHEDULE_KEYMAP));
 }
 
 export async function saveSchedules(schedules) {
-  const key = await userKey(KEYS.schedules);
-  await AsyncStorage.setItem(key, JSON.stringify(schedules));
+  const user = await getCurrentUser();
+  if (!user || !schedules.length) return;
+  const rows = schedules.map((s) => ({ id: s.id, user_id: user.id, ...toRow(s, SCHEDULE_KEYMAP, SCHEDULE_DEFAULTS) }));
+  const { error } = await supabase.from('schedules').upsert(rows);
+  if (error) throw error;
 }
 
 export async function addSchedule(schedule) {
-  const list = await getSchedules();
-  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...schedule }, ...list];
-  await saveSchedules(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const row = { id: schedule.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(schedule, SCHEDULE_KEYMAP) };
+  const { error } = await supabase.from('schedules').insert(row);
+  if (error) throw error;
+  return getSchedules();
 }
 
 export async function deleteSchedule(id) {
-  const list = await getSchedules();
-  const updated = list.filter((s) => s.id !== id);
-  await saveSchedules(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('schedules').delete().eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getSchedules();
 }
 
 export async function updateSchedule(id, fields) {
-  const list = await getSchedules();
-  const updated = list.map((s) => (s.id === id ? { ...s, ...fields } : s));
-  await saveSchedules(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('schedules').update(toRow(fields, SCHEDULE_KEYMAP)).eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getSchedules();
 }
 
 // ── Clients ───────────────────────────────────────────────
 export async function getClients() {
-  const key = await userKey(KEYS.clients);
-  const raw = await AsyncStorage.getItem(key);
-  const parsed = safeParseJSON(raw);
-  if (parsed) return parsed;
-  const sample = getSampleClients();
-  await AsyncStorage.setItem(key, JSON.stringify(sample));
-  return sample;
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('clients').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map((r) => fromRow(r, CLIENT_KEYMAP));
 }
 
 export async function saveClients(clients) {
-  const key = await userKey(KEYS.clients);
-  await AsyncStorage.setItem(key, JSON.stringify(clients));
+  const user = await getCurrentUser();
+  if (!user || !clients.length) return;
+  const rows = clients.map((c) => ({ id: c.id, user_id: user.id, ...toRow(c, CLIENT_KEYMAP, CLIENT_DEFAULTS) }));
+  const { error } = await supabase.from('clients').upsert(rows);
+  if (error) throw error;
 }
 
 export async function addClient(client) {
-  const list = await getClients();
-  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...client }, ...list];
-  await saveClients(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const row = { id: client.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(client, CLIENT_KEYMAP) };
+  const { error } = await supabase.from('clients').insert(row);
+  if (error) throw error;
+  return getClients();
 }
 
 export async function updateClient(id, fields) {
-  const list = await getClients();
-  const updated = list.map((c) => (c.id === id ? { ...c, ...fields } : c));
-  await saveClients(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('clients').update(toRow(fields, CLIENT_KEYMAP)).eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getClients();
 }
 
 // ── Histories ─────────────────────────────────────────────
 export async function getHistories() {
-  const key = await userKey(KEYS.histories);
-  const raw = await AsyncStorage.getItem(key);
-  const parsed = safeParseJSON(raw);
-  if (parsed) return parsed;
-  const sample = getSampleHistories();
-  await AsyncStorage.setItem(key, JSON.stringify(sample));
-  return sample;
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('histories').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map((r) => fromRow(r, HISTORY_KEYMAP));
 }
 
 export async function saveHistories(histories) {
-  const key = await userKey(KEYS.histories);
-  await AsyncStorage.setItem(key, JSON.stringify(histories));
+  const user = await getCurrentUser();
+  if (!user || !histories.length) return;
+  const rows = histories.map((h) => ({ id: h.id, user_id: user.id, ...toRow(h, HISTORY_KEYMAP, HISTORY_DEFAULTS) }));
+  const { error } = await supabase.from('histories').upsert(rows);
+  if (error) throw error;
 }
 
 export async function addHistory(history) {
-  const list = await getHistories();
-  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...history }, ...list];
-  await saveHistories(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const row = { id: history.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(history, HISTORY_KEYMAP) };
+  const { error } = await supabase.from('histories').insert(row);
+  if (error) throw error;
+  return getHistories();
 }
 
 export async function updateHistory(id, changes) {
-  const list = await getHistories();
-  const updated = list.map((h) => h.id === id ? { ...h, ...changes } : h);
-  await saveHistories(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('histories').update(toRow(changes, HISTORY_KEYMAP)).eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getHistories();
 }
 
 export async function deleteHistory(id) {
-  const list = await getHistories();
-  const updated = list.filter((h) => h.id !== id);
-  await saveHistories(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('histories').delete().eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getHistories();
 }
 
 export async function getHistoriesByClient(clientId) {
-  const all = await getHistories();
-  return all.filter((h) => h.clientId === clientId).sort((a, b) => b.createdAt - a.createdAt);
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('histories').select('*').eq('user_id', user.id).eq('client_id', clientId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map((r) => fromRow(r, HISTORY_KEYMAP));
 }
 
 // ── Projects ──────────────────────────────────────────────
 export async function getProjects() {
-  const key = await userKey(KEYS.projects);
-  const raw = await AsyncStorage.getItem(key);
-  const parsed = safeParseJSON(raw);
-  if (parsed) return parsed;
-  const sample = getSampleProjects();
-  await AsyncStorage.setItem(key, JSON.stringify(sample));
-  return sample;
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('projects').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map((r) => fromRow(r, PROJECT_KEYMAP));
 }
 
 export async function saveProjects(projects) {
-  const key = await userKey(KEYS.projects);
-  await AsyncStorage.setItem(key, JSON.stringify(projects));
+  const user = await getCurrentUser();
+  if (!user || !projects.length) return;
+  const rows = projects.map((p) => ({ id: p.id, user_id: user.id, ...toRow(p, PROJECT_KEYMAP, PROJECT_DEFAULTS) }));
+  const { error } = await supabase.from('projects').upsert(rows);
+  if (error) throw error;
 }
 
 export async function addProject(project) {
-  const list = await getProjects();
-  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...project }, ...list];
-  await saveProjects(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const row = { id: project.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(project, PROJECT_KEYMAP) };
+  const { error } = await supabase.from('projects').insert(row);
+  if (error) throw error;
+  return getProjects();
 }
 
 export async function updateProject(id, changes) {
-  const list = await getProjects();
-  const updated = list.map((p) => (p.id === id ? { ...p, ...changes, updatedAt: Date.now() } : p));
-  await saveProjects(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const row = { ...toRow(changes, PROJECT_KEYMAP), updated_at: Date.now() };
+  const { error } = await supabase.from('projects').update(row).eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getProjects();
 }
 
 export async function deleteProject(id) {
-  const list = await getProjects();
-  const updated = list.filter((p) => p.id !== id);
-  await saveProjects(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('projects').delete().eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getProjects();
 }
 
-// ── Messages ──────────────────────────────────────────────
+// ── Messages (교차 계정 배달: mailbox_owner_id로 조회, sender_id로 RLS 검증) ──
 export async function getMessages() {
-  const key = await userKey(KEYS.messages);
-  const raw = await AsyncStorage.getItem(key);
-  const parsed = safeParseJSON(raw);
-  if (parsed) return parsed;
-  const sample = getSampleMessages();
-  await AsyncStorage.setItem(key, JSON.stringify(sample));
-  return sample;
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('messages').select('*').eq('mailbox_owner_id', user.id).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map((r) => fromRow(r, MESSAGE_KEYMAP));
 }
 
 export async function saveMessages(messages) {
-  const key = await userKey(KEYS.messages);
-  await AsyncStorage.setItem(key, JSON.stringify(messages));
+  const user = await getCurrentUser();
+  if (!user || !messages.length) return;
+  const rows = messages.map((m) => ({ id: m.id, mailbox_owner_id: user.id, ...toRow(m, MESSAGE_KEYMAP, MESSAGE_DEFAULTS) }));
+  const { error } = await supabase.from('messages').upsert(rows);
+  if (error) throw error;
 }
 
 export async function addMessage(message) {
-  const list = await getMessages();
-  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...message }, ...list];
-  await saveMessages(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const row = { id: message.id || Date.now().toString(), mailbox_owner_id: user.id, created_at: Date.now(), ...toRow(message, MESSAGE_KEYMAP) };
+  const { error } = await supabase.from('messages').insert(row);
+  if (error) throw error;
+  return getMessages();
 }
 
 export async function addMessageForUser(userId, message) {
-  const key = `${KEYS.messages}_${userId}`;
-  const raw = await AsyncStorage.getItem(key);
-  const list = safeParseJSON(raw) || getSampleMessages();
-  if (!raw) await AsyncStorage.setItem(key, JSON.stringify(list));
-  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...message }, ...list];
-  await AsyncStorage.setItem(key, JSON.stringify(updated));
-  return updated;
+  const row = { id: message.id || Date.now().toString(), mailbox_owner_id: userId, created_at: Date.now(), ...toRow(message, MESSAGE_KEYMAP) };
+  const { error } = await supabase.from('messages').insert(row);
+  if (error) throw error;
 }
 
 export async function updateMessage(id, changes) {
-  const list = await getMessages();
-  const updated = list.map((m) => (m.id === id ? { ...m, ...changes, updatedAt: Date.now() } : m));
-  await saveMessages(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const row = { ...toRow(changes, MESSAGE_KEYMAP), updated_at: Date.now() };
+  const { error } = await supabase.from('messages').update(row).eq('id', id).eq('mailbox_owner_id', user.id);
+  if (error) throw error;
+  return getMessages();
 }
 
 export async function updateMessageForUser(userId, id, changes) {
-  const key = `${KEYS.messages}_${userId}`;
-  const raw = await AsyncStorage.getItem(key);
-  const list = safeParseJSON(raw);
-  if (!list) return;
-  const updated = list.map((m) => (m.id === id ? { ...m, ...changes, updatedAt: Date.now() } : m));
-  await AsyncStorage.setItem(key, JSON.stringify(updated));
+  const row = { ...toRow(changes, MESSAGE_KEYMAP), updated_at: Date.now() };
+  const { error } = await supabase.from('messages').update(row).eq('id', id).eq('mailbox_owner_id', userId);
+  if (error) throw error;
 }
 
 export async function deleteMessage(id) {
-  const list = await getMessages();
-  const updated = list.filter((m) => m.id !== id);
-  await saveMessages(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('messages').delete().eq('id', id).eq('mailbox_owner_id', user.id);
+  if (error) throw error;
+  return getMessages();
 }
 
 // ── Meeting Records ───────────────────────────────────────
 export async function getMeetingRecords() {
-  const key = await userKey(KEYS.meetingRecords);
-  const raw = await AsyncStorage.getItem(key);
-  return safeParseJSON(raw) || [];
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('meeting_records').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map((r) => fromRow(r, MEETING_KEYMAP));
 }
 
 export async function saveMeetingRecords(records) {
-  const key = await userKey(KEYS.meetingRecords);
-  await AsyncStorage.setItem(key, JSON.stringify(records));
+  const user = await getCurrentUser();
+  if (!user || !records.length) return;
+  const rows = records.map((r) => ({ id: r.id, user_id: user.id, ...toRow(r, MEETING_KEYMAP, MEETING_DEFAULTS) }));
+  const { error } = await supabase.from('meeting_records').upsert(rows);
+  if (error) throw error;
 }
 
 export async function addMeetingRecord(record) {
-  const list = await getMeetingRecords();
-  const updated = [{ id: Date.now().toString(), createdAt: Date.now(), ...record }, ...list];
-  await saveMeetingRecords(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const row = { id: record.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(record, MEETING_KEYMAP) };
+  const { error } = await supabase.from('meeting_records').insert(row);
+  if (error) throw error;
+  return getMeetingRecords();
 }
 
 export async function updateMeetingRecord(id, changes) {
-  const list = await getMeetingRecords();
-  const updated = list.map((r) => (r.id === id ? { ...r, ...changes } : r));
-  await saveMeetingRecords(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('meeting_records').update(toRow(changes, MEETING_KEYMAP)).eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getMeetingRecords();
 }
 
 export async function deleteMeetingRecord(id) {
-  const list = await getMeetingRecords();
-  const updated = list.filter((r) => r.id !== id);
-  await saveMeetingRecords(updated);
-  return updated;
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('meeting_records').delete().eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getMeetingRecords();
 }
 
+// ── Work Topics (계정별로 분리 — profiles.work_topics) ────
 export async function getWorkTopics() {
-  return (await AsyncStorage.getItem(KEYS.workTopics)) || '';
+  const user = await getCurrentUser();
+  if (!user) return '';
+  const { data, error } = await supabase.from('profiles').select('work_topics').eq('id', user.id).single();
+  if (error) throw error;
+  return data?.work_topics || '';
 }
 
 export async function saveWorkTopics(text) {
-  await AsyncStorage.setItem(KEYS.workTopics, text);
+  const user = await getCurrentUser();
+  if (!user) return;
+  const { error } = await supabase.from('profiles').update({ work_topics: text }).eq('id', user.id);
+  if (error) throw error;
 }
 
 // ── Client Favorites ──────────────────────────────────────
 export async function getClientFavorites() {
-  const key = await userKey(KEYS.clientFavorites);
-  const raw = await AsyncStorage.getItem(key);
-  return safeParseJSON(raw) || [];
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('client_favorites').select('client_id').eq('user_id', user.id);
+  if (error) throw error;
+  return data.map((r) => r.client_id);
 }
 
 export async function toggleClientFavorite(clientId) {
-  const key = await userKey(KEYS.clientFavorites);
+  const user = await getCurrentUser();
+  if (!user) return [];
   const current = await getClientFavorites();
-  const updated = current.includes(clientId)
-    ? current.filter((id) => id !== clientId)
-    : [...current, clientId];
-  await AsyncStorage.setItem(key, JSON.stringify(updated));
-  return updated;
+  if (current.includes(clientId)) {
+    const { error } = await supabase.from('client_favorites').delete().eq('user_id', user.id).eq('client_id', clientId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('client_favorites').insert({ user_id: user.id, client_id: clientId });
+    if (error) throw error;
+  }
+  return getClientFavorites();
 }
 
 // ── User Profile (extended) ───────────────────────────────
 export async function getUserProfile() {
   const user = await getCurrentUser();
   if (!user) return null;
-  const key = `${KEYS.userProfile}_${user.id}`;
-  const raw = await AsyncStorage.getItem(key);
-  const ext = safeParseJSON(raw) || {};
-  return { contact: '', notes: '', ...user, ...ext };
+  const { data, error } = await supabase.from('profiles').select('contact, notes').eq('id', user.id).single();
+  if (error) throw error;
+  return { contact: data?.contact || '', notes: data?.notes || '', ...user };
 }
 
 export async function saveUserProfile(fields) {
   const user = await getCurrentUser();
   if (!user) return;
-  const key = `${KEYS.userProfile}_${user.id}`;
-  const raw = await AsyncStorage.getItem(key);
-  const current = safeParseJSON(raw) || {};
-  await AsyncStorage.setItem(key, JSON.stringify({ ...current, ...fields }));
+  const { error } = await supabase.from('profiles').update(fields).eq('id', user.id);
+  if (error) throw error;
 }
 
-// ── Pyannote Server URL ───────────────────────────────────
+// ── Pyannote Server URL (기기별 설정 — 마이그레이션 범위 밖, 변경 없음) ──
 export async function getPyannoteUrl() {
   return AsyncStorage.getItem(KEYS.pyannoteUrl);
 }
@@ -521,60 +577,119 @@ export async function setPyannoteUrl(url) {
   return AsyncStorage.setItem(KEYS.pyannoteUrl, url);
 }
 
-// ── Sample Data ───────────────────────────────────────────
-function getSampleSchedules() {
-  return [
-    { id: '1', date: todayStr(0), time: '10:00', title: '팀 스탠드업', tag: '회의', notes: '주간 진행 상황 공유', createdAt: Date.now() },
-    { id: '2', date: todayStr(0), time: '14:00', title: '클라이언트 리뷰', tag: '회의', notes: '삼성물산 Q2 결과 검토', createdAt: Date.now() },
-    { id: '3', date: todayStr(0), time: '16:30', title: '주간 보고서 제출', tag: '업무', notes: '', createdAt: Date.now() },
-    { id: '4', date: todayStr(1), time: '09:30', title: '신규 거래처 미팅', tag: '영업', notes: '현대건설 담당자 첫 만남', createdAt: Date.now() },
-    { id: '5', date: todayStr(1), time: '15:00', title: '계약서 검토', tag: '업무', notes: '', createdAt: Date.now() },
-    { id: '6', date: todayStr(2), time: '11:00', title: '내부 전략 회의', tag: '회의', notes: '하반기 목표 수립', createdAt: Date.now() },
-  ];
+// ── 기존 모바일 로컬(AsyncStorage) 데이터 → 클라우드 1회성 업로드 ──
+function legacyIdToUuid(legacyIdOrUuid) {
+  const entry = findRoster({ legacyId: legacyIdOrUuid }) || ROSTER.find((r) => r.id === legacyIdOrUuid);
+  return entry ? entry.id : legacyIdOrUuid;
 }
 
-function getSampleClients() {
-  return [
-    { id: 'c1', name: '김민준', company: '삼성물산', role: '구매팀장', contact: '010-1234-5678', notes: '신뢰 높은 장기 거래처', createdAt: Date.now() - 86400000 * 30 },
-    { id: 'c2', name: '이서연', company: '현대건설', role: '기획팀 과장', contact: '010-9876-5432', notes: '신규 파트너 검토 중', createdAt: Date.now() - 86400000 * 7 },
-    { id: 'c3', name: '박지훈', company: 'LG전자', role: '영업이사', contact: '010-5555-7777', notes: '연간 계약 진행 중', createdAt: Date.now() - 86400000 * 60 },
-    { id: 'c4', name: '최수아', company: 'SK텔레콤', role: '마케팅 팀장', contact: '010-3333-9999', notes: '디지털 전환 프로젝트 논의', createdAt: Date.now() - 86400000 * 14 },
-  ];
+async function readLegacyList(base, legacyId) {
+  const raw = await AsyncStorage.getItem(`${base}_${legacyId}`);
+  return safeParseJSON(raw) || [];
 }
 
-function getSampleProjects() {
-  return [
-    { id: 'p1', title: '신규 ERP 시스템 도입', deadline: todayStr(5), status: '위험', progress: 35, priority: '높음', notes: '예산 승인 지연으로 착수 늦어짐', createdAt: Date.now() - 86400000 * 40 },
-    { id: 'p2', title: '삼성물산 Q3 제안서 작성', deadline: todayStr(3), status: '지연', progress: 60, priority: '높음', notes: '자료 수집 병목 발생', createdAt: Date.now() - 86400000 * 14 },
-    { id: 'p3', title: '팀 온보딩 프로세스 개선', deadline: todayStr(14), status: '진행중', progress: 55, priority: '보통', notes: '', createdAt: Date.now() - 86400000 * 20 },
-    { id: 'p4', title: 'SNS 마케팅 캠페인 기획', deadline: todayStr(21), status: '진행중', progress: 20, priority: '보통', notes: '디자인팀 일정 조율 필요', createdAt: Date.now() - 86400000 * 5 },
-    { id: 'p5', title: '2024 연간 계약 재검토', deadline: todayStr(-5), status: '지연', progress: 80, priority: '높음', notes: '법무팀 검토 대기 중', createdAt: Date.now() - 86400000 * 45 },
-    { id: 'p6', title: '내부 보안 감사', deadline: todayStr(-10), status: '완료', progress: 100, priority: '높음', notes: '일정 내 완료', createdAt: Date.now() - 86400000 * 60 },
-  ];
+export async function hasLegacyLocalData() {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  const entry = findRoster({ id: user.id });
+  if (!entry) return false;
+  const { data, error } = await supabase.from('profiles').select('legacy_data_migrated').eq('id', user.id).single();
+  if (error) throw error;
+  if (data?.legacy_data_migrated) return false;
+  const bases = [LEGACY_KEYS.schedules, LEGACY_KEYS.clients, LEGACY_KEYS.histories, LEGACY_KEYS.projects, LEGACY_KEYS.messages, LEGACY_KEYS.meetingRecords];
+  for (const base of bases) {
+    const list = await readLegacyList(base, entry.legacyId);
+    if (list.length > 0) return true;
+  }
+  return false;
 }
 
-function getSampleMessages() {
-  const base = Date.now();
-  return [
-    { id: 'm1', direction: 'received', fromId: 'kmj', toId: 'test', sender: '김민준', company: '삼성물산', subject: 'Q3 납품 일정 조율 요청', content: '안녕하세요. Q3 납품 일정을 이번 주 내로 확정해 주실 수 있을까요? 내부 생산 계획 수립에 필요합니다.', priority: '긴급', status: '미확인', createdAt: base - 3600000 * 2 },
-    { id: 'm2', direction: 'received', fromId: 'lsy', toId: 'test', sender: '이서연', company: '현대건설', subject: '제안서 검토 완료', content: '보내주신 제안서 검토가 완료되었습니다. 몇 가지 수정 사항이 있어 회신 드립니다. 다음 주 미팅 일정도 조율 부탁드립니다.', priority: '일반', status: '확인', createdAt: base - 3600000 * 5 },
-    { id: 'm3', direction: 'received', fromId: 'pjh', toId: 'test', sender: '박지훈', company: 'LG전자', subject: '계약서 보증 기간 관련 문의', content: '계약서 상의 보증 기간을 2년에서 3년으로 연장 가능한지 검토 부탁드립니다. 법무팀과 협의 후 회신 주세요.', priority: '일반', status: '처리중', createdAt: base - 86400000 * 1 },
-    { id: 'm4', direction: 'received', fromId: 'csa', toId: 'test', sender: '최수아', company: 'SK텔레콤', subject: 'PoC 일정 확인', content: 'PoC 진행 일정을 다음 달 초로 확정하고 싶습니다. 담당자 배정 및 환경 준비 현황 공유 부탁드립니다.', priority: '긴급', status: '미확인', createdAt: base - 86400000 * 2 },
-    { id: 'm5', direction: 'received', fromId: 'admin', toId: 'test', sender: '정우성', company: '내부', subject: '주간 보고서 제출 안내', content: '이번 주 금요일까지 주간 업무 보고서를 팀 공유 폴더에 업로드해 주세요.', priority: '낮음', status: '완료', createdAt: base - 86400000 * 3 },
-    { id: 'm6', direction: 'sent', fromId: 'test', toId: 'kmj', sender: '삼성물산 구매팀', company: '삼성물산', subject: 'Q3 납품 일정 확정 회신', content: '안녕하세요. Q3 납품 일정을 7월 15일로 확정하겠습니다. 세부 사항은 첨부 파일을 참고해 주세요.', priority: '긴급', status: '완료', createdAt: base - 3600000 * 1 },
-    { id: 'm7', direction: 'sent', fromId: 'test', toId: 'lsy', sender: '현대건설 이서연 과장', company: '현대건설', subject: '제안서 수정본 전달', content: '제안서 수정 요청 사항을 반영하여 수정본을 전달드립니다. 미팅 일정은 다음 주 화요일 오전 10시를 제안드립니다.', priority: '일반', status: '처리중', createdAt: base - 3600000 * 3 },
-  ];
-}
+export async function migrateLocalDataToCloud() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('로그인이 필요합니다.');
+  const entry = findRoster({ id: user.id });
+  if (!entry) throw new Error('레거시 계정 정보를 찾을 수 없습니다.');
+  const legacyId = entry.legacyId;
 
-function getSampleHistories() {
-  const base = Date.now();
-  return [
-    { id: 'h1', clientId: 'c1', date: todayStr(-3), type: '미팅', title: 'Q2 결과 검토 미팅', content: '2분기 납품 실적 검토 및 3분기 계획 논의. 전반적으로 만족스러운 결과.', result: '3분기 물량 10% 증가 합의', createdAt: base - 86400000 * 3 },
-    { id: 'h2', clientId: 'c1', date: todayStr(-15), type: '통화', title: '납품 일정 조율', content: '긴급 납품 일정 변경 요청. 1주일 앞당겨 처리 가능 여부 확인.', result: '납품일 조정 완료', createdAt: base - 86400000 * 15 },
-    { id: 'h3', clientId: 'c1', date: todayStr(-30), type: '계약', title: '연간 계약 갱신', content: '2024년 연간 계약 갱신 미팅. 단가 5% 인상 협의.', result: '계약 갱신 완료 (3% 인상)', createdAt: base - 86400000 * 30 },
-    { id: 'h4', clientId: 'c2', date: todayStr(-7), type: '미팅', title: '첫 미팅 및 니즈 파악', content: '현대건설 신규 프로젝트 관련 공급 가능 여부 논의. 담당자 이서연 과장과 첫 만남.', result: '2주 내 제안서 제출 요청', createdAt: base - 86400000 * 7 },
-    { id: 'h5', clientId: 'c3', date: todayStr(-5), type: '이메일', title: '계약 조건 수정 요청', content: 'LG전자 측에서 계약 조건 중 보증 기간 연장 요청 이메일 수신.', result: '내부 검토 후 회신 예정', createdAt: base - 86400000 * 5 },
-    { id: 'h6', clientId: 'c3', date: todayStr(-20), type: '미팅', title: '연간 계약 협상', content: '박지훈 이사와 연간 계약 조건 협상. 납품량 및 단가 논의.', result: '추가 검토 필요, 재미팅 예정', createdAt: base - 86400000 * 20 },
-    { id: 'h7', clientId: 'c4', date: todayStr(-14), type: '미팅', title: '디지털 전환 프로젝트 킥오프', content: 'SK텔레콤 디지털 전환 관련 솔루션 제안. 최수아 팀장과 요구사항 논의.', result: 'PoC 진행 합의', createdAt: base - 86400000 * 14 },
-  ];
+  // 예전 샘플 데이터는 계정마다 동일한 id(c1, p1, m1 ...)를 썼다 — 이제는 전 계정이
+  // 하나의 테이블을 공유하므로 id가 계정 간 충돌하지 않도록 legacyId를 접두어로 붙인다.
+  const ns = (id) => (id ? `${legacyId}__${id}` : id);
+  const nsArr = (arr) => (Array.isArray(arr) ? arr.map(ns) : arr);
+
+  const legacyClients = await readLegacyList(LEGACY_KEYS.clients, legacyId);
+  if (legacyClients.length) {
+    const rows = legacyClients.map((c) => ({ id: ns(c.id), user_id: user.id, ...toRow(c, CLIENT_KEYMAP, CLIENT_DEFAULTS) }));
+    const { error } = await supabase.from('clients').upsert(rows);
+    if (error) throw error;
+  }
+
+  const legacyProjects = await readLegacyList(LEGACY_KEYS.projects, legacyId);
+  if (legacyProjects.length) {
+    const rows = legacyProjects.map((p) => ({
+      id: ns(p.id), user_id: user.id, ...toRow(p, PROJECT_KEYMAP, PROJECT_DEFAULTS),
+      client_ids: nsArr(p.clientIds) ?? [], meeting_record_ids: nsArr(p.meetingRecordIds) ?? [],
+    }));
+    const { error } = await supabase.from('projects').upsert(rows);
+    if (error) throw error;
+  }
+
+  const legacyMeetingRecords = await readLegacyList(LEGACY_KEYS.meetingRecords, legacyId);
+  if (legacyMeetingRecords.length) {
+    const rows = legacyMeetingRecords.map((m) => ({
+      id: ns(m.id), user_id: user.id, ...toRow(m, MEETING_KEYMAP, MEETING_DEFAULTS),
+      client_ids: nsArr(m.clientIds) ?? [], project_id: ns(m.projectId),
+    }));
+    const { error } = await supabase.from('meeting_records').upsert(rows);
+    if (error) throw error;
+  }
+
+  const legacyHistories = await readLegacyList(LEGACY_KEYS.histories, legacyId);
+  if (legacyHistories.length) {
+    const rows = legacyHistories.map((h) => ({
+      id: ns(h.id), user_id: user.id, ...toRow(h, HISTORY_KEYMAP, HISTORY_DEFAULTS), client_id: ns(h.clientId),
+    }));
+    const { error } = await supabase.from('histories').upsert(rows);
+    if (error) throw error;
+  }
+
+  const legacySchedules = await readLegacyList(LEGACY_KEYS.schedules, legacyId);
+  if (legacySchedules.length) {
+    const rows = legacySchedules.map((s) => ({
+      id: ns(s.id), user_id: user.id, ...toRow(s, SCHEDULE_KEYMAP, SCHEDULE_DEFAULTS), client_ids: nsArr(s.clientIds) ?? [],
+    }));
+    const { error } = await supabase.from('schedules').upsert(rows);
+    if (error) throw error;
+  }
+
+  const legacyMessages = await readLegacyList(LEGACY_KEYS.messages, legacyId);
+  if (legacyMessages.length) {
+    const rows = legacyMessages.map((m) => ({
+      id: ns(m.id),
+      mailbox_owner_id: user.id,
+      ...toRow(m, MESSAGE_KEYMAP, MESSAGE_DEFAULTS),
+      sender_id: legacyIdToUuid(m.fromId),
+      to_id: m.toId ? legacyIdToUuid(m.toId) : null,
+      linked_received_id: m.linkedReceivedId ? ns(m.linkedReceivedId) : null,
+    }));
+    const { error } = await supabase.from('messages').upsert(rows);
+    if (error) throw error;
+  }
+
+  const legacyFavorites = await readLegacyList(LEGACY_KEYS.clientFavorites, legacyId);
+  if (legacyFavorites.length) {
+    const rows = legacyFavorites.map((clientId) => ({ user_id: user.id, client_id: ns(clientId) }));
+    const { error } = await supabase.from('client_favorites').upsert(rows);
+    if (error) throw error;
+  }
+
+  const legacyProfileRaw = await AsyncStorage.getItem(`${LEGACY_KEYS.userProfile}_${legacyId}`);
+  const legacyProfileExt = safeParseJSON(legacyProfileRaw) || {};
+  const legacyWorkTopics = await AsyncStorage.getItem(LEGACY_KEYS.workTopics);
+  const profileUpdate = { legacy_data_migrated: true };
+  if (legacyProfileExt.contact) profileUpdate.contact = legacyProfileExt.contact;
+  if (legacyProfileExt.notes) profileUpdate.notes = legacyProfileExt.notes;
+  if (legacyWorkTopics) profileUpdate.work_topics = legacyWorkTopics;
+
+  const { error } = await supabase.from('profiles').update(profileUpdate).eq('id', user.id);
+  if (error) throw error;
 }

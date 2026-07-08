@@ -2,7 +2,7 @@ import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Alert,
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getTestAccounts, switchAccount, getUserProfile, saveUserProfile } from '../services/storage';
+import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getTestAccounts, switchAccount, getUserProfile, saveUserProfile, hasLegacyLocalData, migrateLocalDataToCloud } from '../services/storage';
 import { useUser } from '../context/UserContext';
 
 // API 키 마스킹 표시 (앞 6자 + ••• + 뒤 4자), 9자 이하 또는 masked=false면 원문 그대로
@@ -56,13 +56,30 @@ export default function SettingsScreen() {
   const [switchPassword, setSwitchPassword] = useState('');
   const [switchError, setSwitchError] = useState('');
 
+  const [showLegacyUpload, setShowLegacyUpload] = useState(false);
+  const [legacyUploading, setLegacyUploading] = useState(false);
+
   useEffect(() => {
     getApiKey().then((k) => { if (k) setApiKeyState(k); });
     getGrokApiKey().then((k) => { if (k) setGrokApiKeyState(k); });
     getAiProvider().then(setProviderState);
     getPyannoteUrl().then((u) => { if (u) setPyannoteUrlState(u); });
     getUserProfile().then((p) => { if (p) setProfile(p); });
+    hasLegacyLocalData().then(setShowLegacyUpload);
   }, []);
+
+  async function handleLegacyUpload() {
+    setLegacyUploading(true);
+    try {
+      await migrateLocalDataToCloud();
+      setShowLegacyUpload(false);
+      Alert.alert('완료', '이 기기에 저장되어 있던 로컬 데이터를 클라우드로 업로드했습니다.');
+    } catch (e) {
+      Alert.alert('업로드 실패', e.message);
+    } finally {
+      setLegacyUploading(false);
+    }
+  }
 
   async function handleProviderChange(p) {
     setProviderState(p);
@@ -336,6 +353,17 @@ export default function SettingsScreen() {
               </View>
             </View>
           </View>
+          {showLegacyUpload && (
+            <TouchableOpacity
+              style={[s.card, s.legacyUploadCard]}
+              activeOpacity={0.8}
+              onPress={handleLegacyUpload}
+              disabled={legacyUploading}
+            >
+              <Text style={s.legacyUploadTitle}>{legacyUploading ? '업로드 중...' : '로컬 데이터를 클라우드로 가져오기'}</Text>
+              <Text style={s.legacyUploadDesc}>이 기기에만 저장되어 있던 일정·거래처·프로젝트·메세지·회의록을 클라우드로 올려서 다른 기기(PC 등)에서도 볼 수 있게 합니다.</Text>
+            </TouchableOpacity>
+          )}
           {/* 다른 계정 목록 */}
           {getTestAccounts()
             .filter((a) => a.id !== user.id)
@@ -528,6 +556,9 @@ const s = StyleSheet.create({
   profileNotes: { color: C.textDim, fontSize: 11, marginTop: 2, lineHeight: 16 },
   profileEditBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 7, borderWidth: 1, borderColor: C.accentBlue + '55', backgroundColor: C.accentBlue + '11' },
   profileEditBtnText: { color: C.accentBlue, fontSize: 11, fontWeight: '500' },
+  legacyUploadCard: { borderWidth: 1, borderColor: C.accentTeal + '55', backgroundColor: C.accentTeal + '11', marginBottom: 10 },
+  legacyUploadTitle: { color: C.accentTeal, fontSize: 14, fontWeight: '500', marginBottom: 4 },
+  legacyUploadDesc: { color: C.textSecondary, fontSize: 12, lineHeight: 18 },
   // 웹에서 Modal은 document.body로 포탈되어 App.js의 480px 폭 제한을 벗어나므로 여기서 다시 맞춘다
   modalOverlay: Platform.OS === 'web'
     ? { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center' }
