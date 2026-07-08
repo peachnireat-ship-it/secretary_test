@@ -1,9 +1,9 @@
 import { Text, View, ScrollView, TouchableOpacity, StyleSheet, Modal, Dimensions, Linking } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
+import HomeMapCard from '../components/HomeMapCard';
 import { getSchedules, getClients, getProjects } from '../services/storage';
 import { watchLocation } from '../services/location';
 import { statusColor, tagColor } from '../utils/colors';
@@ -260,32 +260,7 @@ export default function HomeScreen({ navigation }) {
       {/* ── 현재 위치 지도 ── */}
       <View style={s.section}>
         <Text style={s.sectionLabel}>CURRENT LOCATION</Text>
-        <TouchableOpacity activeOpacity={0.85} onPress={openMapApp} disabled={!coords} style={s.mapCard}>
-          {coords ? (
-            <>
-              <MapView
-                style={s.map}
-                region={{ ...coords, latitudeDelta: 0.005, longitudeDelta: 0.005 }}
-                scrollEnabled={false}
-                zoomEnabled={false}
-                pitchEnabled={false}
-                rotateEnabled={false}
-                userInterfaceStyle="dark"
-                pointerEvents="none"
-              >
-                <Marker coordinate={coords} />
-              </MapView>
-              <View style={s.mapAddressRow}>
-                <Text style={s.mapAddressText} numberOfLines={1}>◎ {locationText || '주소 불러오는 중...'}</Text>
-                <Text style={s.mapOpenHint}>지도 앱으로 열기 ›</Text>
-              </View>
-            </>
-          ) : (
-            <View style={s.mapPlaceholder}>
-              <Text style={s.mapPlaceholderText}>{locationText}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <HomeMapCard coords={coords} locationText={locationText} onPress={openMapApp} />
       </View>
 
       {/* ── AI 기능 안내 ── */}
@@ -378,13 +353,6 @@ const s = StyleSheet.create({
   teamBadge: { backgroundColor: C.accentBlue + '22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   teamBadgeText: { color: C.accentBlue, fontSize: 10, letterSpacing: 1, fontWeight: '600' },
   dateText: { color: C.textDim, fontSize: 17, marginTop: 6, letterSpacing: 0.5 },
-  mapCard: { borderWidth: 1, borderColor: C.border, borderRadius: 12, overflow: 'hidden' },
-  map: { width: '100%', height: 180 },
-  mapAddressRow: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  mapAddressText: { color: C.textSecondary, fontSize: 12, letterSpacing: 0.3, flex: 1 },
-  mapOpenHint: { color: C.accentBlue, fontSize: 11, marginLeft: 8 },
-  mapPlaceholder: { height: 100, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface },
-  mapPlaceholderText: { color: C.textDim, fontSize: 13 },
   greetingText: { color: C.textSecondary, fontSize: 20, marginTop: 4, letterSpacing: 1 },
   rule: { height: 1, backgroundColor: C.border, marginBottom: 32 },
   section: { marginBottom: 32 },
