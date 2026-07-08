@@ -1,7 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { Text, View, ActivityIndicator } from 'react-native';
+import { Text, View, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from './src/theme';
 import LoginScreen from './src/screens/LoginScreen';
@@ -89,11 +89,29 @@ function AppContent() {
 
 export default function App() {
   return (
-    <UserProvider>
-      <AppContent />
-    </UserProvider>
+    <View style={webStyles.outer}>
+      <View style={webStyles.inner}>
+        <UserProvider>
+          <AppContent />
+        </UserProvider>
+      </View>
+    </View>
   );
 }
+
+// 웹은 브라우저 창 폭 그대로 늘어나므로 모바일 앱 폭(480px)으로 제한하고 가운데 정렬한다.
+// 네이티브(iOS/Android)는 화면 폭이 이미 480px 미만이라 사실상 영향 없음.
+const webStyles = StyleSheet.create(
+  Platform.OS === 'web'
+    ? {
+        outer: { flex: 1, minHeight: '100vh', backgroundColor: C.bg, alignItems: 'center' },
+        inner: { flex: 1, width: '100%', maxWidth: 480 },
+      }
+    : {
+        outer: { flex: 1 },
+        inner: { flex: 1 },
+      }
+);
 
 function tabColor(name) {
   const map = { 홈: C.gold, 일정: C.accentBlue, 거래처: C.accentTeal, 프로젝트: C.red, 메세지: C.accentPurple, 회의록: C.accentTeal, 설정: C.textSecondary };

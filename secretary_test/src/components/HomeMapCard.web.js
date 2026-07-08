@@ -14,10 +14,11 @@ export default function HomeMapCard({ coords, locationText, onPress }) {
     <TouchableOpacity activeOpacity={0.85} onPress={onPress} disabled={!coords} style={s.mapCard}>
       {coords ? (
         <>
+          {/* pointerEvents 제한 없음: PC에서 스크롤/드래그로 지도 확대·축소·이동 가능 */}
           <iframe
             title="현재 위치 지도"
             src={buildOsmEmbedUrl(coords.latitude, coords.longitude)}
-            style={{ width: '100%', height: 180, border: 0, pointerEvents: 'none' }}
+            style={{ width: '100%', height: 180, border: 0 }}
             loading="lazy"
           />
           <View style={s.mapAddressRow}>
