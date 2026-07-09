@@ -7,15 +7,25 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, getClients, getMeetingRecords, addClient } from '../services/storage';
+import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, updateProject, getClients, getMeetingRecords, addClient } from '../services/storage';
 import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
-import { priorityColor, tagColor } from '../utils/colors';
+import { priorityColor, tagColor, statusColor } from '../utils/colors';
 import { daysUntil, daysLabel } from '../utils/dateUtils';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const DELAY_EXEMPT_STATUSES = ['완료', '취소', '지연'];
+
+// 마감일이 지났는데도 완료/취소/지연 상태가 아닌 프로젝트를 '지연'으로 자동 전환하고 서버에 반영
+async function autoMarkDelayedProjects(projectList) {
+  const overdue = projectList.filter((p) => !DELAY_EXEMPT_STATUSES.includes(p.status) && daysUntil(p.deadline) < 0);
+  if (!overdue.length) return projectList;
+  await Promise.all(overdue.map((p) => updateProject(p.id, { status: '지연' })));
+  const overdueIds = new Set(overdue.map((p) => p.id));
+  return projectList.map((p) => (overdueIds.has(p.id) ? { ...p, status: '지연' } : p));
+}
 
 function dateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -150,7 +160,7 @@ export default function ScheduleScreen({ navigation, route }) {
   async function load() {
     const [allSchedules, allProjects, allClients, allRecords] = await Promise.all([getSchedules(), getProjects(), getClients(), getMeetingRecords()]);
     setSchedules(allSchedules);
-    setProjects(allProjects);
+    setProjects(await autoMarkDelayedProjects(allProjects));
     setClients(allClients);
     setMeetingRecords(allRecords);
   }
@@ -1284,11 +1294,6 @@ function projDayLabel(proj, date) {
   if (dl === date) return { text: '마감', color: C.gold };
   const days = daysUntil(proj.deadline);
   return { text: `D-${days}`, color: C.accentBlue };
-}
-
-function statusColor(status) {
-  const map = { 진행중: C.accentBlue, 위험: '#C45B5B', 지연: C.gold, 완료: C.accentTeal, 취소: C.textSecondary };
-  return map[status] || C.textSecondary;
 }
 
 function getUrgency(deadlineStr, status) {
