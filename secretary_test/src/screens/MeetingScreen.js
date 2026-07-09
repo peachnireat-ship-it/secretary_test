@@ -730,7 +730,7 @@ export default function MeetingScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={[s.modalCancelBtn, s.cancelBtnCompact]} onPress={() => { setClientPickerSpeaker(null); setAddPersonRecordId(null); setAddPersonSelectedIds(new Set()); }} activeOpacity={0.7}>
+              <TouchableOpacity style={s.clientPickerCancelBtn} onPress={() => { setClientPickerSpeaker(null); setAddPersonRecordId(null); setAddPersonSelectedIds(new Set()); }} activeOpacity={0.7}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
             )}
@@ -1931,7 +1931,7 @@ const s = StyleSheet.create({
     : { justifyContent: 'center', paddingHorizontal: 32 },
   mb4: { marginBottom: 4 },
   addPersonBtnRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  cancelBtnCompact: { flex: 0, marginTop: 4 },
+  clientPickerCancelBtn: { paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 10, marginTop: 4 },
   mt16: { marginTop: 16 },
   mb16: { marginBottom: 16 },
   mb0: { marginBottom: 0 },
