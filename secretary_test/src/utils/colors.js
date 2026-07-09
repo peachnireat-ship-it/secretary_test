@@ -26,13 +26,13 @@ export function priorityColor(priority) {
 // 주의: HomeScreen/ProjectScreen의 statusColor는 케이스별 값은 동일하지만 fallback이 C.textSecondary로 달라
 // 별도 함수(statusColor)로 유지한다. 임의로 fallback을 합치면 동작이 바뀔 수 있어 통합하지 않았다.
 export function projectStatusColor(status) {
-  const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
+  const map = { 진행중: C.accentBlue, 위험: C.red, 지연: C.gold, 완료: C.accentTeal, 취소: C.textDim };
   return map[status] || C.textDim;
 }
 
 // 프로젝트 상태 색상 (진행중/위험/지연/완료/취소), 미매칭 시 C.textSecondary
 // HomeScreen.statusColor, ProjectScreen.statusColor 통합 (완전 동일 로직, fallback C.textSecondary)
 export function statusColor(status) {
-  const map = { 진행중: C.accentBlue, 위험: C.gold, 지연: C.red, 완료: C.accentTeal, 취소: C.textDim };
+  const map = { 진행중: C.accentBlue, 위험: C.red, 지연: C.gold, 완료: C.accentTeal, 취소: C.textDim };
   return map[status] || C.textSecondary;
 }

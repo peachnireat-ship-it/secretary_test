@@ -154,7 +154,7 @@ C.red          = '#C45B5B'   // 프로젝트, 위험·긴급
   createdAt: number,
 }
 ```
-- 상태 색상: 진행중=accentBlue, 위험=gold, 지연=red, 완료=accentTeal, 취소=textDim
+- 상태 색상: 진행중=accentBlue, 위험=red, 지연=gold, 완료=accentTeal, 취소=textDim
 
 ### Message (메세지)
 ```js
