@@ -121,11 +121,11 @@ export default function ProjectScreen({ navigation, route }) {
     handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail,
   } = useProjectForm({ meetingRecords, setProjects });
 
-  const swipeDetail = useSwipeClose(() => setShowDetail(false));
-  const swipeAdd = useSwipeClose(() => setShowAdd(false));
-  const swipeProjectView = useSwipeClose(() => setShowProjectView(false));
-  const swipeMeetingDetail = useSwipeClose(() => setShowMeetingDetail(false));
-  const swipePersonDetail = useSwipeClose(() => setShowPersonDetail(false));
+  const swipeDetail = useSwipeClose(() => setShowDetail(false), showDetail);
+  const swipeAdd = useSwipeClose(() => setShowAdd(false), showAdd);
+  const swipeProjectView = useSwipeClose(() => setShowProjectView(false), showProjectView);
+  const swipeMeetingDetail = useSwipeClose(() => setShowMeetingDetail(false), showMeetingDetail);
+  const swipePersonDetail = useSwipeClose(() => setShowPersonDetail(false), showPersonDetail);
 
   const urgencyAnim = useRef(new Animated.Value(0)).current;
 

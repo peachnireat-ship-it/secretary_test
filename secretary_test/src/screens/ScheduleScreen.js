@@ -117,11 +117,11 @@ export default function ScheduleScreen({ navigation, route }) {
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
-  const swipeAdd = useSwipeClose(() => setShowAdd(false));
-  const swipeAI = useSwipeClose(() => setShowAI(false));
-  const swipeProject = useSwipeClose(() => setShowProjectView(false));
-  const swipePerson = useSwipeClose(() => setShowPersonView(false));
-  const swipeSchedule = useSwipeClose(() => { setShowScheduleView(false); setEditMode(false); });
+  const swipeAdd = useSwipeClose(() => setShowAdd(false), showAdd);
+  const swipeAI = useSwipeClose(() => setShowAI(false), showAI);
+  const swipeProject = useSwipeClose(() => setShowProjectView(false), showProjectView);
+  const swipePerson = useSwipeClose(() => setShowPersonView(false), showPersonView);
+  const swipeSchedule = useSwipeClose(() => { setShowScheduleView(false); setEditMode(false); }, showScheduleView);
 
   // eslint-disable-next-line react-hooks/refs -- Animated.Value는 최초 렌더에서 한 번만 생성되는 안전한 패턴
   const calTranslateX = useRef(new Animated.Value(0)).current;

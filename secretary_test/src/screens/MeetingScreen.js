@@ -1,7 +1,7 @@
 import {
   Text, View, ScrollView, TouchableOpacity,
   StyleSheet, ActivityIndicator, Clipboard, Alert, FlatList,
-  Modal, TextInput, KeyboardAvoidingView, Platform,
+  Modal, TextInput, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeeting
 import { projectStatusColor as statusColor, typeColor as histTypeColor } from '../utils/colors';
 import { useAudioRecording, formatTime } from '../hooks/useAudioRecording';
 import { useDiarization, applyNames, parseTranscriptSegments, mergeConsecutiveSegments } from '../hooks/useDiarization';
+import { useSwipeClose } from '../hooks/useSwipeClose';
 import { formatDate } from '../utils/dateUtils';
 
 function formatDateTime(ms) {
@@ -93,6 +94,9 @@ export default function MeetingScreen({ navigation }) {
     onFileReplace: () => { scrollToTopOnPickRef.current = true; },
     onError: (e) => handleApiError(e),
   });
+
+  const swipeNewClient = useSwipeClose(() => setShowNewClientModal(false), showNewClientModal);
+  const swipePerson = useSwipeClose(() => setSelectedPersonClient(null), !!selectedPersonClient);
 
   const loadRecords = useCallback(async () => {
     const records = await getMeetingRecords();
@@ -741,8 +745,10 @@ export default function MeetingScreen({ navigation }) {
       {/* ── 거래처 신규 등록 모달 ── */}
       <Modal visible={showNewClientModal} animationType="slide" transparent onRequestClose={() => setShowNewClientModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.newClientModalOverlay}>
-          <View style={s.newClientModalSheet}>
-            <View style={s.newClientModalHandle} />
+          <Animated.View style={[s.newClientModalSheet, swipeNewClient.animStyle]}>
+            <View style={s.newClientModalHandleWrap} {...swipeNewClient.panHandlers}>
+              <View style={s.newClientModalHandle} />
+            </View>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={s.newClientModalTitle}>거래처 추가</Text>
               <View style={s.newClientInputLabelRow}>
@@ -773,15 +779,17 @@ export default function MeetingScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             </ScrollView>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
       {/* ── 인물 상세 모달 ── */}
       <Modal visible={!!selectedPersonClient} animationType="slide" transparent onRequestClose={() => setSelectedPersonClient(null)}>
         <View style={s.personModalOverlay}>
-          <View style={s.personModalSheet}>
-            <View style={s.personModalHandle} />
+          <Animated.View style={[s.personModalSheet, swipePerson.animStyle]}>
+            <View style={s.personModalHandleWrap} {...swipePerson.panHandlers}>
+              <View style={s.personModalHandle} />
+            </View>
             {selectedPersonClient && (() => {
               const personHistories = histories.filter((h) => h.clientId === selectedPersonClient.id).sort((a, b) => b.createdAt - a.createdAt);
               const linkedProjects = projects.filter((p) => p.clientIds?.includes(selectedPersonClient.id));
@@ -878,7 +886,7 @@ export default function MeetingScreen({ navigation }) {
                 </>
               );
             })()}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -1690,7 +1698,8 @@ const s = StyleSheet.create({
   personModalSheet: Platform.OS === 'web'
     ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, height: '90%', width: '100%', maxWidth: 480 }
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, height: '90%' },
-  personModalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  personModalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
+  personModalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   personDetailHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   personDetailAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
   personDetailAvatarText: { color: C.accentTeal, fontSize: 22, fontWeight: '400' },
@@ -1744,7 +1753,8 @@ const s = StyleSheet.create({
   newClientModalSheet: Platform.OS === 'web'
     ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, maxHeight: '90%', width: '100%', maxWidth: 480 }
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, maxHeight: '90%' },
-  newClientModalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  newClientModalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
+  newClientModalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   newClientModalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
   newClientInputLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 16, marginBottom: 8 },
   newClientInputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginTop: 16, marginBottom: 8 },

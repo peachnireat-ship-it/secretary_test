@@ -1,12 +1,13 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Modal, KeyboardAvoidingView, Platform, Alert,
+  TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Animated,
 } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { getMessages, addMessage, addMessageForUser, updateMessage, updateMessageForUser, deleteMessage, getTestAccounts, getClients } from '../services/storage';
 import { useUser } from '../context/UserContext';
+import { useSwipeClose } from '../hooks/useSwipeClose';
 
 const PRIORITIES = ['긴급', '일반', '낮음'];
 const STATUSES = ['미확인', '확인', '처리중', '완료'];
@@ -65,6 +66,9 @@ export default function MessageScreen() {
   const [replyMode, setReplyMode] = useState(false);
   const [replySubject, setReplySubject] = useState('');
   const [replyContent, setReplyContent] = useState('');
+
+  const swipeAdd = useSwipeClose(() => setShowAdd(false), showAdd);
+  const swipeDetail = useSwipeClose(() => { setShowDetail(false); setEditMode(false); setReplyMode(false); }, showDetail);
 
   async function load() {
     setMessages(await getMessages());
@@ -330,8 +334,10 @@ export default function MessageScreen() {
       {/* 상세 모달 */}
       <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => { setShowDetail(false); setEditMode(false); setReplyMode(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.overlay}>
-          <View style={[s.sheet, s.maxH90pct]}>
-            <View style={s.handle} />
+          <Animated.View style={[s.sheet, s.maxH90pct, swipeDetail.animStyle]}>
+            <View style={s.handleWrap} {...swipeDetail.panHandlers}>
+              <View style={s.handle} />
+            </View>
             {detailMsg && (
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* 헤더 */}
@@ -500,15 +506,17 @@ export default function MessageScreen() {
                 </View>
               </ScrollView>
             )}
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
       {/* 추가 모달 */}
       <Modal visible={showAdd} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.overlay}>
-          <View style={s.sheet}>
-            <View style={s.handle} />
+          <Animated.View style={[s.sheet, swipeAdd.animStyle]}>
+            <View style={s.handleWrap} {...swipeAdd.panHandlers}>
+              <View style={s.handle} />
+            </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={s.modalTitle}>메세지 추가</Text>
 
@@ -590,7 +598,7 @@ export default function MessageScreen() {
                 </TouchableOpacity>
               </View>
             </ScrollView>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -650,7 +658,8 @@ const s = StyleSheet.create({
   sheet: Platform.OS === 'web'
     ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, width: '100%', maxWidth: 480 }
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
-  handle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  handle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
+  handleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 12 },
 
   directionRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
