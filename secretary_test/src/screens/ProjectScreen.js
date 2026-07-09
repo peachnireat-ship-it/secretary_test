@@ -4,7 +4,7 @@ import {
   Animated,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
@@ -55,6 +55,16 @@ function isAtRisk(project) {
   if (project.status === '완료' || project.status === '취소') return false;
   const days = daysUntil(project.deadline);
   return days <= 7 && project.progress < 80;
+}
+
+// ScheduleScreen.getUrgency와 동일 로직: 마감 7일 이내 = 1(gold), 3일 이내 = 2(red)
+function getUrgency(deadlineStr, status) {
+  if (status === '완료' || status === '취소') return 0;
+  if (!deadlineStr) return 0;
+  const days = daysUntil(deadlineStr);
+  if (days < 0 || days > 7) return 0;
+  if (days <= 3) return 2;
+  return 1;
 }
 
 export default function ProjectScreen({ navigation, route }) {
@@ -116,6 +126,19 @@ export default function ProjectScreen({ navigation, route }) {
   const swipeProjectView = useSwipeClose(() => setShowProjectView(false));
   const swipeMeetingDetail = useSwipeClose(() => setShowMeetingDetail(false));
   const swipePersonDetail = useSwipeClose(() => setShowPersonDetail(false));
+
+  const urgencyAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(urgencyAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(urgencyAnim, { toValue: 0.1, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, []);
 
   useEffect(() => {
     const addTask = route?.params?.addTask;
@@ -324,9 +347,12 @@ export default function ProjectScreen({ navigation, route }) {
             <Text style={s.emptyHint}>+ 버튼으로 프로젝트를 추가하세요</Text>
           </View>
         ) : (
+          // eslint-disable-next-line react-hooks/refs -- urgencyAnim은 최초 렌더에서 한 번만 생성되는 Animated.Value ref
           filtered.map((item) => {
             const days = daysUntil(item.deadline);
             const risk = isAtRisk(item);
+            const urgency = getUrgency(item.deadline, item.status);
+            const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
             const linkedMeetings = item.meetingRecordIds?.length > 0
               ? meetingRecords.filter((r) => item.meetingRecordIds.includes(r.id))
               : [];
@@ -422,6 +448,9 @@ export default function ProjectScreen({ navigation, route }) {
                       </TouchableOpacity>
                     ))}
                   </View>
+                )}
+                {urgency > 0 && (
+                  <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
                 )}
               </View>
             );
@@ -1337,6 +1366,7 @@ const s = StyleSheet.create({
 
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 16, gap: 10 },
   cardRisk: { borderColor: C.gold + '55' },
+  urgencyBorder: { borderRadius: 14, borderWidth: 2 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
