@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
@@ -21,6 +22,8 @@ const ICONS = {
 
 function TabNavigator() {
   const insets = useSafeAreaInsets();
+  // 웹은 insets.bottom이 0이라 네이티브 기준 여백만으로는 라벨 하단이 살짝 잘림 (브라우저 line-height 보정)
+  const webExtraBottom = Platform.OS === 'web' ? 10 : 0;
 
   return (
     <Tab.Navigator
@@ -31,13 +34,18 @@ function TabNavigator() {
           backgroundColor: C.surface,
           borderTopColor: C.border,
           borderTopWidth: 1,
-          height: 70 + insets.bottom,
-          paddingBottom: 12 + insets.bottom,
+          height: 70 + insets.bottom + webExtraBottom,
+          paddingBottom: 12 + insets.bottom + webExtraBottom,
           paddingTop: 10,
         },
         tabBarActiveTintColor: tabColor(route.name),
         tabBarInactiveTintColor: C.textDim,
-        tabBarLabelStyle: { fontSize: 10, letterSpacing: 0.5, fontWeight: '500' },
+        // 웹에서 react-navigation Label은 numberOfLines=1 때문에 overflow:hidden이 걸리는데,
+        // CSS flexbox 규칙상 overflow가 visible이 아닌 flex item은 자동 최소 높이가 0이 되어
+        // 부모(탭 아이템) 공간이 부족하면 lineHeight(14px)보다 낮게(예: 9px) 찌그러들고,
+        // 그 안의 텍스트(특히 한글 받침)가 자체 overflow:hidden에 잘려 보인다.
+        // flexShrink:0으로 라벨이 항상 lineHeight만큼의 높이를 확보하도록 고정한다.
+        tabBarLabelStyle: { fontSize: 10, lineHeight: 14, letterSpacing: 0.5, fontWeight: '500', flexShrink: 0 },
         tabBarIcon: ({ focused, color }) => (
           <Text style={{ fontSize: 18, color }}>{ICONS[route.name]?.[focused ? 'active' : 'inactive']}</Text>
         ),
@@ -88,6 +96,20 @@ function AppContent() {
 }
 
 export default function App() {
+  // react-native-web은 html/body에 height:100% + overflow:hidden을 강제로 주입한다
+  // (네이티브에 페이지 스크롤이 없는 것처럼 흉내내기 위함). 이 때문에 앱 전체 컬럼 높이가
+  // 뷰포트 높이(100vh)에 여유 없이 딱 맞춰지고, 폰트 렌더링/서브픽셀 반올림 차이로 실제
+  // 레이아웃이 1~수 px만 넘어가도 초과분(주로 맨 아래 하단 탭바)이 스크롤 없이 그냥
+  // 잘려서 안 보이게 된다. 탭바 자체의 height/padding을 늘려도 컬럼 총합은 여전히
+  // 정확히 100vh로 맞춰지므로 근본 해결이 안 된다 — body를 스크롤 가능하게 풀어줘서
+  // 초과분이 "잘리지" 않고 "스크롤"되도록 안전장치를 둔다.
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.body.style.overflowY = 'auto';
+      document.documentElement.style.overflowY = 'auto';
+    }
+  }, []);
+
   return (
     <View style={webStyles.outer}>
       <View style={webStyles.inner}>

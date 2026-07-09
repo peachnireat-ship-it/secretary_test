@@ -350,6 +350,7 @@ export default function ProjectScreen({ navigation, route }) {
           // eslint-disable-next-line react-hooks/refs -- urgencyAnim은 최초 렌더에서 한 번만 생성되는 Animated.Value ref
           filtered.map((item) => {
             const days = daysUntil(item.deadline);
+            const isCompleted = item.status === '완료';
             const risk = isAtRisk(item);
             const urgency = getUrgency(item.deadline, item.status);
             const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
@@ -399,8 +400,8 @@ export default function ProjectScreen({ navigation, route }) {
                       {item.startDate ? (
                         <Text style={s.startDateText}>{item.startDate} 시작</Text>
                       ) : null}
-                      <Text style={[s.deadlineText, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
-                        {item.deadline} · {daysLabel(days)}
+                      <Text style={[s.deadlineText, days < 0 && !isCompleted && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                        {item.deadline}{isCompleted && days < 0 ? '' : ` · ${daysLabel(days)}`}
                       </Text>
                     </View>
                   </View>
@@ -1229,6 +1230,7 @@ export default function ProjectScreen({ navigation, route }) {
             </View>
             {viewProject && (() => {
               const days = daysUntil(viewProject.deadline);
+              const isCompleted = viewProject.status === '완료';
               const linkedMeetings = viewProject.meetingRecordIds?.length
                 ? meetingRecords.filter((r) => viewProject.meetingRecordIds.includes(r.id))
                 : [];
@@ -1260,8 +1262,8 @@ export default function ProjectScreen({ navigation, route }) {
                   <Text style={[s.progressLabel, s.progressLabelSpacing]}>{viewProject.progress}% 완료</Text>
 
                   <Text style={s.inputLabel}>마감일</Text>
-                  <Text style={[s.viewText, days < 0 && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
-                    {viewProject.deadline}  ·  {daysLabel(days)}
+                  <Text style={[s.viewText, days < 0 && !isCompleted && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                    {viewProject.deadline}{isCompleted && days < 0 ? '' : `  ·  ${daysLabel(days)}`}
                   </Text>
 
                   {viewProject.notes ? (
