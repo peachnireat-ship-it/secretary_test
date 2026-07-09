@@ -1,6 +1,19 @@
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { supabase } from './supabaseClient';
+
+// expo-secure-store는 웹에서 네이티브 모듈이 구현되어 있지 않아(getValueWithKeyAsync 등이 없음)
+// SecureStore.getItemAsync/setItemAsync를 웹에서 그대로 호출하면 TypeError가 던져진다.
+// 웹에서는 대신 AsyncStorage(react-native-web에서 localStorage 기반)로 폴백한다.
+async function secureGetItem(key) {
+  if (Platform.OS === 'web') return AsyncStorage.getItem(key);
+  return SecureStore.getItemAsync(key);
+}
+async function secureSetItem(key, value) {
+  if (Platform.OS === 'web') return AsyncStorage.setItem(key, value);
+  return SecureStore.setItemAsync(key, value);
+}
 
 const KEYS = {
   apiKey: 'claude_api_key',
@@ -141,14 +154,14 @@ let _cachedApiKey;
 
 export async function getApiKey() {
   if (_cachedApiKey !== undefined) return _cachedApiKey;
-  const stored = await SecureStore.getItemAsync('groq_api_key_secure');
+  const stored = await secureGetItem('groq_api_key_secure');
   if (stored) {
     _cachedApiKey = stored;
     return stored;
   }
   const legacy = await AsyncStorage.getItem(KEYS.apiKey);
   if (legacy) {
-    await SecureStore.setItemAsync('groq_api_key_secure', legacy);
+    await secureSetItem('groq_api_key_secure', legacy);
     await AsyncStorage.removeItem(KEYS.apiKey);
     _cachedApiKey = legacy;
     return legacy;
@@ -159,7 +172,7 @@ export async function getApiKey() {
 
 export async function setApiKey(key) {
   _cachedApiKey = key;
-  return SecureStore.setItemAsync('groq_api_key_secure', key);
+  return secureSetItem('groq_api_key_secure', key);
 }
 
 // ── Grok API Key ──────────────────────────────────────────
@@ -167,14 +180,14 @@ let _cachedGrokApiKey;
 
 export async function getGrokApiKey() {
   if (_cachedGrokApiKey !== undefined) return _cachedGrokApiKey;
-  const stored = await SecureStore.getItemAsync('grok_api_key_secure');
+  const stored = await secureGetItem('grok_api_key_secure');
   if (stored) {
     _cachedGrokApiKey = stored;
     return stored;
   }
   const legacy = await AsyncStorage.getItem(KEYS.grokApiKey);
   if (legacy) {
-    await SecureStore.setItemAsync('grok_api_key_secure', legacy);
+    await secureSetItem('grok_api_key_secure', legacy);
     await AsyncStorage.removeItem(KEYS.grokApiKey);
     _cachedGrokApiKey = legacy;
     return legacy;
@@ -185,7 +198,7 @@ export async function getGrokApiKey() {
 
 export async function setGrokApiKey(key) {
   _cachedGrokApiKey = key;
-  return SecureStore.setItemAsync('grok_api_key_secure', key);
+  return secureSetItem('grok_api_key_secure', key);
 }
 
 // ── AI Provider ───────────────────────────────────────────
@@ -224,7 +237,7 @@ function fromRow(row, keymap) {
 }
 
 const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', createdAt: 'created_at' };
-const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', notes: 'notes', createdAt: 'created_at' };
+const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', notes: 'notes', aiSummary: 'ai_summary', createdAt: 'created_at' };
 const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', createdAt: 'created_at' };
 const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', createdAt: 'created_at', updatedAt: 'updated_at' };
 const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', createdAt: 'created_at' };
@@ -232,7 +245,7 @@ const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'com
 
 // NOT NULL 컬럼 기본값 — 벌크 upsert 시 toRow()의 defaults 인자로 전달한다.
 const SCHEDULE_DEFAULTS = { notes: '', client_ids: [] };
-const CLIENT_DEFAULTS = { role: '', work_contact: '', notes: '' };
+const CLIENT_DEFAULTS = { role: '', work_contact: '', notes: '', ai_summary: '' };
 const HISTORY_DEFAULTS = { content: '', result: '' };
 const PROJECT_DEFAULTS = { status: '진행중', priority: '보통', notes: '', progress: 0, client_ids: [], meeting_record_ids: [] };
 const MEETING_DEFAULTS = { transcript: '', summary: '', client_ids: [], tasks: [] };

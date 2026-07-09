@@ -57,7 +57,7 @@ export default function ClientScreen({ navigation, route }) {
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
 
-  const swipeClient = useSwipeClose(() => setSelectedClient(null));
+  const swipeClient = useSwipeClose(() => setSelectedClient(null), !!selectedClient);
 
   // load() 최초 완료 여부 — clients/histories state를 재조회 없이 그대로 쓰는
   // fetchHistorySummary가 빈 배열([]) 상태로 실행되지 않도록 가드하는 데 사용
@@ -242,6 +242,13 @@ export default function ClientScreen({ navigation, route }) {
       const normalized = normalizeAIDates(reply);
       clientSummaryCache.current[client.id] = normalized;
       setClientSummary(normalized);
+      // DB에 저장해 웹/모바일 등 다른 기기에서도 동일한 요약을 그대로 보게 한다 (기기별 재생성 방지)
+      try {
+        const updated = await updateClient(client.id, { aiSummary: normalized });
+        setClients(updated);
+      } catch {
+        // 요약 저장 실패는 화면 표시(방금 생성된 텍스트)를 막지 않는다. 다음 갱신 때 다시 시도됨.
+      }
     } catch (e) {
       setClientSummary(e.message === 'API_KEY_MISSING' ? '설정 탭에서 API 키를 입력하면 AI 요약을 볼 수 있습니다.' : `오류: ${e.message}`);
     } finally {
@@ -251,6 +258,15 @@ export default function ClientScreen({ navigation, route }) {
 
   function openClient(client) {
     setSelectedClient(client);
+    // client.aiSummary는 탭 포커스마다 load()가 getClients()로 다시 받아오는 DB 최신값이므로
+    // 메모리 캐시(clientSummaryCache)보다 우선한다. 그렇지 않으면 다른 기기(웹/모바일)에서
+    // 새로 생성/저장한 요약이 있어도, 이 세션에서 예전에 캐시해 둔 값이 계속 표시된다.
+    if (client.aiSummary) {
+      clientSummaryCache.current[client.id] = client.aiSummary;
+      setClientSummary(client.aiSummary);
+      setSummaryLoading(false);
+      return;
+    }
     const cached = clientSummaryCache.current[client.id];
     if (cached) {
       setClientSummary(cached);

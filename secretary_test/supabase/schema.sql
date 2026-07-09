@@ -46,6 +46,7 @@ create table if not exists clients (
   contact text not null,
   work_contact text not null default '',
   notes text not null default '',
+  ai_summary text not null default '',
   created_at bigint not null
 );
 
