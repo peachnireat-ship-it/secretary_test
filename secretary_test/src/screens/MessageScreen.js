@@ -199,7 +199,11 @@ export default function MessageScreen() {
   async function handleReply() {
     if (!replyContent.trim()) return;
     const toId = detailMsg.fromId;
+    const ts = Date.now();
+    const sentMsgId = String(ts);
+    const receivedMsgId = toId ? String(ts + 1) : undefined;
     await addMessage({
+      id: sentMsgId,
       direction: 'sent',
       sender: detailMsg.sender,
       company: detailMsg.company || '',
@@ -209,9 +213,11 @@ export default function MessageScreen() {
       status: '미확인',
       fromId: user?.id,
       toId: toId || undefined,
+      linkedReceivedId: receivedMsgId,
     });
     if (toId) {
       await addMessageForUser(toId, {
+        id: receivedMsgId,
         direction: 'received',
         sender: user?.name || '',
         company: clients.find((c) => c.name === user?.name)?.company || '',
