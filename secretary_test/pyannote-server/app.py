@@ -36,6 +36,11 @@ def preprocess_audio(input_path, output_path):
     )
 
 
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'})
+
+
 @app.route('/mono', methods=['POST'])
 def mono():
     if 'file' not in request.files:
