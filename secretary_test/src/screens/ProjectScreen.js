@@ -8,12 +8,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getProjects, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
+import { getProjects, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
 import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectForm';
 import { statusColor, priorityColor } from '../utils/colors';
-import { daysUntil, daysLabel } from '../utils/dateUtils';
+import { daysUntil, daysLabel, dateTimeFromTimestamp } from '../utils/dateUtils';
 import { parseTranscriptSegments } from '../utils/transcript';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
@@ -178,7 +178,18 @@ export default function ProjectScreen({ navigation, route }) {
 
   async function load() {
     const [all, records, clientList, histList] = await Promise.all([getProjects(), getMeetingRecords(), getClients(), getHistories()]);
-    setProjects(all);
+    // 시작일자가 비어있는 기존 프로젝트는 등록일(createdAt)로 채워서 저장 (최초 1회만 실제 쓰기 발생)
+    // 백필 실패(네트워크 오류 등)가 이미 정상 조회된 all 데이터 표시까지 막지 않도록 개별 실패는 무시한다.
+    const missingStartDate = all.filter((p) => !p.startDate);
+    let finalProjects = all;
+    for (const p of missingStartDate) {
+      try {
+        finalProjects = await updateProject(p.id, { startDate: dateTimeFromTimestamp(p.createdAt) });
+      } catch {
+        // 백필은 best-effort: 실패해도 이미 조회된 all 데이터 표시는 막지 않는다.
+      }
+    }
+    setProjects(finalProjects);
     setMeetingRecords(records);
     setClients(clientList);
     setHistories(histList);

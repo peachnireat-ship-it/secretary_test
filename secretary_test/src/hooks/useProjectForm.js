@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert } from 'react-native';
 import { addProject, updateProject } from '../services/storage';
+import { dateTimeFromTimestamp } from '../utils/dateUtils';
 
 function getDaysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -133,7 +134,7 @@ export function useProjectForm({ meetingRecords, setProjects }) {
       return;
     }
     const meetingRecord = pendingMeetingRecordId ? meetingRecords.find((r) => r.id === pendingMeetingRecordId) : null;
-    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(newStartAmPm, newStartTime)}` : '';
+    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(newStartAmPm, newStartTime)}` : dateTimeFromTimestamp(Date.now());
     const deadlineStr = `${deadlineDateNorm} ${to24h(newDeadlineAmPm, newDeadlineTime)}`;
     const updated = await addProject({
       title: newTitle.trim(),
@@ -203,7 +204,7 @@ export function useProjectForm({ meetingRecords, setProjects }) {
       Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
       return;
     }
-    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(editStartAmPm, editStartTime)}` : '';
+    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(editStartAmPm, editStartTime)}` : dateTimeFromTimestamp(detailProject.createdAt);
     const deadlineStr = `${deadlineDateNorm} ${to24h(editDeadlineAmPm, editDeadlineTime)}`;
     const updated = await updateProject(detailProject.id, {
       title: editTitle.trim(),
