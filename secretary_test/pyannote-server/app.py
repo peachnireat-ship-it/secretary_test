@@ -19,6 +19,7 @@ def add_cors_headers(response):
 
 HF_TOKEN = os.environ.get('HF_TOKEN')
 API_KEY = os.environ.get('PYANNOTE_API_KEY')
+print(f'[startup] PYANNOTE_API_KEY set: {bool(API_KEY)} (len={len(API_KEY) if API_KEY else 0})')
 _pipeline = None
 
 # 무료 티어(단일 워커) 보호용: 동시 처리 1건 제한
