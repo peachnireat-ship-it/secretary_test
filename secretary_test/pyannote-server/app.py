@@ -80,6 +80,16 @@ def get_pipeline():
     return _pipeline
 
 
+def load_waveform(path):
+    # torchcodec(FFmpeg 공유 라이브러리 의존)을 우회하기 위해 soundfile로 직접 디코딩 후
+    # {"waveform": Tensor, "sample_rate": int} 형태로 파이프라인에 전달한다.
+    import soundfile as sf
+    import torch
+    data, sample_rate = sf.read(path, dtype='float32', always_2d=True)
+    waveform = torch.from_numpy(data.T)
+    return {'waveform': waveform, 'sample_rate': sample_rate}
+
+
 def preprocess_audio(input_path, output_path):
     subprocess.run(
         [
@@ -167,7 +177,7 @@ def diarize():
                 return jsonify({'error': f'오디오 길이가 {MAX_AUDIO_DURATION_SEC // 60}분을 초과합니다.'}), 400
 
             try:
-                diarization = get_pipeline()(output_path)
+                diarization = get_pipeline()(load_waveform(output_path))
             except Exception as e:
                 return jsonify({'error': f'화자 분리 오류: {str(e)}'}), 500
 
