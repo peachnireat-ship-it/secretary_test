@@ -2,7 +2,6 @@ import os
 import tempfile
 import subprocess
 from flask import Flask, request, jsonify, Response
-from pyannote.audio import Pipeline
 
 app = Flask(__name__)
 
@@ -13,6 +12,7 @@ _pipeline = None
 def get_pipeline():
     global _pipeline
     if _pipeline is None:
+        from pyannote.audio import Pipeline
         if not HF_TOKEN:
             raise RuntimeError('HF_TOKEN 환경변수가 설정되지 않았습니다.')
         _pipeline = Pipeline.from_pretrained(
