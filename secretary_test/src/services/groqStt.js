@@ -153,7 +153,10 @@ export async function diarizeWithPyannote(fileUri, mimeType, whisperSegments) {
   if (!whisperSegments?.length) return null;
 
   const baseUrl = await getPyannoteUrl();
-  if (!baseUrl) return null;
+  if (!baseUrl) {
+    console.log('[diarize] pyannote URL 미설정 → AI 방식 사용');
+    return null;
+  }
 
   try {
     const ext = (mimeType || 'audio/m4a').split('/')[1] || 'm4a';
@@ -165,14 +168,23 @@ export async function diarizeWithPyannote(fileUri, mimeType, whisperSegments) {
       headers: await buildPyannoteHeaders(),
       body: formData,
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.warn(`[diarize] pyannote 서버 응답 실패 (${res.status}) → AI 방식으로 폴백`, body);
+      return null;
+    }
 
     const { segments: pySegs } = await res.json();
-    if (!pySegs?.length) return null;
+    if (!pySegs?.length) {
+      console.warn('[diarize] pyannote 서버가 빈 세그먼트 반환 → AI 방식으로 폴백');
+      return null;
+    }
 
+    console.log('[diarize] pyannote 서버로 화자 분리 성공');
     const raw = buildTranscript(whisperSegments, pySegs);
     return polishTranscript(raw);
-  } catch {
+  } catch (e) {
+    console.warn('[diarize] pyannote 요청 실패 → AI 방식으로 폴백', e.message);
     return null;
   }
 }
