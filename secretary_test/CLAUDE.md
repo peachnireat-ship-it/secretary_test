@@ -353,6 +353,34 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ## 세션 작업 이력
 
+### 2026-07-10
+
+#### pyannote-server `/health` 엔드포인트 추가 및 Render 배포 트러블슈팅
+
+**배경**: `SettingsScreen.js`의 "연결 확인" 버튼(`handleTestPyannote`)이 저장된 pyannote 서버 URL로 `GET ${url}/health`를 호출하도록 되어 있었으나(7/8 Supabase 마이그레이션 커밋 `9c2d6f8`에 포함), `pyannote-server/app.py`에는 해당 라우트가 없어 항상 실패하던 상태로 방치되어 있었음.
+
+**서버 코드 수정**
+- `1dd91f1` — `pyannote-server/app.py`에 `/health` GET 라우트 추가. 화자 분리 파이프라인 로드 없이 즉시 `{"status":"ok"}` 반환
+- `08b326f` — 모듈 최상단에서 무조건 실행되던 `from pyannote.audio import Pipeline`을 `get_pipeline()` 내부로 지연 로딩. torch/pytorch_lightning 등 무거운 의존성 로드가 Flask 기동(포트 바인딩)을 막고 있었기 때문
+
+**Render 배포 트러블슈팅 (시행착오 순서대로)**
+1. **Build 실패**: `Could not open requirements file: ... requirements.txt`
+   - 원인: Render에 연결된 GitHub 저장소(`secretary_test`)가 로컬 모노레포(`C:\Users\user`) 전체를 그대로 미러링하고 있어, 실제 경로가 `secretary_test/pyannote-server/requirements.txt`인데 Root Directory가 `pyannote-server`로만 설정됨
+   - 조치: Root Directory를 `secretary_test/pyannote-server`로 수정
+2. **Start 실패**: `Running 'uvicorn main:app ...'` → `uvicorn: command not found`
+   - 원인: FastAPI/ASGI용 기본 템플릿 Start Command가 남아있었음(이 프로젝트는 Flask, 파일명도 `main.py`가 아닌 `app.py`)
+   - 조치: Start Command를 `python app.py`로 수정
+3. **포트 바인딩 타임아웃**: `No open ports detected` 반복 → `Port scan timeout reached ... Deploy cancelled`
+   - 1차 원인 추정(메모리 부족)은 Metrics 확인 결과 배제됨
+   - 실제 원인: Python 표준출력 버퍼링으로 인해 Flask 기동 로그/에러가 전혀 안 보여 진단 불가 상태였음
+   - 조치: Start Command를 `python -u app.py`로 변경(버퍼링 비활성화) → Flask 정상 기동 로그 확인됨 → 이후 `/health` 200 OK 확인 완료
+
+**최종 확인**: `curl https://secretary-test.onrender.com/health` → `200 {"status":"ok"}`
+
+**참고**: `requirements.txt`의 `torch`가 버전/빌드 제한 없이 설치되어 CUDA(GPU)용 풀빌드(nvidia-cu* 패키지 다수 포함, 2GB+)가 깔림 — Render 무료 플랜은 GPU가 없는 CPU 전용 인스턴스라 전혀 불필요. 지연 로딩으로 당장의 기동 문제는 해결됐지만, 추후 `/diarize` 실제 호출 시 임포트·설치 용량 문제가 재발할 수 있어 CPU 전용 torch 빌드로 교체하는 게 근본적으로 더 안전함(미해결 과제로 남김).
+
+---
+
 ### 2026-07-01 ~ 2026-07-03
 
 #### 종합 코드 리뷰 리포트 36개 항목 전량 조치 완료
