@@ -1,6 +1,16 @@
 import * as FileSystem from 'expo-file-system';
-import { getApiKey, getPyannoteUrl } from './storage';
+import { getApiKey, getPyannoteUrl, getCurrentUser } from './storage';
 import { askClaude } from './claude';
+
+async function buildPyannoteHeaders() {
+  const headers = {};
+  if (process.env.EXPO_PUBLIC_PYANNOTE_API_KEY) {
+    headers['X-API-Key'] = process.env.EXPO_PUBLIC_PYANNOTE_API_KEY;
+  }
+  const user = await getCurrentUser().catch(() => null);
+  if (user?.id) headers['X-User-Id'] = user.id;
+  return headers;
+}
 
 export async function transcribeAudio(fileUri, mimeType = 'audio/m4a') {
   const apiKey = await getApiKey();
@@ -114,6 +124,7 @@ export async function convertToMonoViaServer(fileUri, mimeType) {
 
     const res = await fetch(`${baseUrl.replace(/\/$/, '')}/mono`, {
       method: 'POST',
+      headers: await buildPyannoteHeaders(),
       body: formData,
     });
     if (!res.ok) return null;
@@ -151,6 +162,7 @@ export async function diarizeWithPyannote(fileUri, mimeType, whisperSegments) {
 
     const res = await fetch(`${baseUrl.replace(/\/$/, '')}/diarize`, {
       method: 'POST',
+      headers: await buildPyannoteHeaders(),
       body: formData,
     });
     if (!res.ok) return null;
