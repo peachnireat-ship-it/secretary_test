@@ -375,9 +375,9 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
    - 실제 원인: Python 표준출력 버퍼링으로 인해 Flask 기동 로그/에러가 전혀 안 보여 진단 불가 상태였음
    - 조치: Start Command를 `python -u app.py`로 변경(버퍼링 비활성화) → Flask 정상 기동 로그 확인됨 → 이후 `/health` 200 OK 확인 완료
 
-**최종 확인**: `curl https://secretary-test.onrender.com/health` → `200 {"status":"ok"}`
+**최종 확인**: `curl https://secretary-test.onrender.com/health` → `200 {"status":"ok"}` (CORS 헤더 부재로 웹에서 "연결 실패" 재발 → `d075d7b`에서 `after_request` 훅으로 `Access-Control-Allow-*` 헤더 추가 후 웹 "연결 확인" 성공 확인)
 
-**참고**: `requirements.txt`의 `torch`가 버전/빌드 제한 없이 설치되어 CUDA(GPU)용 풀빌드(nvidia-cu* 패키지 다수 포함, 2GB+)가 깔림 — Render 무료 플랜은 GPU가 없는 CPU 전용 인스턴스라 전혀 불필요. 지연 로딩으로 당장의 기동 문제는 해결됐지만, 추후 `/diarize` 실제 호출 시 임포트·설치 용량 문제가 재발할 수 있어 CPU 전용 torch 빌드로 교체하는 게 근본적으로 더 안전함(미해결 과제로 남김).
+**후속 조치**: `requirements.txt`의 `torch`가 버전/빌드 제한 없이 설치되어 CUDA(GPU)용 풀빌드(nvidia-cu* 패키지 다수 포함, 2GB+)가 깔리던 문제를 `d9cd189`에서 해결. `--extra-index-url https://download.pytorch.org/whl/cpu` 추가로 `torch-X.X.X+cpu` CPU 전용 빌드가 선택되도록 수정(로컬 `pip install --dry-run`으로 확인 완료). Render 무료 플랜(GPU 없음)에서 불필요한 설치 용량·임포트 부담 제거.
 
 ---
 
