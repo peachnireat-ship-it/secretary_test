@@ -75,7 +75,7 @@ def get_pipeline():
             raise RuntimeError('HF_TOKEN 환경변수가 설정되지 않았습니다.')
         _pipeline = Pipeline.from_pretrained(
             'pyannote/speaker-diarization-3.1',
-            use_auth_token=HF_TOKEN,
+            token=HF_TOKEN,
         )
     return _pipeline
 
