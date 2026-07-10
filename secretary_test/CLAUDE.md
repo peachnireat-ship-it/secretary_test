@@ -382,6 +382,49 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ---
 
+#### pyannote-server 공유 무료 티어 보호 안전장치 추가
+
+**배경**: pyannote-server가 Render 무료 티어(단일 워커, 512MB)에서 전체 앱 사용자가 공유하는 구조인데, 인증·동시성 제한·용량 제한이 전혀 없어 남용/과부하에 취약했음.
+
+**조치 (`037eeeb`)**
+- `check_api_key()` — `PYANNOTE_API_KEY` 환경변수가 설정된 경우에만 `/mono`, `/diarize`에서 `X-API-Key` 헤더 검증(401). 미설정 시 기존처럼 통과(무중단 롤아웃)
+- `_busy_lock`(`threading.Lock`, non-blocking) — 동시 요청 1건만 처리, 나머지는 429
+- `app.config['MAX_CONTENT_LENGTH'] = 50MB`, `MAX_AUDIO_DURATION_SEC = 600`(10분, `ffprobe`로 측정 후 초과 시 400)
+- `check_and_bump_quota()` — `X-User-Id`(Supabase user id)별 일일 화자 분리 20회 제한, 서버 메모리 저장(재배포/슬립 시 초기화됨, 영속 아님)
+- 클라이언트(`groqStt.js`)는 `getCurrentUser()`의 user id를 `X-User-Id`로, `EXPO_PUBLIC_PYANNOTE_API_KEY`를 `X-API-Key`로 전송하도록 수정
+
+**환경변수 설정 트러블슈팅**: Render에 `PYANNOTE_API_KEY`를 여러 차례 추가해도 반영 안 되는 문제 발생 → `055b44d`에서 시작 시 `설정 여부/길이`만 로그로 남기는 디버그 라인 추가해 원인 진단 → 실제 원인은 **Key 이름 오타**(`PYANNOTE_API` — `_KEY` 누락). 이름 수정 후 정상 작동 확인(`401`/`400` 응답 curl로 검증).
+
+---
+
+#### 화자 분리 방식(pyannote/AI) 배지 추가
+
+**배경**: `diarizeWithPyannote()` 실패 시 AI(LLM) 방식으로 조용히 폴백하는 구조라, 사용자가 실제로 어떤 방식으로 화자 분리가 됐는지 화면에서 알 수 없었음.
+
+**1차 구현 (`caef0f6`)**: `groqStt.js`의 `diarizeWithPyannote()`에 성공/실패 사유별 `console.log`/`console.warn` 추가(URL 미설정 / 서버 응답 실패 / 빈 세그먼트 / 요청 실패 4가지 분기).
+
+**2차 구현 — UI 배지 (`secretary-orchestrator` 파이프라인, developer→style-guard→qa)**
+- `useDiarization.js`: `diarizeSource` state(`'pyannote'|'ai'|null`) 추가, `diarize()` 호출 시 결과에 따라 설정, `resetDiarization()`에서 초기화
+- `MeetingScreen.js`: 저장 전 미리보기 TRANSCRIPT 헤더에 "Pyannote 서버"(accentTeal)/"AI 방식"(textSecondary) 배지 렌더링
+- **버그**: 최초 구현 시 배지 조건이 `!!rawTranscript && !!diarizeSource`였는데, `rawTranscript`는 화자 태그 정규식(`[화자 N]`) 매치 여부에 따라서만 채워지는 별도 state라 실제로는 배지가 안 보이는 경우가 있었음(사용자가 실기기 테스트로 발견, qa는 코드 레벨 검증만 해서 놓침) → `!!diarizeSource` 단독 조건으로 수정
+
+**3차 구현 — 기록 탭까지 확장 (`66344fe`)**: 저장 시(`confirmSave`) `diarizeSource`를 `addMeetingRecord()`에 포함해 영속화. 기록(저장된 회의록) 탭 TRANSCRIPT 헤더에도 동일 배지 추가(`item.diarizeSource` 기반, 과거 데이터는 필드 없어 미표시). 재분리(`confirmRediarize`) 완료 시 항상 `diarizeSource: 'ai'`로 갱신(재분리는 LLM 전용이므로).
+- **Supabase 스키마 변경 필요**: `storage.js`가 AsyncStorage가 아니라 실제로는 **Supabase**를 쓰고 있음(이 문서의 "저장소: AsyncStorage" 표기는 구식 정보 — 하단 데이터 모델 절 참고). `MEETING_KEYMAP`에 `diarizeSource: 'diarize_source'` 매핑 추가만으로는 부족하고, 실제 Supabase DB에 컬럼이 있어야 함. `supabase/patch_meeting_records_diarize_source.sql` 신규 작성(`alter table meeting_records add column if not exists diarize_source text;`) → 사용자가 Supabase SQL Editor에서 직접 실행 완료.
+
+---
+
+#### pyannote 실제 화자 분리(`/diarize`) 미작동 트러블슈팅
+
+**배경**: `/health` 연결 확인은 성공하는데, 실제 오디오 분석 시 계속 AI(LLM) 방식으로만 폴백되는 문제 발생. `/diarize`에 실제 오디오 파일로 직접 curl 호출하여 단계별로 원인을 재현·확인.
+
+1. **`HF_TOKEN 환경변수가 설정되지 않았습니다`(500)**: `/health`는 이 토큰을 쓰지 않아 계속 정상으로 보였지만, `get_pipeline()`은 `HF_TOKEN` 없이는 항상 실패. Render에 `HF_TOKEN` 미설정 상태였음(설정했다고 착각했거나 실제로 저장 안 된 상태) → 사용자가 HuggingFace 토큰 발급 후 Render 환경변수에 추가. `c973b1e`에서 시작 시 설정 여부 로그 추가해 `True (len=37)` 확인.
+2. **`Pipeline.from_pretrained() got an unexpected keyword argument 'use_auth_token'`(500)**: 최신 `pyannote.audio`가 `use_auth_token` 대신 `token` 키워드를 요구하도록 변경됨(라이브러리 버전업으로 인한 API 변경, `requirements.txt`에 `pyannote.audio>=3.1`로 버전 미고정이라 최신판이 설치됨). `1ada151`에서 `use_auth_token=HF_TOKEN` → `token=HF_TOKEN`으로 수정.
+3. **`403 Cannot access gated repo ... pyannote/speaker-diarization-community-1`**: `pyannote/speaker-diarization-3.1` 파이프라인이 내부적으로 별도의 gated 모델(`pyannote/speaker-diarization-community-1`)도 참조함. 기존에 `speaker-diarization-3.1`/`segmentation-3.0`에만 접근 동의했었고 이 모델엔 동의 안 한 상태였음 → HuggingFace에서 해당 모델 페이지 접근 동의 완료(동의는 즉시 적용, 재배포 불필요).
+
+**진단 방법 메모**: `curl -X POST -H "X-API-Key: ..." -H "X-User-Id: ..." -F "file=@테스트.wav" https://secretary-test.onrender.com/diarize` 로 실제 오디오 업로드를 재현하면 `/health`로는 드러나지 않는 `get_pipeline()` 내부 에러(HF_TOKEN, 파라미터명, gated 모델 접근권한)를 그대로 확인할 수 있음. 로컬에서 `ffmpeg -f lavfi -i "sine=frequency=440:duration=3"`로 테스트용 짧은 wav 생성 가능. Render 무료 티어 콜드스타트 시 첫 요청은 최대 ~100초 소요됨.
+
+---
+
 ### 2026-07-01 ~ 2026-07-03
 
 #### 종합 코드 리뷰 리포트 36개 항목 전량 조치 완료
