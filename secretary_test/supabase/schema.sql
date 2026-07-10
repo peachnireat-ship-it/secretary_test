@@ -92,6 +92,7 @@ create table if not exists meeting_records (
   client_ids jsonb not null default '[]',
   project_id text references projects(id) on delete set null,
   tasks jsonb not null default '[]',
+  diarize_source text, -- 화자 분리 방식: 'pyannote' | 'ai' | null(과거 데이터/수동 입력)
   created_at bigint not null
 );
 create index if not exists meeting_records_project_idx on meeting_records(project_id);

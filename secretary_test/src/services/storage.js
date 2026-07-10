@@ -240,7 +240,7 @@ const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag'
 const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', notes: 'notes', aiSummary: 'ai_summary', createdAt: 'created_at' };
 const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', createdAt: 'created_at' };
 const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', createdAt: 'created_at', updatedAt: 'updated_at' };
-const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', createdAt: 'created_at' };
+const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', diarizeSource: 'diarize_source', createdAt: 'created_at' };
 const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'company', subject: 'subject', content: 'content', priority: 'priority', status: 'status', fromId: 'sender_id', toId: 'to_id', linkedReceivedId: 'linked_received_id', editHistory: 'edit_history', createdAt: 'created_at', updatedAt: 'updated_at' };
 
 // NOT NULL 컬럼 기본값 — 벌크 upsert 시 toRow()의 defaults 인자로 전달한다.

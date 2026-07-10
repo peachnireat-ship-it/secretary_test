@@ -69,7 +69,7 @@ export default function MeetingScreen({ navigation }) {
     onError: (e) => handleApiError(e),
   });
   const {
-    rawTranscript, speakerNames, speakerEditRecordId, speakerEditNames, speakerEditDeleted,
+    rawTranscript, speakerNames, diarizeSource, speakerEditRecordId, speakerEditNames, speakerEditDeleted,
     speakerEditCustom, speakerClientMap, segmentEditRecordId,
     editableSegments, segmentPickerIdx, segTextEditIdx, segTextEditValue, speakerCount,
     rediarizingId, showRediarizeModal, rediarizeCountInput,
@@ -295,7 +295,7 @@ export default function MeetingScreen({ navigation }) {
         setSummary(finalSummary);
       }
       const clientIds = [...new Set(Object.values(speakerClientMap).filter(Boolean))];
-      const updated = await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary: finalSummary, transcript: finalTranscript, tasks, clientIds });
+      const updated = await addMeetingRecord({ title: title || `${formatDate(Date.now())} · ${transcriptSource}`, source: transcriptSource, summary: finalSummary, transcript: finalTranscript, tasks, clientIds, diarizeSource: diarizeSource || undefined });
       setMeetingRecords(updated);
       setSaved(true);
       analyzeWorkTopics(updated);
@@ -1109,7 +1109,16 @@ export default function MeetingScreen({ navigation }) {
           {!!transcript && (
             <View style={[s.section, s.mb16]}>
               <View style={s.transcriptHeader}>
-                <Text style={s.sectionLabel}>TRANSCRIPT</Text>
+                <View style={s.transcriptHeaderLeft}>
+                  <Text style={[s.sectionLabel, s.mb0]}>TRANSCRIPT</Text>
+                  {!!diarizeSource && (
+                    <View style={[s.diarizeSourceBadge, diarizeSource === 'pyannote' ? s.diarizeSourceBadgePyannote : s.diarizeSourceBadgeAi]}>
+                      <Text style={[s.diarizeSourceBadgeText, diarizeSource === 'pyannote' ? s.diarizeSourceBadgeTextPyannote : s.diarizeSourceBadgeTextAi]}>
+                        {diarizeSource === 'pyannote' ? 'Pyannote 서버' : 'AI 방식'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <TouchableOpacity onPress={() => copyToClipboard(transcript)} activeOpacity={0.7}>
                   <Text style={s.copyBtn}>복사</Text>
                 </TouchableOpacity>
@@ -1338,7 +1347,16 @@ export default function MeetingScreen({ navigation }) {
                     {!!item.transcript && (
                       <View style={s.historySection}>
                         <View style={s.historySectionHeader}>
-                          <Text style={s.historySectionLabel}>TRANSCRIPT</Text>
+                          <View style={s.transcriptHeaderLeft}>
+                            <Text style={s.historySectionLabel}>TRANSCRIPT</Text>
+                            {!!item.diarizeSource && (
+                              <View style={[s.diarizeSourceBadge, item.diarizeSource === 'pyannote' ? s.diarizeSourceBadgePyannote : s.diarizeSourceBadgeAi]}>
+                                <Text style={[s.diarizeSourceBadgeText, item.diarizeSource === 'pyannote' ? s.diarizeSourceBadgeTextPyannote : s.diarizeSourceBadgeTextAi]}>
+                                  {item.diarizeSource === 'pyannote' ? 'Pyannote 서버' : 'AI 방식'}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
                           <TouchableOpacity onPress={() => copyToClipboard(item.transcript)} activeOpacity={0.7}>
                             <Text style={s.copyBtn}>복사</Text>
                           </TouchableOpacity>
@@ -1608,11 +1626,6 @@ const s = StyleSheet.create({
   taskExtractBtnText: { color: C.accentPurple, fontSize: 14, fontWeight: '500' },
   taskSelectAllText: { color: C.accentTeal, fontSize: 12, fontWeight: '500' },
   saveBtnNew: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '55' },
-  saveBtn: {
-    backgroundColor: C.accentTeal + '22', borderWidth: 1,
-    borderColor: C.accentTeal + '55', borderRadius: 20,
-    paddingVertical: 10, paddingHorizontal: 28,
-  },
   saveBtnText: { color: C.accentTeal, fontSize: 14, fontWeight: '500' },
   savedBadge: {
     backgroundColor: C.accentTeal + '18', borderWidth: 1,
@@ -1621,7 +1634,14 @@ const s = StyleSheet.create({
   },
   savedText: { color: C.accentTeal, fontSize: 13, fontWeight: '500' },
   transcriptHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  transcriptHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   transcriptSource: { color: C.textDim, fontSize: 11, marginTop: 2 },
+  diarizeSourceBadge: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
+  diarizeSourceBadgePyannote: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '55' },
+  diarizeSourceBadgeAi: { backgroundColor: C.textSecondary + '22', borderColor: C.textSecondary + '55' },
+  diarizeSourceBadgeText: { fontSize: 10, fontWeight: '600' },
+  diarizeSourceBadgeTextPyannote: { color: C.accentTeal },
+  diarizeSourceBadgeTextAi: { color: C.textSecondary },
   copyBtn: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
   transcriptText: { color: C.textPrimary, fontSize: 14, lineHeight: 24, padding: 18 },
   // 제목 입력 모달
@@ -1682,8 +1702,6 @@ const s = StyleSheet.create({
   clientPickerCheckMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
   clientConfirmBtn: { backgroundColor: C.accentTeal, borderColor: C.accentTeal },
   clientConfirmBtnText: { color: '#fff', fontWeight: '700' },
-  linkedClientRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
-  linkedClientDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.accentPurple },
   linkedClientName: { color: C.textPrimary, fontSize: 13, fontWeight: '500' },
   linkedClientCompany: { flex: 1, color: C.textDim, fontSize: 11 },
   linkedPersonRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, backgroundColor: C.accentTeal + '10', borderWidth: 1, borderColor: C.accentTeal + '33', borderRadius: 10, paddingHorizontal: 10, marginBottom: 6 },
@@ -1869,16 +1887,13 @@ const s = StyleSheet.create({
     backgroundColor: C.gold + '22', borderWidth: 1, borderColor: C.gold + '55',
     borderRadius: 6, paddingVertical: 4, paddingHorizontal: 10,
   },
-  segSpeakerBadgeActive: { backgroundColor: C.gold + '44', borderColor: C.gold },
   segSpeakerText: { color: C.gold, fontSize: 12, fontWeight: '600' },
-  segSpeakerTextActive: { color: C.gold },
   segContent: { color: C.textSecondary, fontSize: 13, lineHeight: 20 },
   segPickerBox: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   segPickerChip: {
     borderWidth: 1, borderColor: C.borderHigh, borderRadius: 6,
     paddingVertical: 6, paddingHorizontal: 14,
   },
-  segPickerChipActive: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '66' },
   segPickerChipText: { color: C.textSecondary, fontSize: 13 },
   segPickerChipTextActive: { color: C.accentTeal, fontWeight: '600' },
   segTextInput: {

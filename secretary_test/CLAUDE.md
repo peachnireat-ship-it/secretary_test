@@ -185,6 +185,7 @@ C.red          = '#C45B5B'   // 프로젝트, 위험·긴급
   clientIds: string[],
   projectId: string,
   tasks: Array<{assignee, content, deadline, priority}>,
+  diarizeSource: 'pyannote'|'ai'|null,  // 화자 분리 방식(선택). 과거 데이터/미해당 시 null — 배지 미표시
   createdAt: number,
 }
 ```

@@ -92,6 +92,7 @@ function buildTranscriptFromSegments(segments) {
 export function useDiarization({ meetingRecords, setMeetingRecords, onError }) {
   const [rawTranscript, setRawTranscript] = useState('');
   const [speakerNames, setSpeakerNames] = useState({});
+  const [diarizeSource, setDiarizeSource] = useState(null); // 'pyannote' | 'ai' | null
 
   const [speakerEditRecordId, setSpeakerEditRecordId] = useState(null);
   const [speakerEditNames, setSpeakerEditNames] = useState({});
@@ -115,10 +116,12 @@ export function useDiarization({ meetingRecords, setMeetingRecords, onError }) {
   function resetDiarization() {
     setRawTranscript('');
     setSpeakerNames({});
+    setDiarizeSource(null);
   }
 
   async function diarize(audioUri, audioMime, segments, fallbackText) {
     const pyResult = await diarizeWithPyannote(audioUri, audioMime, segments);
+    setDiarizeSource(pyResult ? 'pyannote' : 'ai');
     const diarized = pyResult ?? await diarizeSegments(segments, speakerCount);
     const speakers = extractSpeakers(diarized);
     if (speakers.length > 0) {
@@ -241,6 +244,7 @@ export function useDiarization({ meetingRecords, setMeetingRecords, onError }) {
       const updated = await updateMeetingRecord(item.id, {
         transcript: newTranscript,
         summary: newSummary,
+        diarizeSource: 'ai',
       });
       setMeetingRecords(updated);
     } catch (e) {
@@ -251,7 +255,7 @@ export function useDiarization({ meetingRecords, setMeetingRecords, onError }) {
   }
 
   return {
-    rawTranscript, speakerNames, speakerEditRecordId, speakerEditNames, speakerEditDeleted,
+    rawTranscript, speakerNames, diarizeSource, speakerEditRecordId, speakerEditNames, speakerEditDeleted,
     speakerEditCustom, speakerClientMap, speakerClientEditMap, segmentEditRecordId,
     editableSegments, segmentPickerIdx, segTextEditIdx, segTextEditValue, speakerCount,
     rediarizingId, showRediarizeModal, rediarizeTarget, rediarizeCountInput,
