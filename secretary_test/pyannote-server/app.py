@@ -127,12 +127,17 @@ def get_pipeline():
         # 이 프로세스 내에서 weights_only=False로 완화하는 것은 허용 가능한 트레이드오프.
         if not getattr(torch.load, '_weights_only_compat_patched', False):
             _orig_torch_load = torch.load
+            # mmap=True를 지원하는 torch 버전이면 체크포인트 파일을 통째로 메모리에
+            # 복사하지 않고 매핑해서 읽어 로딩 시 피크 메모리를 낮춘다(무료 티어 512MB 대응).
+            _supports_mmap = 'mmap' in inspect.signature(_orig_torch_load).parameters
 
             def _torch_load_compat(*args, **kwargs):
                 # lightning의 _load()가 weights_only=None을 명시적으로 넘기는 경우가 있어
                 # setdefault로는 걸러지지 않는다. None도 "미지정"으로 간주해 False로 보정한다.
                 if kwargs.get('weights_only') is None:
                     kwargs['weights_only'] = False
+                if _supports_mmap and kwargs.get('mmap') is None:
+                    kwargs['mmap'] = True
                 return _orig_torch_load(*args, **kwargs)
 
             _torch_load_compat._weights_only_compat_patched = True
