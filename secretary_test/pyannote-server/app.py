@@ -88,7 +88,7 @@ def get_pipeline():
         torch.set_num_threads(1)
         _pipeline = Pipeline.from_pretrained(
             'pyannote/speaker-diarization-3.1',
-            token=HF_TOKEN,
+            use_auth_token=HF_TOKEN,
         )
     return _pipeline
 
