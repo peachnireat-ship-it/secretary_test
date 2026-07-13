@@ -4,6 +4,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { transcribeAudio, convertToMonoViaServer } from '../services/groqStt';
 import { askClaude, buildTaskExtractionSystem, buildMeetingSummarySystem } from '../services/claude';
+import { getPyannoteUrl } from '../services/storage';
 
 const AUDIO_EXTS = ['mp3', 'mp4', 'm4a', 'wav', 'aac', 'ogg', 'flac', 'wma', 'opus', 'webm', 'amr', '3gp'];
 
@@ -186,7 +187,12 @@ export function useAudioRecording({ diarize, resetDiarization, onFileReplace, on
 
       let diarized = text;
       if (segments.length > 0) {
-        setLoadingMsg('화자 구분 분석 중…');
+        const pyannoteUrl = await getPyannoteUrl();
+        setLoadingMsg(
+          pyannoteUrl
+            ? '화자 구분 분석 중… (오디오가 길면 실시간보다 오래 걸릴 수 있어요)'
+            : '화자 구분 분석 중…'
+        );
         diarized = await diarize(audioUri, audioMime, segments, text);
       }
 
