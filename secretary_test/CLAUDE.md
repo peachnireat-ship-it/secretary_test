@@ -354,6 +354,48 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ## 세션 작업 이력
 
+### 2026-07-14
+
+#### 영문 혼용 회사명 AI 요약 손상 데이터 복구 (`supabase/fix_client_ai_summary.js`)
+
+**배경**: 과거 `stripNonKorean()`이 영문 알파벳을 낱개로 지워버리던 버그(현재는 `81dc55f`/`7335cbb`/`bacf176`/`dffd485`로 이미 수정됨)로 인해, "SK텔레콤"·"LG전자"·"HNIX" 등 영문이 섞인 회사명을 가진 거래처의 `clients.ai_summary`가 Supabase에 깨진 채로 남아있었음. 재발 방지 코드(`raw:true` + `fixForeignWordsInText`)는 이미 배포됐지만, 이미 저장된 과거 데이터는 복구되지 않은 상태로 방치되어 있었음(1회성 복구 스크립트는 작성돼 있었으나 미실행·미커밋 상태로 발견됨).
+
+**실행**: Groq API 키를 `.env`에 저장하지 않고 PowerShell 세션에만 `$env:EXPO_PUBLIC_GROQ_API_KEY`로 임시 설정 후 스크립트 실행(실행 후 `Remove-Item Env:`로 정리) — 보안 리뷰(#1 `.env` 실키 제거)와 충돌하지 않는 방식으로 진행.
+
+**결과**: 대상 4건(SK텔레콤 최수아, LG전자 박지훈×2, HNIX test1) 전부 성공. 복구 전 텍스트에서 "텔레콤의"(SK 잘림), "전자"(LG 잘림), "의 1 과장"(HNIX/test 잘림)처럼 실제로 손상돼 있던 것을 확인, 복구 후 회사명·이름이 정상 표기되고 문장도 자연스럽게 재생성됨. 스크립트는 `supabase/` 아래 커밋해 향후 동일 유형 데이터 손상 재발 시 참고용으로 보존.
+
+---
+
+### 2026-07-13
+
+#### Pyannote 화자 분리 엔진 트러블슈팅 → sherpa-onnx로 전면 교체
+
+**배경**: Render 무료 티어(512MB)에서 `pyannote.audio`(PyTorch) 파이프라인이 반복적으로 OOM. 07-10부터 이어진 문제를 하루 동안 순차적으로 파고들다 근본 해결로 전환.
+
+1. `53b5915` — OOM(502): `diarize()` 추론을 `torch.inference_mode()`로 감싸 autograd 그래프 추적 제거, `torch.set_num_threads(1)` + `OMP_NUM_THREADS`/`MKL_NUM_THREADS=1`로 스레드풀 메모리 축소, `requirements.txt`에 `pyannote.audio<4.0` 상한 추가
+2. `0762d0b` — `torchaudio.list_audio_backends` 제거로 인한 500: `get_pipeline()`에 `['soundfile']` 반환 shim 주입해 우회
+3. `81b9c0e` — `pyannote.audio==3.4.0`으로 정확히 버전 고정, 인증 파라미터명을 `use_auth_token`으로 일치
+4. `d19f886` — `huggingface_hub`의 `hf_hub_download`가 `use_auth_token`→`token`으로 개명된 것 대응: `inspect.signature` 기반 방어적 shim 추가
+5. `aab1cb9` — `torchaudio.AudioMetaData` 누락으로 `pyannote.audio` import 자체가 실패 → 빈 stub 클래스 주입
+6. `524b496` — `hf_hub_download` shim이 `core/pipeline.py`에만 적용되어 있어 `core/model.py`·`speaker_verification.py`에서 재발 → `_patch_hf_hub_download_compat()` 헬퍼로 일반화해 3개 모듈 전부 적용
+7. `5b0330b` — PyTorch 2.6부터 `torch.load()`의 `weights_only` 기본값이 `True`로 바뀌어 pyannote 사전학습 체크포인트 로딩 실패 → `weights_only=False` 강제 shim
+8. `353b10c` — 위 shim이 `weights_only=None`으로 명시 호출되는 경우 `setdefault`가 무효화됨을 발견 → 값 자체를 확인해 `None`도 `False`로 보정
+9. `bdd7698` — `torch.load(mmap=True)`로 체크포인트 로딩 피크 메모리 절감 시도 — **OOM 근본 해결 안 됨**
+10. **`8e7dc4e`(핵심 결정)** — PyTorch 계열 의존성(torch/torchaudio/pyannote.audio/lightning/huggingface_hub)을 전부 제거하고 **ONNX Runtime 기반 sherpa-onnx로 엔진 교체**. segmentation은 기존과 동일한 모델의 ONNX 변환판(6.6MB), embedding은 CAM++ voxceleb 영어 모델(28MB)로 대체. 두 모델 모두 HF 게이트 인증 불필요. 로컬 실측: 초기화 0.56초, 처리 3.6초, 다중 화자 세그먼트 정상 반환 확인
+11. `9994ada` — 실제 6분 오디오로 측정한 처리 시간이 실시간의 약 1.26배(7.5분)로 확인되어, pyannote 서버 경로 사용 시에만 "오디오가 길면 실시간보다 오래 걸릴 수 있어요" 안내 문구 추가(AI 폴백 경로는 기존 메시지 유지)
+
+**진단 방법 메모**: 이번 세션도 07-10과 동일하게 `/health`로는 안 드러나는 `get_pipeline()` 내부 에러를 실제 오디오 curl 업로드로 재현하며 단계별로 확인. 매 단계 라이브러리 내부 소스(PyPI)를 직접 확인해 정확한 원인(파라미터명 변경, 기본값 변경, shim 무효화 조건)을 특정한 뒤 수정.
+
+---
+
+#### 거래처 연락처 등록 모바일 모달 버그 수정 및 웹 대안 기능 추가 (`7f6bc5b`)
+
+- 안드로이드에서 Modal→Modal 전환(연락처 가져오기 / 직접 입력) 시 두 번째 모달이 렌더링되지 않는 레이스 컨디션을 `setTimeout`으로 회피
+- `expo-contacts`가 웹에서는 항상 권한 거부를 반환해 접근 불가능 → 웹 전용 "텍스트 붙여넣기로 가져오기" 기능 추가, 플랫폼별로 연락처 소스 옵션 분리 노출
+- 회의록 요약에 외국어 교정(`fixForeignWordsInText`) 적용 및 에러 처리 개선 포함
+
+---
+
 ### 2026-07-10
 
 #### pyannote-server `/health` 엔드포인트 추가 및 Render 배포 트러블슈팅
