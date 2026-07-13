@@ -1,4 +1,10 @@
 import os
+
+# torch/MKL 스레드풀 크기를 제한해 Render 무료 티어(512MB) 메모리 오버헤드를 줄인다.
+# torch가 실제로 import되기 전(지연 로딩 지점보다 먼저)에 설정되어야 효과가 있다.
+os.environ.setdefault('OMP_NUM_THREADS', '1')
+os.environ.setdefault('MKL_NUM_THREADS', '1')
+
 import tempfile
 import subprocess
 import threading
@@ -70,9 +76,13 @@ def get_audio_duration(path):
 def get_pipeline():
     global _pipeline
     if _pipeline is None:
+        import torch
         from pyannote.audio import Pipeline
         if not HF_TOKEN:
             raise RuntimeError('HF_TOKEN 환경변수가 설정되지 않았습니다.')
+        # 무료 티어 단일 워커 환경에서 torch의 스레드풀이 CPU 코어 수만큼 늘어나며
+        # 메모리를 과도하게 쓰는 것을 막는다.
+        torch.set_num_threads(1)
         _pipeline = Pipeline.from_pretrained(
             'pyannote/speaker-diarization-3.1',
             token=HF_TOKEN,
@@ -177,7 +187,11 @@ def diarize():
                 return jsonify({'error': f'오디오 길이가 {MAX_AUDIO_DURATION_SEC // 60}분을 초과합니다.'}), 400
 
             try:
-                diarization = get_pipeline()(load_waveform(output_path))
+                import torch
+                # autograd 그래프 추적을 끄고 추론만 수행해 메모리 사용을 줄인다.
+                # (Render 무료 티어 512MB에서 OOM으로 프로세스가 재시작되던 문제 대응)
+                with torch.inference_mode():
+                    diarization = get_pipeline()(load_waveform(output_path))
             except Exception as e:
                 return jsonify({'error': f'화자 분리 오류: {str(e)}'}), 500
 
