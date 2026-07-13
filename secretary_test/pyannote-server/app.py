@@ -1,13 +1,9 @@
 import os
-
-# torch/MKL 스레드풀 크기를 제한해 Render 무료 티어(512MB) 메모리 오버헤드를 줄인다.
-# torch가 실제로 import되기 전(지연 로딩 지점보다 먼저)에 설정되어야 효과가 있다.
-os.environ.setdefault('OMP_NUM_THREADS', '1')
-os.environ.setdefault('MKL_NUM_THREADS', '1')
-
+import tarfile
 import tempfile
 import subprocess
 import threading
+import urllib.request
 from datetime import date
 from flask import Flask, request, jsonify, Response
 
@@ -23,11 +19,26 @@ def add_cors_headers(response):
     return response
 
 
-HF_TOKEN = os.environ.get('HF_TOKEN')
 API_KEY = os.environ.get('PYANNOTE_API_KEY')
 print(f'[startup] PYANNOTE_API_KEY set: {bool(API_KEY)} (len={len(API_KEY) if API_KEY else 0})')
-print(f'[startup] HF_TOKEN set: {bool(HF_TOKEN)} (len={len(HF_TOKEN) if HF_TOKEN else 0})')
-_pipeline = None
+_diarizer = None
+
+# sherpa-onnx 기반 화자 분리 모델 (ONNX Runtime, PyTorch 불필요 — 512MB 무료 티어 대응).
+# pyannote.audio 3.1(PyTorch)이 세그멘테이션+임베딩 모델을 전부 메모리에 올리면서
+# 512MB를 초과해 OOM이 반복되어, 같은 세그멘테이션 모델(pyannote/segmentation-3.0)을
+# ONNX로 변환한 버전 + 경량 임베딩 모델(CAM++) 조합으로 교체.
+MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_models')
+SEGMENTATION_DIR = os.path.join(MODELS_DIR, 'sherpa-onnx-pyannote-segmentation-3-0')
+SEGMENTATION_MODEL = os.path.join(SEGMENTATION_DIR, 'model.onnx')
+EMBEDDING_MODEL = os.path.join(MODELS_DIR, 'campplus_sv_en_voxceleb_16k.onnx')
+SEGMENTATION_URL = (
+    'https://github.com/k2-fsa/sherpa-onnx/releases/download/'
+    'speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2'
+)
+EMBEDDING_URL = (
+    'https://github.com/k2-fsa/sherpa-onnx/releases/download/'
+    'speaker-recongition-models/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx'
+)
 
 # 무료 티어(단일 워커) 보호용: 동시 처리 1건 제한
 _busy_lock = threading.Lock()
@@ -73,90 +84,44 @@ def get_audio_duration(path):
     return float(result.stdout.strip())
 
 
-def get_pipeline():
-    global _pipeline
-    if _pipeline is None:
-        import torch
-        import torchaudio
-        if not hasattr(torchaudio, 'list_audio_backends'):
-            torchaudio.list_audio_backends = lambda: ['soundfile']
-        if not hasattr(torchaudio, 'AudioMetaData'):
-            class _AudioMetaDataStub:
-                pass
-            torchaudio.AudioMetaData = _AudioMetaDataStub
-        from pyannote.audio import Pipeline
-        # huggingface_hub의 hf_hub_download()가 use_auth_token 파라미터를 제거하고
-        # token으로 이름을 바꾼 버전이 설치된 경우를 대비한 호환성 shim.
-        # pyannote.audio 내부에서 `from huggingface_hub import hf_hub_download`로
-        # 자기 네임스페이스에 참조를 복사해가는 모듈이 core/pipeline.py 외에도
-        # core/model.py(세그멘테이션/임베딩 등 하위 모델 체크포인트 다운로드)와
-        # pipelines/speaker_verification.py(화자 임베딩 모델 다운로드)에 각각 있어,
-        # speaker-diarization-3.1 파이프라인이 하위 모델을 로딩하는 단계에서
-        # pipeline.py만 패치하면 같은 에러가 재발한다. 3개 모듈 전부를 패치해야 한다.
-        import inspect
-        import pyannote.audio.core.pipeline as _pyannote_pipeline_module
-        import pyannote.audio.core.model as _pyannote_model_module
-        import pyannote.audio.pipelines.speaker_verification as _pyannote_speaker_verification_module
+def _ensure_models_downloaded():
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    if not os.path.exists(SEGMENTATION_MODEL):
+        archive_path = os.path.join(MODELS_DIR, 'segmentation.tar.bz2')
+        urllib.request.urlretrieve(SEGMENTATION_URL, archive_path)
+        with tarfile.open(archive_path, 'r:bz2') as tar:
+            tar.extractall(MODELS_DIR)
+        os.remove(archive_path)
+    if not os.path.exists(EMBEDDING_MODEL):
+        urllib.request.urlretrieve(EMBEDDING_URL, EMBEDDING_MODEL)
 
-        def _patch_hf_hub_download_compat(module):
-            if 'use_auth_token' not in inspect.signature(module.hf_hub_download).parameters:
-                _orig = module.hf_hub_download
 
-                def _compat(*args, use_auth_token=None, **kwargs):
-                    if use_auth_token is not None:
-                        kwargs.setdefault('token', use_auth_token)
-                    return _orig(*args, **kwargs)
-
-                module.hf_hub_download = _compat
-
-        for _module in (
-            _pyannote_pipeline_module,
-            _pyannote_model_module,
-            _pyannote_speaker_verification_module,
-        ):
-            _patch_hf_hub_download_compat(_module)
-        if not HF_TOKEN:
-            raise RuntimeError('HF_TOKEN 환경변수가 설정되지 않았습니다.')
-        # 무료 티어 단일 워커 환경에서 torch의 스레드풀이 CPU 코어 수만큼 늘어나며
-        # 메모리를 과도하게 쓰는 것을 막는다.
-        torch.set_num_threads(1)
-        # PyTorch 2.6부터 torch.load()의 weights_only 기본값이 True로 바뀌면서,
-        # 2.6 이전에 저장된 pyannote 공식 체크포인트(torch.torch_version.TorchVersion 등
-        # 안전 언피클링 화이트리스트에 없는 객체 포함)를 로드할 수 없게 됨.
-        # HuggingFace의 공식 게이트 모델(HF_TOKEN 인증 필요)만 이 경로로 로딩되므로
-        # 이 프로세스 내에서 weights_only=False로 완화하는 것은 허용 가능한 트레이드오프.
-        if not getattr(torch.load, '_weights_only_compat_patched', False):
-            _orig_torch_load = torch.load
-            # mmap=True를 지원하는 torch 버전이면 체크포인트 파일을 통째로 메모리에
-            # 복사하지 않고 매핑해서 읽어 로딩 시 피크 메모리를 낮춘다(무료 티어 512MB 대응).
-            _supports_mmap = 'mmap' in inspect.signature(_orig_torch_load).parameters
-
-            def _torch_load_compat(*args, **kwargs):
-                # lightning의 _load()가 weights_only=None을 명시적으로 넘기는 경우가 있어
-                # setdefault로는 걸러지지 않는다. None도 "미지정"으로 간주해 False로 보정한다.
-                if kwargs.get('weights_only') is None:
-                    kwargs['weights_only'] = False
-                if _supports_mmap and kwargs.get('mmap') is None:
-                    kwargs['mmap'] = True
-                return _orig_torch_load(*args, **kwargs)
-
-            _torch_load_compat._weights_only_compat_patched = True
-            torch.load = _torch_load_compat
-        _pipeline = Pipeline.from_pretrained(
-            'pyannote/speaker-diarization-3.1',
-            use_auth_token=HF_TOKEN,
+def get_diarizer():
+    global _diarizer
+    if _diarizer is None:
+        _ensure_models_downloaded()
+        import sherpa_onnx
+        config = sherpa_onnx.OfflineSpeakerDiarizationConfig(
+            segmentation=sherpa_onnx.OfflineSpeakerSegmentationModelConfig(
+                pyannote=sherpa_onnx.OfflineSpeakerSegmentationPyannoteModelConfig(
+                    model=SEGMENTATION_MODEL
+                ),
+            ),
+            embedding=sherpa_onnx.SpeakerEmbeddingExtractorConfig(
+                model=EMBEDDING_MODEL
+            ),
+            # 참석자 수를 모르므로 -1(자동 검출)로 클러스터링. threshold는 라이브러리 기본값.
+            clustering=sherpa_onnx.FastClusteringConfig(
+                num_clusters=-1,
+                threshold=0.5,
+            ),
+            min_duration_on=0.3,
+            min_duration_off=0.5,
         )
-    return _pipeline
-
-
-def load_waveform(path):
-    # torchcodec(FFmpeg 공유 라이브러리 의존)을 우회하기 위해 soundfile로 직접 디코딩 후
-    # {"waveform": Tensor, "sample_rate": int} 형태로 파이프라인에 전달한다.
-    import soundfile as sf
-    import torch
-    data, sample_rate = sf.read(path, dtype='float32', always_2d=True)
-    waveform = torch.from_numpy(data.T)
-    return {'waveform': waveform, 'sample_rate': sample_rate}
+        if not config.validate():
+            raise RuntimeError('sherpa-onnx 화자 분리 설정이 유효하지 않습니다(모델 파일 확인 필요).')
+        _diarizer = sherpa_onnx.OfflineSpeakerDiarization(config)
+    return _diarizer
 
 
 def preprocess_audio(input_path, output_path):
@@ -246,21 +211,25 @@ def diarize():
                 return jsonify({'error': f'오디오 길이가 {MAX_AUDIO_DURATION_SEC // 60}분을 초과합니다.'}), 400
 
             try:
-                import torch
-                # autograd 그래프 추적을 끄고 추론만 수행해 메모리 사용을 줄인다.
-                # (Render 무료 티어 512MB에서 OOM으로 프로세스가 재시작되던 문제 대응)
-                with torch.inference_mode():
-                    diarization = get_pipeline()(load_waveform(output_path))
+                import soundfile as sf
+                data, sample_rate = sf.read(output_path, dtype='float32', always_2d=True)
+                audio = data[:, 0]
+                diarizer = get_diarizer()
+                if sample_rate != diarizer.sample_rate:
+                    return jsonify({
+                        'error': f'샘플레이트 불일치: 모델 기대값 {diarizer.sample_rate}Hz, 실제 {sample_rate}Hz',
+                    }), 500
+                result = diarizer.process(audio).sort_by_start_time()
             except Exception as e:
                 return jsonify({'error': f'화자 분리 오류: {str(e)}'}), 500
 
             segments = [
                 {
-                    'speaker': speaker,
-                    'start': round(turn.start, 3),
-                    'end': round(turn.end, 3),
+                    'speaker': f'SPEAKER_{r.speaker:02d}',
+                    'start': round(r.start, 3),
+                    'end': round(r.end, 3),
                 }
-                for turn, _, speaker in diarization.itertracks(yield_label=True)
+                for r in result
             ]
 
         return jsonify({'segments': segments})
