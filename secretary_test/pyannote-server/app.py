@@ -120,6 +120,20 @@ def get_pipeline():
         # 무료 티어 단일 워커 환경에서 torch의 스레드풀이 CPU 코어 수만큼 늘어나며
         # 메모리를 과도하게 쓰는 것을 막는다.
         torch.set_num_threads(1)
+        # PyTorch 2.6부터 torch.load()의 weights_only 기본값이 True로 바뀌면서,
+        # 2.6 이전에 저장된 pyannote 공식 체크포인트(torch.torch_version.TorchVersion 등
+        # 안전 언피클링 화이트리스트에 없는 객체 포함)를 로드할 수 없게 됨.
+        # HuggingFace의 공식 게이트 모델(HF_TOKEN 인증 필요)만 이 경로로 로딩되므로
+        # 이 프로세스 내에서 weights_only=False로 완화하는 것은 허용 가능한 트레이드오프.
+        if not getattr(torch.load, '_weights_only_compat_patched', False):
+            _orig_torch_load = torch.load
+
+            def _torch_load_compat(*args, **kwargs):
+                kwargs.setdefault('weights_only', False)
+                return _orig_torch_load(*args, **kwargs)
+
+            _torch_load_compat._weights_only_compat_patched = True
+            torch.load = _torch_load_compat
         _pipeline = Pipeline.from_pretrained(
             'pyannote/speaker-diarization-3.1',
             use_auth_token=HF_TOKEN,
