@@ -87,20 +87,34 @@ def get_pipeline():
         from pyannote.audio import Pipeline
         # huggingface_hub의 hf_hub_download()가 use_auth_token 파라미터를 제거하고
         # token으로 이름을 바꾼 버전이 설치된 경우를 대비한 호환성 shim.
-        # pyannote.audio.core.pipeline 모듈이 `from huggingface_hub import hf_hub_download`로
-        # 자기 네임스페이스에 이미 참조를 복사해뒀기 때문에, huggingface_hub 모듈이 아니라
-        # 이 모듈 자신의 hf_hub_download 이름을 패치해야 한다.
+        # pyannote.audio 내부에서 `from huggingface_hub import hf_hub_download`로
+        # 자기 네임스페이스에 참조를 복사해가는 모듈이 core/pipeline.py 외에도
+        # core/model.py(세그멘테이션/임베딩 등 하위 모델 체크포인트 다운로드)와
+        # pipelines/speaker_verification.py(화자 임베딩 모델 다운로드)에 각각 있어,
+        # speaker-diarization-3.1 파이프라인이 하위 모델을 로딩하는 단계에서
+        # pipeline.py만 패치하면 같은 에러가 재발한다. 3개 모듈 전부를 패치해야 한다.
         import inspect
         import pyannote.audio.core.pipeline as _pyannote_pipeline_module
-        if 'use_auth_token' not in inspect.signature(_pyannote_pipeline_module.hf_hub_download).parameters:
-            _orig_hf_hub_download = _pyannote_pipeline_module.hf_hub_download
+        import pyannote.audio.core.model as _pyannote_model_module
+        import pyannote.audio.pipelines.speaker_verification as _pyannote_speaker_verification_module
 
-            def _hf_hub_download_compat(*args, use_auth_token=None, **kwargs):
-                if use_auth_token is not None:
-                    kwargs.setdefault('token', use_auth_token)
-                return _orig_hf_hub_download(*args, **kwargs)
+        def _patch_hf_hub_download_compat(module):
+            if 'use_auth_token' not in inspect.signature(module.hf_hub_download).parameters:
+                _orig = module.hf_hub_download
 
-            _pyannote_pipeline_module.hf_hub_download = _hf_hub_download_compat
+                def _compat(*args, use_auth_token=None, **kwargs):
+                    if use_auth_token is not None:
+                        kwargs.setdefault('token', use_auth_token)
+                    return _orig(*args, **kwargs)
+
+                module.hf_hub_download = _compat
+
+        for _module in (
+            _pyannote_pipeline_module,
+            _pyannote_model_module,
+            _pyannote_speaker_verification_module,
+        ):
+            _patch_hf_hub_download_compat(_module)
         if not HF_TOKEN:
             raise RuntimeError('HF_TOKEN 환경변수가 설정되지 않았습니다.')
         # 무료 티어 단일 워커 환경에서 torch의 스레드풀이 CPU 코어 수만큼 늘어나며
