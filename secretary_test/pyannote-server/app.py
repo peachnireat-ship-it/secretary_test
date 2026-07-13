@@ -81,6 +81,22 @@ def get_pipeline():
         if not hasattr(torchaudio, 'list_audio_backends'):
             torchaudio.list_audio_backends = lambda: ['soundfile']
         from pyannote.audio import Pipeline
+        # huggingface_hub의 hf_hub_download()가 use_auth_token 파라미터를 제거하고
+        # token으로 이름을 바꾼 버전이 설치된 경우를 대비한 호환성 shim.
+        # pyannote.audio.core.pipeline 모듈이 `from huggingface_hub import hf_hub_download`로
+        # 자기 네임스페이스에 이미 참조를 복사해뒀기 때문에, huggingface_hub 모듈이 아니라
+        # 이 모듈 자신의 hf_hub_download 이름을 패치해야 한다.
+        import inspect
+        import pyannote.audio.core.pipeline as _pyannote_pipeline_module
+        if 'use_auth_token' not in inspect.signature(_pyannote_pipeline_module.hf_hub_download).parameters:
+            _orig_hf_hub_download = _pyannote_pipeline_module.hf_hub_download
+
+            def _hf_hub_download_compat(*args, use_auth_token=None, **kwargs):
+                if use_auth_token is not None:
+                    kwargs.setdefault('token', use_auth_token)
+                return _orig_hf_hub_download(*args, **kwargs)
+
+            _pyannote_pipeline_module.hf_hub_download = _hf_hub_download_compat
         if not HF_TOKEN:
             raise RuntimeError('HF_TOKEN 환경변수가 설정되지 않았습니다.')
         # 무료 티어 단일 워커 환경에서 torch의 스레드풀이 CPU 코어 수만큼 늘어나며
