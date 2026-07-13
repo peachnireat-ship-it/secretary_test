@@ -77,6 +77,9 @@ def get_pipeline():
     global _pipeline
     if _pipeline is None:
         import torch
+        import torchaudio
+        if not hasattr(torchaudio, 'list_audio_backends'):
+            torchaudio.list_audio_backends = lambda: ['soundfile']
         from pyannote.audio import Pipeline
         if not HF_TOKEN:
             raise RuntimeError('HF_TOKEN 환경변수가 설정되지 않았습니다.')
