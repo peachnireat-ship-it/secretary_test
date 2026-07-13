@@ -129,7 +129,10 @@ def get_pipeline():
             _orig_torch_load = torch.load
 
             def _torch_load_compat(*args, **kwargs):
-                kwargs.setdefault('weights_only', False)
+                # lightning의 _load()가 weights_only=None을 명시적으로 넘기는 경우가 있어
+                # setdefault로는 걸러지지 않는다. None도 "미지정"으로 간주해 False로 보정한다.
+                if kwargs.get('weights_only') is None:
+                    kwargs['weights_only'] = False
                 return _orig_torch_load(*args, **kwargs)
 
             _torch_load_compat._weights_only_compat_patched = True
