@@ -3,7 +3,7 @@ import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { transcribeAudio, convertToMonoViaServer } from '../services/groqStt';
-import { askClaude, buildTaskExtractionSystem, buildMeetingSummarySystem } from '../services/claude';
+import { askClaude, buildTaskExtractionSystem, buildMeetingSummarySystem, fixForeignWordsInText } from '../services/claude';
 import { getPyannoteUrl } from '../services/storage';
 
 const AUDIO_EXTS = ['mp3', 'mp4', 'm4a', 'wav', 'aac', 'ogg', 'flac', 'wma', 'opus', 'webm', 'amr', '3gp'];
@@ -124,7 +124,13 @@ export function useAudioRecording({ diarize, resetDiarization, onFileReplace, on
         buildMeetingSummarySystem(),
         { raw: true }
       );
-      setSummary(sum);
+      let fixed = sum;
+      try {
+        fixed = await fixForeignWordsInText(sum);
+      } catch {
+        // 외국어 교정 실패는 요약 자체 실패로 이어지지 않도록 원본 요약을 그대로 사용
+      }
+      setSummary(fixed);
     } catch (e) {
       onError(e);
     } finally {

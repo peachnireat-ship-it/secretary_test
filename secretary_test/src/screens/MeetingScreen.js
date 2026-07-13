@@ -320,7 +320,11 @@ export default function MeetingScreen({ navigation }) {
       const updated = await updateMeetingRecord(item.id, changes);
       setMeetingRecords(updated);
     } catch (e) {
-      handleApiError(e);
+      if (e.message === 'API_KEY_MISSING') {
+        handleApiError(e);
+      } else {
+        Alert.alert('외국어 수정 실패', e.message);
+      }
     } finally {
       setFixingForeignId(null);
     }

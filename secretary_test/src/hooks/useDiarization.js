@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert } from 'react-native';
 import { diarizeSegments, diarizeWithPyannote, rediarizeTranscript } from '../services/groqStt';
-import { askClaude, buildMeetingSummarySystem } from '../services/claude';
+import { askClaude, buildMeetingSummarySystem, fixForeignWordsInText } from '../services/claude';
 import { updateMeetingRecord } from '../services/storage';
 
 function extractSpeakers(text) {
@@ -241,9 +241,15 @@ export function useDiarization({ meetingRecords, setMeetingRecords, onError }) {
         buildMeetingSummarySystem(),
         { raw: true }
       );
+      let fixedSummary = newSummary;
+      try {
+        fixedSummary = await fixForeignWordsInText(newSummary);
+      } catch {
+        // 외국어 교정 실패는 재분리 자체 실패로 이어지지 않도록 원본 요약을 그대로 사용
+      }
       const updated = await updateMeetingRecord(item.id, {
         transcript: newTranscript,
-        summary: newSummary,
+        summary: fixedSummary,
         diarizeSource: 'ai',
       });
       setMeetingRecords(updated);

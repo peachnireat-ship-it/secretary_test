@@ -9,7 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { getClients, addClient, updateClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite } from '../services/storage';
-import { askClaude, buildClientSystem, josa과와, normalizeAIDates } from '../services/claude';
+import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
 import { priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
@@ -47,6 +47,8 @@ export default function ClientScreen({ navigation, route }) {
   const [contactList, setContactList] = useState([]);
   const [contactSearch, setContactSearch] = useState('');
   const [contactLoading, setContactLoading] = useState(false);
+  const [showPasteContacts, setShowPasteContacts] = useState(false);
+  const [pasteText, setPasteText] = useState('');
 
   const [selectedMeetingRecord, setSelectedMeetingRecord] = useState(null);
   const [showAI, setShowAI] = useState(false);
@@ -115,28 +117,33 @@ export default function ClientScreen({ navigation, route }) {
     !contactSearch || c.name?.includes(contactSearch)
   );
 
-  async function handlePickFromContacts() {
+  function handlePickFromContacts() {
+    // 안드로이드에서 Modal은 각각 별도의 네이티브 Dialog로 렌더링되어, 한 배치(같은 핸들러) 안에서
+    // showSourcePicker를 false로 하고 showContactPicker를 true로 하면 두 번째 모달이 렌더링되지 않는
+    // 레이스 컨디션이 발생함 — setTimeout으로 다음 모달 오픈을 다음 tick 이후로 미뤄서 회피
     setShowSourcePicker(false);
-    setContactLoading(true);
-    setShowContactPicker(true);
+    setTimeout(async () => {
+      setContactLoading(true);
+      setShowContactPicker(true);
 
-    const { status } = await Contacts.requestPermissionsAsync();
-    if (status !== 'granted') {
-      setShowContactPicker(false);
+      const { status } = await Contacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        setShowContactPicker(false);
+        setContactLoading(false);
+        Alert.alert('권한 필요', '연락처 접근 권한이 필요합니다. 기기 설정에서 권한을 허용해주세요.');
+        return;
+      }
+
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name, Contacts.Fields.Company, Contacts.Fields.JobTitle],
+      });
+
+      const withPhone = data
+        .filter((c) => c.name && c.phoneNumbers?.length > 0)
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+      setContactList(withPhone);
       setContactLoading(false);
-      Alert.alert('권한 필요', '연락처 접근 권한이 필요합니다. 기기 설정에서 권한을 허용해주세요.');
-      return;
-    }
-
-    const { data } = await Contacts.getContactsAsync({
-      fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name, Contacts.Fields.Company, Contacts.Fields.JobTitle],
-    });
-
-    const withPhone = data
-      .filter((c) => c.name && c.phoneNumbers?.length > 0)
-      .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-    setContactList(withPhone);
-    setContactLoading(false);
+    }, 300);
   }
 
   function selectContact(contact) {
@@ -149,6 +156,28 @@ export default function ClientScreen({ navigation, route }) {
     setShowContactPicker(false);
     setContactSearch('');
     setShowAddClient(true);
+  }
+
+  function handleParsePastedContacts() {
+    const { contacts, failedCount } = parsePastedContacts(pasteText);
+    if (contacts.length === 0) {
+      Alert.alert('인식 실패', '인식된 연락처가 없습니다.');
+      return;
+    }
+    setShowPasteContacts(false);
+    setPasteText('');
+    if (failedCount > 0) {
+      Alert.alert('일부 제외됨', `${failedCount}건은 전화번호를 인식하지 못해 제외되었습니다.`);
+    }
+    if (contacts.length === 1) {
+      // 1건이면 연락처 선택 화면(showContactPicker)을 거치지 않고 바로 거래처 추가 폼으로 진입한다.
+      // 안드로이드 Modal 레이스 컨디션(handlePickFromContacts와 동일) 회피 — 다음 모달은 지연 오픈
+      setTimeout(() => selectContact(contacts[0]), 300);
+      return;
+    }
+    setContactList(contacts);
+    // 안드로이드 Modal 레이스 컨디션(handlePickFromContacts와 동일) 회피 — 다음 모달은 지연 오픈
+    setTimeout(() => setShowContactPicker(true), 300);
   }
 
   async function handleAddClient() {
@@ -205,8 +234,14 @@ export default function ClientScreen({ navigation, route }) {
         .filter((m, idx) => m.role !== 'assistant' || idx > 0)
         .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
       const systemPrompt = buildClientSystem(clients, histories);
-      const reply = await askClaude(apiMessages, systemPrompt);
-      setChatMessages([...history, { role: 'assistant', text: reply }]);
+      const reply = await askClaude(apiMessages, systemPrompt, { raw: true });
+      let fixedReply = reply;
+      try {
+        fixedReply = await fixForeignWordsInText(reply);
+      } catch {
+        // 외국어 교정 실패는 채팅 응답 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+      }
+      setChatMessages([...history, { role: 'assistant', text: fixedReply }]);
     } catch (e) {
       const errText = e.message === 'API_KEY_MISSING'
         ? 'API 키가 설정되지 않았습니다. 설정 탭에서 Google AI API 키를 입력해주세요.'
@@ -238,8 +273,14 @@ export default function ClientScreen({ navigation, route }) {
       const lastWord = client.role?.trim() || client.name;
       const particle = josa과와(lastWord);
       const nameWithRole = client.role?.trim() ? `${client.name} ${client.role}` : client.name;
-      const reply = await askClaude([{ role: 'user', content: `${client.company} ${nameWithRole}${particle}의 관계를 3~4문장으로 자연스럽게 요약해줘. 마지막 연락 날짜, 현재 상황, 다음 필요한 액션을 포함해줘. 반드시 한국어로만 작성해줘.` }], systemPrompt);
-      const normalized = normalizeAIDates(reply);
+      const reply = await askClaude([{ role: 'user', content: `${client.company} ${nameWithRole}${particle}의 관계를 3~4문장으로 자연스럽게 요약해줘. 마지막 연락 날짜, 현재 상황, 다음 필요한 액션을 포함해줘. 반드시 한국어로만 작성해줘.` }], systemPrompt, { raw: true });
+      let fixedReply = reply;
+      try {
+        fixedReply = await fixForeignWordsInText(reply);
+      } catch {
+        // 외국어 교정 실패는 요약 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+      }
+      const normalized = normalizeAIDates(fixedReply);
       clientSummaryCache.current[client.id] = normalized;
       setClientSummary(normalized);
       // DB에 저장해 웹/모바일 등 다른 기기에서도 동일한 요약을 그대로 보게 한다 (기기별 재생성 방지)
@@ -285,9 +326,16 @@ export default function ClientScreen({ navigation, route }) {
       const systemPrompt = buildClientSystem(clients, histories);
       const reply = await askClaude(
         [{ role: 'user', content: `등록된 모든 거래처 인원의 관계 히스토리를 종합해서 보고서 형식으로 작성해줘. 각 거래처별로 현재 관계 상태, 마지막 연락 시점, 주요 히스토리 요약, 다음에 필요한 액션을 포함해줘. 히스토리가 없는 거래처는 간략히 언급만 해줘. 반드시 한국어로만 작성해줘.` }],
-        systemPrompt
+        systemPrompt,
+        { raw: true }
       );
-      setHistorySummary(normalizeAIDates(reply));
+      let fixedReply = reply;
+      try {
+        fixedReply = await fixForeignWordsInText(reply);
+      } catch {
+        // 외국어 교정 실패는 요약 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+      }
+      setHistorySummary(normalizeAIDates(fixedReply));
     } catch (e) {
       setHistorySummary(e.message === 'API_KEY_MISSING' ? '설정 탭에서 API 키를 입력하면 AI 요약을 볼 수 있습니다.' : `오류: ${e.message}`);
     } finally {
@@ -391,14 +439,22 @@ export default function ClientScreen({ navigation, route }) {
           <View style={s.sourceSheet}>
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>거래처 추가</Text>
-            <TouchableOpacity style={s.sourceOption} onPress={() => { setShowSourcePicker(false); setShowAddClient(true); }}>
+            <TouchableOpacity style={s.sourceOption} onPress={() => { setShowSourcePicker(false); setTimeout(() => setShowAddClient(true), 300); }}>
               <Text style={s.sourceIcon}>✏️</Text>
               <Text style={s.sourceOptionText}>직접 입력</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[s.sourceOption, s.noBorderBottom]} onPress={handlePickFromContacts}>
-              <Text style={s.sourceIcon}>📱</Text>
-              <Text style={s.sourceOptionText}>연락처에서 가져오기</Text>
-            </TouchableOpacity>
+            {Platform.OS !== 'web' && (
+              <TouchableOpacity style={[s.sourceOption, s.noBorderBottom]} onPress={handlePickFromContacts}>
+                <Text style={s.sourceIcon}>📱</Text>
+                <Text style={s.sourceOptionText}>연락처에서 가져오기</Text>
+              </TouchableOpacity>
+            )}
+            {Platform.OS === 'web' && (
+              <TouchableOpacity style={[s.sourceOption, s.noBorderBottom]} onPress={() => { setShowSourcePicker(false); setTimeout(() => setShowPasteContacts(true), 300); }}>
+                <Text style={s.sourceIcon}>📋</Text>
+                <Text style={s.sourceOptionText}>텍스트로 가져오기</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>
@@ -442,6 +498,42 @@ export default function ClientScreen({ navigation, route }) {
             )}
           </View>
         </View>
+      </Modal>
+
+      {/* ── 텍스트 붙여넣기로 가져오기 모달 (웹 전용 진입점) ── */}
+      <Modal visible={showPasteContacts} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
+          <View style={[s.modalSheet, s.h80pct]}>
+            <View style={s.modalHandle} />
+            <View style={s.chatHeader}>
+              <Text style={s.modalTitle}>텍스트로 가져오기</Text>
+              <TouchableOpacity onPress={() => { setShowPasteContacts(false); setPasteText(''); }}>
+                <Text style={s.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={s.pasteHint}>
+              한 줄에 한 명씩 입력하세요. 이름·회사·직책·연락처는 공백, 쉼표 등으로 구분합니다.{'\n'}
+              예) 홍길동 삼성전자 구매팀장 010-1234-5678
+            </Text>
+            <TextInput
+              style={s.pasteInput}
+              value={pasteText}
+              onChangeText={setPasteText}
+              placeholder={'홍길동 삼성전자 구매팀장 010-1234-5678\n김민준 현대건설 과장 010-2345-6789'}
+              placeholderTextColor={C.textDim}
+              multiline
+              textAlignVertical="top"
+            />
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowPasteContacts(false); setPasteText(''); }}>
+                <Text style={s.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalConfirm} onPress={handleParsePastedContacts}>
+                <Text style={s.modalConfirmText}>다음</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── 클라이언트 상세 모달 ── */}
@@ -904,6 +996,37 @@ function formatHistoryDate(dateStr) {
   return `${y}년 ${m}월 ${d}일`;
 }
 
+// 웹(PC)에서 expo-contacts 네이티브 접근이 불가능한 사용자를 위한 텍스트 붙여넣기 파싱.
+// 한 줄 = 한 명, 토큰화 후 전화번호 패턴을 찾아 분리하고 나머지를 이름/회사/직책 순으로 채운다.
+// handlePickFromContacts가 만드는 contact 객체와 동일한 shape({ id, name, phoneNumbers, company, jobTitle })으로 반환해
+// showContactPicker/selectContact가 별도 분기 없이 그대로 재사용할 수 있게 한다.
+function parsePastedContacts(text) {
+  const phoneRegex = /\d{2,4}-?\d{3,4}-?\d{4}/;
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const contacts = [];
+  let failedCount = 0;
+
+  lines.forEach((line, index) => {
+    const tokens = line.split(/[\s,\t]+/).filter(Boolean);
+    const phoneIdx = tokens.findIndex((t) => phoneRegex.test(t));
+    if (phoneIdx === -1) {
+      failedCount += 1;
+      return;
+    }
+    const phone = tokens[phoneIdx];
+    const rest = tokens.filter((_, i) => i !== phoneIdx);
+    contacts.push({
+      id: `pasted-${Date.now()}-${index}`,
+      name: rest[0] || '',
+      phoneNumbers: [{ number: phone }],
+      company: rest[1] || '',
+      jobTitle: rest.slice(2).join(' '),
+    });
+  });
+
+  return { contacts, failedCount };
+}
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 12 },
@@ -950,6 +1073,8 @@ const s = StyleSheet.create({
   sourceIcon: { fontSize: 20, width: 28, textAlign: 'center' },
   sourceOptionText: { color: C.textPrimary, fontSize: 16 },
   contactItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  pasteHint: { color: C.textDim, fontSize: 11, lineHeight: 16, marginBottom: 12 },
+  pasteInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12, minHeight: 180 },
 
   // Detail Modal
   // 웹에서 Modal은 document.body로 포탈되어 App.js의 480px 폭 제한을 벗어나므로 여기서 다시 맞춘다
