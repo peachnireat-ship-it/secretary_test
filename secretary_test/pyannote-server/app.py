@@ -80,6 +80,10 @@ def get_pipeline():
         import torchaudio
         if not hasattr(torchaudio, 'list_audio_backends'):
             torchaudio.list_audio_backends = lambda: ['soundfile']
+        if not hasattr(torchaudio, 'AudioMetaData'):
+            class _AudioMetaDataStub:
+                pass
+            torchaudio.AudioMetaData = _AudioMetaDataStub
         from pyannote.audio import Pipeline
         # huggingface_hub의 hf_hub_download()가 use_auth_token 파라미터를 제거하고
         # token으로 이름을 바꾼 버전이 설치된 경우를 대비한 호환성 shim.
