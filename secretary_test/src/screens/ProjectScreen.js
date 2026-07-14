@@ -124,8 +124,11 @@ export default function ProjectScreen({ navigation, route }) {
     detailPersonPickerVisible, setDetailPersonPickerVisible,
     detailPersonPickerSearch, setDetailPersonPickerSearch,
 
+    missingEmailModalVisible, missingEmailPeople, missingEmailDrafts, setMissingEmailDrafts,
+    confirmMissingEmailAndSave, skipMissingEmailAndSave,
+
     handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail, addClientToNew,
-  } = useProjectForm({ meetingRecords, projects, schedules, setProjects });
+  } = useProjectForm({ meetingRecords, projects, schedules, clients, setProjects });
 
   const swipeDetail = useSwipeClose(() => setShowDetail(false), showDetail);
   const swipeAdd = useSwipeClose(() => setShowAdd(false), showAdd);
@@ -1312,6 +1315,42 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* ── 이메일 미등록 인물 모달 (프로젝트 추가/수정 저장 직전) ── */}
+      <Modal visible={missingEmailModalVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={skipMissingEmailAndSave}>
+        <View style={[s.modalOverlay, s.modalOverlayCentered]}>
+          <View style={s.speakerModalBox}>
+            <Text style={s.speakerModalTitle}>이메일 미등록 인물</Text>
+            <Text style={s.speakerModalSubtitle}>
+              다음 관련 인물은 이메일이 등록되어 있지 않아 알림 메일을 받을 수 없습니다. 지금 입력하면 저장 시 함께 등록됩니다.
+            </Text>
+            <ScrollView style={s.clientPickerList} keyboardShouldPersistTaps="handled">
+              {missingEmailPeople.map((p) => (
+                <View key={p.id} style={s.missingEmailRow}>
+                  <Text style={s.clientPickerName}>{p.name}</Text>
+                  <TextInput
+                    style={s.clientPickerInput}
+                    value={missingEmailDrafts[p.id] || ''}
+                    onChangeText={(t) => setMissingEmailDrafts((prev) => ({ ...prev, [p.id]: t }))}
+                    placeholder="이메일 (선택)"
+                    placeholderTextColor={C.textDim}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+              ))}
+            </ScrollView>
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.speakerCancelBtn} onPress={skipMissingEmailAndSave} activeOpacity={0.7}>
+                <Text style={s.speakerCancelText}>그대로 등록</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalConfirm} onPress={confirmMissingEmailAndSave} activeOpacity={0.8}>
+                <Text style={s.modalConfirmText}>저장하고 등록</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── 프로젝트 보기 모달 (읽기 전용) ── */}
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
@@ -1563,6 +1602,7 @@ const s = StyleSheet.create({
   clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },
   clientAddBtn: { backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 8, paddingVertical: 11, alignItems: 'center' },
   clientAddBtnText: { color: C.accentBlue, fontSize: 13, fontWeight: '500' },
+  missingEmailRow: { gap: 6, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
   contentEditOverlay: Platform.OS === 'web'
     ? { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 }
     : { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },

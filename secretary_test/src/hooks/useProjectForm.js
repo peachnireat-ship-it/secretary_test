@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert } from '../utils/alertCompat';
-import { addProject, updateProject } from '../services/storage';
+import { addProject, updateProject, updateClient, getTestAccounts } from '../services/storage';
 import { dateTimeFromTimestamp, findOverlappingItems, formatOverlapMessage } from '../utils/dateUtils';
 
 function getDaysInMonth(year, month) {
@@ -76,15 +76,32 @@ function from24h(time24) {
   return { ampm, time12: `${String(h12).padStart(2, '0')}:${mStr}` };
 }
 
+function findClientEmail(client, testAccounts) {
+  if (client.linkedProfileId) {
+    const linked = testAccounts.find((a) => a.id === client.linkedProfileId);
+    if (linked?.email) return linked.email;
+  }
+  return client.email || '';
+}
+function findMissingEmailPeople(clientIds, clients) {
+  const testAccounts = getTestAccounts();
+  return clientIds
+    .map((id) => clients.find((c) => c.id === id))
+    .filter(Boolean)
+    .filter((c) => !findClientEmail(c, testAccounts))
+    .map((c) => ({ id: c.id, name: c.name }));
+}
+
 /**
  * 프로젝트 화면 생성/수정 모달 입력 상태·유효성 검사·저장 로직 공통 훅.
  * @param {object} params
  * @param {Array} params.meetingRecords 회의록 목록 (신규 프로젝트 추가 시 연결된 회의록 조회용, 읽기 전용)
  * @param {Array} params.projects 기존 프로젝트 목록 (기간 겹침 검사용, 읽기 전용)
  * @param {Array} params.schedules 기존 일정 목록 (기간 겹침 검사용, 읽기 전용)
+ * @param {Array} params.clients 거래처 목록 (이메일 미등록 인물 확인용, 읽기 전용)
  * @param {(projects: Array) => void} params.setProjects 프로젝트 목록 갱신 콜백
  */
-export function useProjectForm({ meetingRecords, projects = [], schedules = [], setProjects }) {
+export function useProjectForm({ meetingRecords, projects = [], schedules = [], clients = [], setProjects }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newStartDate, setNewStartDate] = useState('');
@@ -124,6 +141,11 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
   const [detailPersonPickerVisible, setDetailPersonPickerVisible] = useState(false);
   const [detailPersonPickerSearch, setDetailPersonPickerSearch] = useState('');
 
+  const [missingEmailModalVisible, setMissingEmailModalVisible] = useState(false);
+  const [missingEmailPeople, setMissingEmailPeople] = useState([]);
+  const [missingEmailDrafts, setMissingEmailDrafts] = useState({});
+  const [pendingSave, setPendingSave] = useState(null);
+
   async function saveNewProject(startDateStr, deadlineStr) {
     const meetingRecord = pendingMeetingRecordId ? meetingRecords.find((r) => r.id === pendingMeetingRecordId) : null;
     const updated = await addProject({
@@ -144,6 +166,18 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setNewStatus('진행중'); setNewProgress('0'); setNewPriority('보통'); setNewNotes('');
     setPendingMeetingRecordId(null);
     setNewClientIds([]);
+  }
+
+  function proceedToSaveNew(startDateStr, deadlineStr) {
+    const missing = findMissingEmailPeople(newClientIds, clients);
+    if (missing.length > 0) {
+      setMissingEmailPeople(missing);
+      setMissingEmailDrafts({});
+      setPendingSave({ startDateStr, deadlineStr, mode: 'new' });
+      setMissingEmailModalVisible(true);
+      return;
+    }
+    saveNewProject(startDateStr, deadlineStr);
   }
 
   async function handleAdd() {
@@ -173,12 +207,12 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
         `다음 일정/프로젝트와 기간이 겹칩니다.\n\n${formatOverlapMessage(overlaps)}\n\n그래도 이 일자로 등록하시겠습니까?`,
         [
           { text: '취소', style: 'cancel' },
-          { text: '그대로 등록', onPress: () => saveNewProject(startDateStr, deadlineStr) },
+          { text: '그대로 등록', onPress: () => proceedToSaveNew(startDateStr, deadlineStr) },
         ]
       );
       return;
     }
-    await saveNewProject(startDateStr, deadlineStr);
+    proceedToSaveNew(startDateStr, deadlineStr);
   }
 
   function openDetail(project) {
@@ -232,6 +266,18 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setShowDetail(false);
   }
 
+  function proceedToSaveEdit(startDateStr, deadlineStr) {
+    const missing = findMissingEmailPeople(editClientIds, clients);
+    if (missing.length > 0) {
+      setMissingEmailPeople(missing);
+      setMissingEmailDrafts({});
+      setPendingSave({ startDateStr, deadlineStr, mode: 'edit' });
+      setMissingEmailModalVisible(true);
+      return;
+    }
+    saveEditedProject(startDateStr, deadlineStr);
+  }
+
   async function handleEditSave() {
     if (!editTitle.trim() || !editDeadline.trim()) {
       Alert.alert('입력 필요', '제목과 마감일시는 필수 입력 항목입니다.');
@@ -259,12 +305,31 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
         `다음 일정/프로젝트와 기간이 겹칩니다.\n\n${formatOverlapMessage(overlaps)}\n\n그래도 이 일자로 등록하시겠습니까?`,
         [
           { text: '취소', style: 'cancel' },
-          { text: '그대로 등록', onPress: () => saveEditedProject(startDateStr, deadlineStr) },
+          { text: '그대로 등록', onPress: () => proceedToSaveEdit(startDateStr, deadlineStr) },
         ]
       );
       return;
     }
-    await saveEditedProject(startDateStr, deadlineStr);
+    proceedToSaveEdit(startDateStr, deadlineStr);
+  }
+
+  async function finishPendingSave() {
+    setMissingEmailModalVisible(false);
+    const p = pendingSave;
+    setPendingSave(null);
+    if (!p) return;
+    if (p.mode === 'new') await saveNewProject(p.startDateStr, p.deadlineStr);
+    else await saveEditedProject(p.startDateStr, p.deadlineStr);
+  }
+  async function confirmMissingEmailAndSave() {
+    for (const person of missingEmailPeople) {
+      const draft = (missingEmailDrafts[person.id] || '').trim();
+      if (draft) await updateClient(person.id, { email: draft });
+    }
+    await finishPendingSave();
+  }
+  async function skipMissingEmailAndSave() {
+    await finishPendingSave();
   }
 
   async function handleProgressUpdate(id, newProg) {
@@ -306,6 +371,10 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
 
     detailPersonPickerVisible, setDetailPersonPickerVisible,
     detailPersonPickerSearch, setDetailPersonPickerSearch,
+
+    missingEmailModalVisible, setMissingEmailModalVisible,
+    missingEmailPeople, missingEmailDrafts, setMissingEmailDrafts,
+    confirmMissingEmailAndSave, skipMissingEmailAndSave,
 
     handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail, addClientToNew,
   };
