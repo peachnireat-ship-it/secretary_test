@@ -237,7 +237,7 @@ function fromRow(row, keymap) {
 }
 
 const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', createdAt: 'created_at' };
-const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', notes: 'notes', aiSummary: 'ai_summary', createdAt: 'created_at' };
+const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', notes: 'notes', aiSummary: 'ai_summary', createdAt: 'created_at' };
 const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', createdAt: 'created_at' };
 const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', createdAt: 'created_at', updatedAt: 'updated_at' };
 const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', diarizeSource: 'diarize_source', createdAt: 'created_at' };
@@ -245,7 +245,7 @@ const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'com
 
 // NOT NULL 컬럼 기본값 — 벌크 upsert 시 toRow()의 defaults 인자로 전달한다.
 const SCHEDULE_DEFAULTS = { notes: '', client_ids: [] };
-const CLIENT_DEFAULTS = { role: '', work_contact: '', notes: '', ai_summary: '' };
+const CLIENT_DEFAULTS = { role: '', work_contact: '', email: '', notes: '', ai_summary: '' };
 const HISTORY_DEFAULTS = { content: '', result: '' };
 const PROJECT_DEFAULTS = { status: '진행중', priority: '보통', notes: '', progress: 0, client_ids: [], meeting_record_ids: [] };
 const MEETING_DEFAULTS = { transcript: '', summary: '', client_ids: [], tasks: [] };

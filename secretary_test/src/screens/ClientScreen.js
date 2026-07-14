@@ -41,6 +41,7 @@ export default function ClientScreen({ navigation, route }) {
   const [newRole, setNewRole] = useState('');
   const [newContact, setNewContact] = useState('');
   const [newWorkContact, setNewWorkContact] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newNotes, setNewNotes] = useState('');
 
   const [showSourcePicker, setShowSourcePicker] = useState(false);
@@ -186,10 +187,10 @@ export default function ClientScreen({ navigation, route }) {
       Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.\n모두 입력 후 추가해주세요.');
       return;
     }
-    const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), notes: newNotes.trim() });
+    const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), email: newEmail.trim(), notes: newNotes.trim() });
     setClients(updated);
     setShowAddClient(false);
-    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewNotes('');
+    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewNotes('');
   }
 
   function openEditClient(client) {
@@ -198,6 +199,7 @@ export default function ClientScreen({ navigation, route }) {
     setNewRole(client.role || '');
     setNewContact(client.contact || '');
     setNewWorkContact(client.workContact || '');
+    setNewEmail(client.email || '');
     setNewNotes(client.notes || '');
     setShowEditClient(true);
   }
@@ -207,12 +209,12 @@ export default function ClientScreen({ navigation, route }) {
       Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.');
       return;
     }
-    const updated = await updateClient(selectedClient.id, { name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), notes: newNotes.trim() });
+    const updated = await updateClient(selectedClient.id, { name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), email: newEmail.trim(), notes: newNotes.trim() });
     setClients(updated);
     const updatedClient = updated.find((c) => c.id === selectedClient.id);
     setSelectedClient(updatedClient);
     setShowEditClient(false);
-    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewNotes('');
+    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewNotes('');
   }
 
   function handleHistoriesChange(updated) {
@@ -570,7 +572,7 @@ export default function ClientScreen({ navigation, route }) {
             </View>
 
             {/* 연락처 */}
-            {(selectedClient?.contact || selectedClient?.workContact) && (
+            {(selectedClient?.contact || selectedClient?.workContact || selectedClient?.email) && (
               <View style={s.contactSection}>
                 {selectedClient.contact ? (
                   <View style={s.contactRow}>
@@ -599,6 +601,21 @@ export default function ClientScreen({ navigation, route }) {
                       ]
                     )}>
                       <Text style={s.contactNumber}>{selectedClient.workContact}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+                {selectedClient.email ? (
+                  <View style={s.contactRow}>
+                    <Text style={s.contactLabel}>이메일</Text>
+                    <TouchableOpacity onPress={() => Alert.alert(
+                      '메일 보내기',
+                      `${selectedClient.name}(${selectedClient.email})에게 메일을 보내시겠습니까?`,
+                      [
+                        { text: '취소', style: 'cancel' },
+                        { text: '메일 보내기', onPress: () => Linking.openURL(`mailto:${selectedClient.email}`) },
+                      ]
+                    )}>
+                      <Text style={s.contactNumber}>{selectedClient.email}</Text>
                     </TouchableOpacity>
                   </View>
                 ) : null}
@@ -695,11 +712,13 @@ export default function ClientScreen({ navigation, route }) {
               <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>직장 연락처</Text>
               <TextInput style={s.input} value={newWorkContact} onChangeText={setNewWorkContact} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>이메일</Text>
+              <TextInput style={s.input} value={newEmail} onChangeText={setNewEmail} placeholder="example@company.com" placeholderTextColor={C.textDim} keyboardType="email-address" autoCapitalize="none" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>메모</Text>
               <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
             </ScrollView>
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewNotes(''); }}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewNotes(''); }}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.modalConfirm} onPress={handleEditClient}>
@@ -736,6 +755,8 @@ export default function ClientScreen({ navigation, route }) {
               <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>직장 연락처</Text>
               <TextInput style={s.input} value={newWorkContact} onChangeText={setNewWorkContact} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>이메일</Text>
+              <TextInput style={s.input} value={newEmail} onChangeText={setNewEmail} placeholder="example@company.com" placeholderTextColor={C.textDim} keyboardType="email-address" autoCapitalize="none" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>메모</Text>
               <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
             </ScrollView>
