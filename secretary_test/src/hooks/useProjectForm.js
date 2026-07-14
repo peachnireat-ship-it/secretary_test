@@ -98,6 +98,10 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
   const [newPriority, setNewPriority] = useState('보통');
   const [newNotes, setNewNotes] = useState('');
   const [pendingMeetingRecordId, setPendingMeetingRecordId] = useState(null);
+  const [newClientIds, setNewClientIds] = useState([]);
+
+  const [addPersonPickerVisible, setAddPersonPickerVisible] = useState(false);
+  const [addPersonPickerSearch, setAddPersonPickerSearch] = useState('');
 
   const [showDetail, setShowDetail] = useState(false);
   const [detailProject, setDetailProject] = useState(null);
@@ -131,7 +135,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
       priority: newPriority,
       notes: newNotes.trim(),
       meetingRecordIds: pendingMeetingRecordId ? [pendingMeetingRecordId] : [],
-      clientIds: meetingRecord?.clientIds || [],
+      clientIds: [...new Set([...(meetingRecord?.clientIds || []), ...newClientIds])],
     });
     setProjects(updated);
     setShowAdd(false);
@@ -139,6 +143,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setNewDeadline(''); setNewDeadlineTime('06:00'); setNewDeadlineAmPm('오후');
     setNewStatus('진행중'); setNewProgress('0'); setNewPriority('보통'); setNewNotes('');
     setPendingMeetingRecordId(null);
+    setNewClientIds([]);
   }
 
   async function handleAdd() {
@@ -275,12 +280,22 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setDetailPersonPickerSearch('');
   }
 
+  function addClientToNew(client) {
+    if (!client.id) return;
+    setNewClientIds((prev) =>
+      prev.includes(client.id) ? prev.filter((id) => id !== client.id) : [...prev, client.id]
+    );
+  }
+
   return {
     showAdd, setShowAdd, newTitle, setNewTitle, newStartDate, setNewStartDate,
     newStartTime, setNewStartTime, newStartAmPm, setNewStartAmPm, newDeadline, setNewDeadline,
     newDeadlineTime, setNewDeadlineTime, newDeadlineAmPm, setNewDeadlineAmPm, newStatus, setNewStatus,
     newProgress, setNewProgress, newPriority, setNewPriority, newNotes, setNewNotes,
     pendingMeetingRecordId, setPendingMeetingRecordId,
+    newClientIds, setNewClientIds,
+    addPersonPickerVisible, setAddPersonPickerVisible,
+    addPersonPickerSearch, setAddPersonPickerSearch,
 
     showDetail, setShowDetail, detailProject, setDetailProject, showProjectView, setShowProjectView,
     viewProject, setViewProject, editTitle, setEditTitle, editStartDate, setEditStartDate,
@@ -292,6 +307,6 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     detailPersonPickerVisible, setDetailPersonPickerVisible,
     detailPersonPickerSearch, setDetailPersonPickerSearch,
 
-    handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail,
+    handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail, addClientToNew,
   };
 }

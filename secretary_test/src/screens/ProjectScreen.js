@@ -109,6 +109,9 @@ export default function ProjectScreen({ navigation, route }) {
     newDeadlineTime, setNewDeadlineTime, newDeadlineAmPm, setNewDeadlineAmPm, newStatus, setNewStatus,
     newProgress, setNewProgress, newPriority, setNewPriority, newNotes, setNewNotes,
     setPendingMeetingRecordId,
+    newClientIds, setNewClientIds,
+    addPersonPickerVisible, setAddPersonPickerVisible,
+    addPersonPickerSearch, setAddPersonPickerSearch,
 
     showDetail, setShowDetail, detailProject, showProjectView, setShowProjectView,
     viewProject, setViewProject, editTitle, setEditTitle, editStartDate, setEditStartDate,
@@ -120,7 +123,7 @@ export default function ProjectScreen({ navigation, route }) {
     detailPersonPickerVisible, setDetailPersonPickerVisible,
     detailPersonPickerSearch, setDetailPersonPickerSearch,
 
-    handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail,
+    handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail, addClientToNew,
   } = useProjectForm({ meetingRecords, projects, schedules, setProjects });
 
   const swipeDetail = useSwipeClose(() => setShowDetail(false), showDetail);
@@ -481,7 +484,7 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 프로젝트 상세 모달 ── */}
       <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => setShowDetail(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { maxHeight: '90%' }, swipeDetail.animStyle]}>
+          <Animated.View style={[s.modalSheet, commonStyles.maxH90pct, swipeDetail.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeDetail.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -668,7 +671,7 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 프로젝트 추가 모달 ── */}
       <Modal visible={showAdd} animationType="slide" transparent onRequestClose={() => setShowAdd(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, { maxHeight: '92%' }, swipeAdd.animStyle]}>
+          <Animated.View style={[s.modalSheet, s.maxH92pct, swipeAdd.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeAdd.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -726,8 +729,42 @@ export default function ProjectScreen({ navigation, route }) {
             <Text style={s.inputLabel}>메모 (선택)</Text>
             <TextInput style={[s.input, s.h64]} value={newNotes} onChangeText={setNewNotes} placeholder="지연 원인, 진행 상황 등" placeholderTextColor={C.textDim} multiline />
 
+            {/* 관련 인물 */}
+            <View style={s.relatedPeopleHeaderRow}>
+              <Text style={[s.inputLabel, s.inputLabelInline]}>관련 인물</Text>
+              <TouchableOpacity
+                onPress={() => { setAddPersonPickerVisible(true); setAddPersonPickerSearch(''); }}
+                style={s.addPersonBtn}
+              >
+                <Text style={s.addPersonBtnText}>+ 추가</Text>
+              </TouchableOpacity>
+            </View>
+            {newClientIds.length > 0 && (
+              <View style={s.relatedPeopleRow}>
+                {newClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean).map((c) => (
+                  <View key={c.id} style={s.relatedPersonChip}>
+                    <View style={s.personChipInner}>
+                      <View style={s.relatedPersonAvatar}>
+                        <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
+                      </View>
+                      <View style={commonStyles.flex1}>
+                        <Text style={s.relatedPersonName}>{c.name}</Text>
+                        {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setNewClientIds((prev) => prev.filter((cid) => cid !== c.id))}
+                      hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
+                    >
+                      <Text style={s.removePersonIcon}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <View style={[s.modalBtns, commonStyles.mb8]}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => setShowAdd(false)}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); }}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.modalConfirm} onPress={handleAdd}>
@@ -1235,6 +1272,45 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* ── 인물 추가 피커 모달 (프로젝트 추가) ── */}
+      <Modal visible={addPersonPickerVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setAddPersonPickerVisible(false)}>
+        <View style={[s.modalOverlay, s.modalOverlayCentered]}>
+          <View style={[s.speakerModalBox, s.clientPickerBox]}>
+            <Text style={s.speakerModalTitle}>인물 추가</Text>
+            <TextInput
+              style={s.clientPickerInput}
+              value={addPersonPickerSearch}
+              onChangeText={setAddPersonPickerSearch}
+              placeholder="이름 또는 회사 검색"
+              placeholderTextColor={C.textDim}
+              autoFocus
+            />
+            <ScrollView style={s.clientPickerList} keyboardShouldPersistTaps="handled">
+              {clients
+                .filter((c) => !addPersonPickerSearch || c.name.includes(addPersonPickerSearch) || (c.company || '').includes(addPersonPickerSearch))
+                .map((c) => {
+                  const selected = newClientIds.includes(c.id);
+                  return (
+                    <TouchableOpacity key={c.id} style={[s.clientPickerItem, selected && s.clientPickerItemSelected]} onPress={() => addClientToNew(c)} activeOpacity={0.7}>
+                      <Text style={s.clientPickerName}>{selected && <Text style={s.clientPickerCheckMark}>✓ </Text>}{c.name}</Text>
+                      {!!c.company && <Text style={s.clientPickerCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text>}
+                    </TouchableOpacity>
+                  );
+                })
+              }
+              {clients
+                .filter((c) => !addPersonPickerSearch || c.name.includes(addPersonPickerSearch) || (c.company || '').includes(addPersonPickerSearch))
+                .length === 0 && (
+                <Text style={s.clientPickerEmpty}>검색 결과가 없습니다</Text>
+              )}
+            </ScrollView>
+            <TouchableOpacity style={s.speakerCancelBtn} onPress={() => setAddPersonPickerVisible(false)} activeOpacity={0.7}>
+              <Text style={s.speakerCancelText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── 프로젝트 보기 모달 (읽기 전용) ── */}
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
@@ -1414,10 +1490,6 @@ const s = StyleSheet.create({
   cardPersonAvatarText: { color: C.accentTeal, fontSize: 11, fontWeight: '600' },
   cardPersonName: { color: C.textSecondary, fontSize: 12, fontWeight: '500' },
   cardPersonCompany: { color: C.textDim, fontSize: 10, marginTop: 1 },
-  clientChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  clientChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.accentTeal + '18', borderWidth: 1, borderColor: C.accentTeal + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
-  clientChipDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: C.accentTeal },
-  clientChipText: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
   meetingChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   meetingChip: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   meetingChipText: { color: C.accentPurple, fontSize: 11, fontWeight: '500' },
@@ -1483,6 +1555,8 @@ const s = StyleSheet.create({
   clientPickerInput: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: C.textPrimary, fontSize: 14 },
   clientPickerList: { maxHeight: 280 },
   clientPickerItem: { paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.border },
+  clientPickerItemSelected: { backgroundColor: C.red + '14' },
+  clientPickerCheckMark: { color: C.red, fontWeight: '700' },
   clientPickerName: { color: C.textPrimary, fontSize: 14, fontWeight: '500' },
   clientPickerCompany: { color: C.textDim, fontSize: 12, marginTop: 2 },
   clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },
@@ -1611,4 +1685,5 @@ const s = StyleSheet.create({
   progressLabelSpacing: { marginTop: 4, marginBottom: 12 },
   confirmBtnBlock: { marginTop: 16, marginHorizontal: 0, marginBottom: 8 },
   spacerH8: { height: 8 },
+  maxH92pct: { maxHeight: '92%' },
 });
