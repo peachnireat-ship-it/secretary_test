@@ -36,3 +36,6 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# Supabase CLI local metadata (project link info, machine-specific)
+supabase/.temp/

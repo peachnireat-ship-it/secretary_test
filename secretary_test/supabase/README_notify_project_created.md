@@ -29,10 +29,11 @@ Supabase 대시보드 > SQL Editor에서 `supabase/patch_clients_email.sql` 내�
 ## 5. `patch_project_notify_trigger.sql` 실행
 1. `supabase/functions/notify-project-created/index.ts` 배포가 완료된 상태여야 한다 (2번 단계 완료 후).
 2. `patch_project_notify_trigger.sql` 상단의 `<PROJECT_REF>` 플레이스홀더를 실제 프로젝트 ref로 교체 (Project Settings > API에서 Project URL 확인).
-3. SQL Editor에서 아래를 먼저 실행해 webhook secret을 설정 (3번에서 설정한 `WEBHOOK_SECRET`과 동일한 값):
+3. SQL Editor에서 아래를 먼저 실행해 webhook secret을 Vault에 저장 (3번에서 설정한 `WEBHOOK_SECRET`과 동일한 값). `alter database ... set`은 호스팅 환경에서 슈퍼유저 권한이 없어 `permission denied`가 발생하므로, Supabase의 암호화된 시크릿 저장소인 Vault를 대신 사용한다:
    ```sql
-   alter database postgres set app.settings.webhook_secret = '3번에서-설정한-값과-동일한-문자열';
+   select vault.create_secret('3번에서-설정한-값과-동일한-문자열', 'notify_project_created_webhook_secret');
    ```
+   (값을 나중에 바꾸고 싶으면: `select vault.update_secret(id, '새-값') from vault.secrets where name = 'notify_project_created_webhook_secret';`)
 4. 그 다음 `patch_project_notify_trigger.sql` 파일 전체를 SQL Editor에 붙여넣고 실행.
 
 ## 6. 동작 확인

@@ -12,8 +12,8 @@
 // - SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: Supabase Edge Function 배포 시 자동 주입됨
 // - RESEND_API_KEY: Resend 대시보드에서 발급한 API 키
 // - WEBHOOK_SECRET: DB 트리거가 보내는 x-webhook-secret 헤더와 비교할 공유 시크릿
-//   (Supabase 대시보드에서 `alter database postgres set app.settings.webhook_secret = '...'`로
-//    설정한 값과 동일해야 함)
+//   (Supabase SQL Editor에서 `select vault.create_secret('...', 'notify_project_created_webhook_secret');`로
+//    Vault에 저장한 값과 동일해야 함. 자세한 내용은 supabase/patch_project_notify_trigger.sql 참고)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     // ── 2) projects 테이블 조회 ──
     const { data: project, error: projectError } = await supabase
       .from('projects')
-      .select('id, title, user_id, client_ids, deadline, start_date')
+      .select('id, title, user_id, client_ids, deadline, start_date, status, priority, progress, notes')
       .eq('id', projectId)
       .single();
 
@@ -122,18 +122,38 @@ Deno.serve(async (req) => {
     const subject = `[secretary_test] 새 프로젝트 등록: ${project.title}`;
     const startDateText = project.start_date || '미정';
     const deadlineText = project.deadline || '미정';
-    const textBody =
-      `새 프로젝트가 등록되었습니다.\n\n` +
-      `제목: ${project.title}\n` +
-      `시작일: ${startDateText}\n` +
-      `마감일: ${deadlineText}\n`;
-    const htmlBody =
-      `<p>새 프로젝트가 등록되었습니다.</p>` +
-      `<ul>` +
-      `<li><strong>제목:</strong> ${project.title}</li>` +
-      `<li><strong>시작일:</strong> ${startDateText}</li>` +
-      `<li><strong>마감일:</strong> ${deadlineText}</li>` +
-      `</ul>`;
+    const organizerText = registrant?.name || '알 수 없음';
+    const relatedPeopleNames = relatedClients.map((c) => c.name).filter(Boolean);
+    const relatedPeopleText = relatedPeopleNames.length > 0 ? relatedPeopleNames.join(', ') : '없음';
+    const notesText = project.notes || '';
+
+    const textLines = [
+      '새 프로젝트가 등록되었습니다.',
+      '',
+      `제목: ${project.title}`,
+      `주최자: ${organizerText}`,
+      `상태: ${project.status}`,
+      `우선순위: ${project.priority}`,
+      `진행률: ${project.progress}%`,
+      `시작일: ${startDateText}`,
+      `마감일: ${deadlineText}`,
+      `관련 인물: ${relatedPeopleText}`,
+    ];
+    if (notesText) textLines.push(`메모: ${notesText}`);
+    const textBody = textLines.join('\n');
+
+    const htmlItems = [
+      `<li><strong>제목:</strong> ${project.title}</li>`,
+      `<li><strong>주최자:</strong> ${organizerText}</li>`,
+      `<li><strong>상태:</strong> ${project.status}</li>`,
+      `<li><strong>우선순위:</strong> ${project.priority}</li>`,
+      `<li><strong>진행률:</strong> ${project.progress}%</li>`,
+      `<li><strong>시작일:</strong> ${startDateText}</li>`,
+      `<li><strong>마감일:</strong> ${deadlineText}</li>`,
+      `<li><strong>관련 인물:</strong> ${relatedPeopleText}</li>`,
+    ];
+    if (notesText) htmlItems.push(`<li><strong>메모:</strong> ${notesText}</li>`);
+    const htmlBody = `<p>새 프로젝트가 등록되었습니다.</p><ul>${htmlItems.join('')}</ul>`;
 
     const resendResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -142,8 +162,10 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        // TODO: 실제 발신 도메인으로 교체 필요 (Resend에 도메인 인증 후 사용)
-        from: 'notifications@example.com',
+        // 도메인 미인증 상태의 Resend 테스트 모드 발신 주소.
+        // 이 상태에서는 수신자도 Resend 가입 이메일로만 발송 가능(다른 주소는 Resend가 거부함).
+        // 본인 도메인을 인증하면 그 도메인의 임의 주소(예: notifications@yourdomain.com)로 교체할 것.
+        from: 'onboarding@resend.dev',
         to: recipients,
         subject,
         text: textBody,

@@ -5,9 +5,14 @@
 -- 1) 이 SQL을 실행하기 전에 supabase/functions/notify-project-created를 먼저 배포하고,
 --    아래 EDGE_FUNCTION_URL 플레이스홀더(<PROJECT_REF>)를 실제 프로젝트 ref로 교체할 것
 --    (Supabase 대시보드 > Project Settings > API 에서 Project URL로 확인 가능)
--- 2) Supabase 대시보드 SQL Editor에서 아래 명령으로 webhook_secret을 설정할 것
---    (이 값은 Edge Function의 WEBHOOK_SECRET 환경변수와 동일한 값이어야 한다):
---      alter database postgres set app.settings.webhook_secret = '원하는-임의의-비밀-문자열';
+-- 2) Supabase 대시보드 SQL Editor에서 아래 명령으로 webhook secret을 Vault에 저장할 것
+--    (일반 `alter database ... set`은 호스팅 환경에서 슈퍼유저 권한이 없어 permission denied가
+--    발생하므로, Supabase의 암호화된 시크릿 저장소인 Vault를 사용한다.
+--    이 값은 Edge Function의 WEBHOOK_SECRET 환경변수와 동일한 값이어야 한다):
+--      select vault.create_secret('원하는-임의의-비밀-문자열', 'notify_project_created_webhook_secret');
+--    (이미 한 번 만들었는데 값을 바꾸고 싶으면 아래로 갱신:
+--      select vault.update_secret(id, '새로운-비밀-문자열') from vault.secrets
+--      where name = 'notify_project_created_webhook_secret';)
 -- 3) 그 다음에 이 파일 전체를 SQL Editor에 붙여넣고 실행할 것
 -- 4) 자세한 배포 절차는 supabase/README_notify_project_created.md 참고
 
@@ -18,12 +23,17 @@ create or replace function notify_project_created()
 returns trigger
 language plpgsql
 security definer
+set search_path = public, vault
 as $$
 declare
-  -- TODO: <PROJECT_REF>를 실제 Supabase 프로젝트 ref로 교체할 것
-  edge_function_url text := 'https://<PROJECT_REF>.supabase.co/functions/v1/notify-project-created';
-  webhook_secret text := current_setting('app.settings.webhook_secret', true);
+  edge_function_url text := 'https://peodtjwyajgratgshluy.supabase.co/functions/v1/notify-project-created';
+  webhook_secret text;
 begin
+  -- Vault에서 webhook secret 조회 (2번 단계에서 vault.create_secret으로 저장한 값)
+  select decrypted_secret into webhook_secret
+  from vault.decrypted_secrets
+  where name = 'notify_project_created_webhook_secret'
+  limit 1;
   -- 알림 발송(net.http_post)이 어떤 이유로든 실패해도(pg_net 미설치, 권한 문제 등)
   -- 예외를 여기서 삼켜서 핵심 기능인 project INSERT 자체는 항상 정상 커밋되도록 한다.
   begin
