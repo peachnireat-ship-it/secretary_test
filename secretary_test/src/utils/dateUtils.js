@@ -48,7 +48,7 @@ export function hasDateRangeOverlap(start1, end1, start2, end2) {
 
 // 일정 객체에서 겹침 판단에 쓸 유효 시작/종료 날짜(YYYY-MM-DD)를 추출.
 // 기간 일정(startDate/endDate)이면 그 날짜 부분을, 아니면 단일 날짜(date)를 시작=종료로 취급.
-export function scheduleDateRange(schedule) {
+export function getScheduleRange(schedule) {
   const start = (schedule.startDate || '').split(' ')[0] || schedule.date;
   const end = (schedule.endDate || '').split(' ')[0] || schedule.date;
   return { start, end };
@@ -56,7 +56,7 @@ export function scheduleDateRange(schedule) {
 
 // 프로젝트 객체에서 겹침 판단에 쓸 유효 시작/종료 날짜(YYYY-MM-DD)를 추출.
 // startDate가 없으면 마감일(deadline)을 시작일로 대체해 단일 날짜 구간으로 취급.
-export function projectDateRange(project) {
+export function getProjectRange(project) {
   const deadlineDate = (project.deadline || '').split(' ')[0];
   const start = (project.startDate || '').split(' ')[0] || deadlineDate;
   return { start, end: deadlineDate };
@@ -69,7 +69,7 @@ export function findOverlappingItems({ start, end, schedules = [], projects = []
   const overlaps = [];
   for (const sc of schedules) {
     if (excludeType === 'schedule' && excludeId && sc.id === excludeId) continue;
-    const { start: s2, end: e2 } = scheduleDateRange(sc);
+    const { start: s2, end: e2 } = getScheduleRange(sc);
     if (hasDateRangeOverlap(start, end, s2, e2)) {
       overlaps.push({ type: 'schedule', title: sc.title, start: s2, end: e2 });
     }
@@ -77,7 +77,7 @@ export function findOverlappingItems({ start, end, schedules = [], projects = []
   for (const p of projects) {
     if (p.status === '완료' || p.status === '취소') continue;
     if (excludeType === 'project' && excludeId && p.id === excludeId) continue;
-    const { start: s2, end: e2 } = projectDateRange(p);
+    const { start: s2, end: e2 } = getProjectRange(p);
     if (hasDateRangeOverlap(start, end, s2, e2)) {
       overlaps.push({ type: 'project', title: p.title, start: s2, end: e2 });
     }

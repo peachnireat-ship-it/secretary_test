@@ -159,7 +159,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(newStartAmPm, newStartTime)}` : dateTimeFromTimestamp(Date.now());
     const deadlineStr = `${deadlineDateNorm} ${to24h(newDeadlineAmPm, newDeadlineTime)}`;
 
-    // 실제 저장될 startDate의 날짜 부분을 그대로 겹침 검사 기준으로 사용 (projectDateRange()와 동일한 방식)
+    // 실제 저장될 startDate의 날짜 부분을 그대로 겹침 검사 기준으로 사용 (getProjectRange()와 동일한 방식)
     const rangeStart = startDateStr.split(' ')[0];
     const overlaps = findOverlappingItems({ start: rangeStart, end: deadlineDateNorm, schedules, projects, excludeType: 'project' });
     if (overlaps.length > 0) {
@@ -245,7 +245,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(editStartAmPm, editStartTime)}` : dateTimeFromTimestamp(detailProject.createdAt);
     const deadlineStr = `${deadlineDateNorm} ${to24h(editDeadlineAmPm, editDeadlineTime)}`;
 
-    // 실제 저장될 startDate의 날짜 부분을 그대로 겹침 검사 기준으로 사용 (projectDateRange()와 동일한 방식)
+    // 실제 저장될 startDate의 날짜 부분을 그대로 겹침 검사 기준으로 사용 (getProjectRange()와 동일한 방식)
     const rangeStart = startDateStr.split(' ')[0];
     const overlaps = findOverlappingItems({ start: rangeStart, end: deadlineDateNorm, schedules, projects, excludeId: detailProject.id, excludeType: 'project' });
     if (overlaps.length > 0) {
