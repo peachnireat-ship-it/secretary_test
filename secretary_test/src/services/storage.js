@@ -52,8 +52,8 @@ const ROSTER = [
   { id: '6309db8f-0c79-4773-b4b0-ae3ae4b33c84', legacyId: 'admin', email: 'peach.nireat@gmail.com', name: '관리자', role: 'admin', team: '운영팀' },
   { id: '20ac9bc4-efef-45ed-b091-b204eba4e231', legacyId: 'kmj', email: 'kmj@secretary.app', name: '김민준', role: '구매팀장', team: '삼성물산' },
   { id: 'f9ebdb42-0273-4753-bdf7-d78b48455cf9', legacyId: 'lsy', email: 'lsy@secretary.app', name: '이서연', role: '기획팀 과장', team: '현대건설' },
-  { id: '55dc6288-622b-464e-a1e2-25f683394fb9', legacyId: 'pjh', email: 'pjh@secretary.app', name: '박지훈', role: '영업이사', team: 'LG전자' },
-  { id: '356c2bca-09c1-4b25-8aab-a71f532e974a', legacyId: 'csa', email: 'csa@secretary.app', name: '최수아', role: '마케팅 팀장', team: 'SK텔레콤' },
+  { id: '55dc6288-622b-464e-a1e2-25f683394fb9', legacyId: 'pjh', email: 'nireat@naver.com', name: '박지훈', role: '영업이사', team: 'LG전자' },
+  { id: '356c2bca-09c1-4b25-8aab-a71f532e974a', legacyId: 'csa', email: 'like-a-g6@daum.net', name: '최수아', role: '마케팅 팀장', team: 'SK텔레콤' },
 ];
 
 // __DEV__ 전용 계정 전환(switchAccount)에서만 사용 — 이미 LoginScreen __DEV__ 자동입력 버튼과
