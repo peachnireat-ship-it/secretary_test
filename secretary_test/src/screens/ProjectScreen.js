@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
-import { getProjects, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
+import { getProjects, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
 import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectForm';
@@ -74,6 +74,7 @@ export default function ProjectScreen({ navigation, route }) {
   const [meetingRecords, setMeetingRecords] = useState([]);
   const [clients, setClients] = useState([]);
   const [histories, setHistories] = useState([]);
+  const [schedules, setSchedules] = useState([]);
   const [showPersonDetail, setShowPersonDetail] = useState(false);
   const [personDetailClient, setPersonDetailClient] = useState(null);
   const [filter, setFilter] = useState('전체');
@@ -120,7 +121,7 @@ export default function ProjectScreen({ navigation, route }) {
     detailPersonPickerSearch, setDetailPersonPickerSearch,
 
     handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail,
-  } = useProjectForm({ meetingRecords, setProjects });
+  } = useProjectForm({ meetingRecords, projects, schedules, setProjects });
 
   const swipeDetail = useSwipeClose(() => setShowDetail(false), showDetail);
   const swipeAdd = useSwipeClose(() => setShowAdd(false), showAdd);
@@ -178,7 +179,7 @@ export default function ProjectScreen({ navigation, route }) {
   }, [route?.params?.openAI]);
 
   async function load() {
-    const [all, records, clientList, histList] = await Promise.all([getProjects(), getMeetingRecords(), getClients(), getHistories()]);
+    const [all, records, clientList, histList, scheduleList] = await Promise.all([getProjects(), getMeetingRecords(), getClients(), getHistories(), getSchedules()]);
     // 시작일자가 비어있는 기존 프로젝트는 등록일(createdAt)로 채워서 저장 (최초 1회만 실제 쓰기 발생)
     // 백필 실패(네트워크 오류 등)가 이미 정상 조회된 all 데이터 표시까지 막지 않도록 개별 실패는 무시한다.
     const missingStartDate = all.filter((p) => !p.startDate);
@@ -194,6 +195,7 @@ export default function ProjectScreen({ navigation, route }) {
     setMeetingRecords(records);
     setClients(clientList);
     setHistories(histList);
+    setSchedules(scheduleList);
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));

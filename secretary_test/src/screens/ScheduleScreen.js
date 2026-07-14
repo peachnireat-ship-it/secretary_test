@@ -13,7 +13,7 @@ import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/clau
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
 import { priorityColor, tagColor, statusColor } from '../utils/colors';
-import { daysUntil, daysLabel } from '../utils/dateUtils';
+import { daysUntil, daysLabel, findOverlappingItems, formatOverlapMessage } from '../utils/dateUtils';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -263,6 +263,15 @@ export default function ScheduleScreen({ navigation, route }) {
   // eslint-disable-next-line react-hooks/refs -- 렌더마다 최신 moveMonth를 ref에 동기화하는 안전한 패턴(panResponder 콜백에서 최신 함수 참조용)
   moveMonthRef.current = moveMonth;
 
+  async function saveNewSchedule(scheduleDate, startDateStr, endDateStr) {
+    const updated = await addSchedule({ date: scheduleDate, time: to24h(newStartAmPm, newStartTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: startDateStr, endDate: endDateStr });
+    setSchedules(updated);
+    setShowAdd(false);
+    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]);
+    setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전');
+    setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전');
+  }
+
   async function handleAdd() {
     if (!newTitle.trim()) return;
     const startTrim = newStartDate.trim();
@@ -274,12 +283,21 @@ export default function ScheduleScreen({ navigation, route }) {
     const scheduleDate = startTrim.length === 10 ? startTrim : selectedDate;
     const startDateStr = startTrim ? `${startTrim} ${to24h(newStartAmPm, newStartTime)}` : '';
     const endDateStr = endTrim ? `${endTrim} ${to24h(newEndAmPm, newEndTime)}` : '';
-    const updated = await addSchedule({ date: scheduleDate, time: to24h(newStartAmPm, newStartTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: startDateStr, endDate: endDateStr });
-    setSchedules(updated);
-    setShowAdd(false);
-    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]);
-    setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전');
-    setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전');
+
+    const rangeEnd = endTrim.length === 10 ? endTrim : scheduleDate;
+    const overlaps = findOverlappingItems({ start: scheduleDate, end: rangeEnd, schedules, projects, excludeType: 'schedule' });
+    if (overlaps.length > 0) {
+      Alert.alert(
+        '일정 겹침',
+        `다음 일정/프로젝트와 기간이 겹칩니다.\n\n${formatOverlapMessage(overlaps)}\n\n그래도 이 일자로 등록하시겠습니까?`,
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '그대로 등록', onPress: () => saveNewSchedule(scheduleDate, startDateStr, endDateStr) },
+        ]
+      );
+      return;
+    }
+    await saveNewSchedule(scheduleDate, startDateStr, endDateStr);
   }
 
   function openClientPicker(currentIds, onConfirm) {
@@ -312,18 +330,7 @@ export default function ScheduleScreen({ navigation, route }) {
     setSchedules(updated);
   }
 
-  async function handleEditSave() {
-    if (!editTitle.trim()) return;
-    const editStartTrim = editStartDate.trim();
-    const editEndTrim = editEndDate.trim();
-    if (editStartTrim.length === 10 && editEndTrim.length === 10 && editEndTrim < editStartTrim) {
-      Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
-      return;
-    }
-    const scheduleDate = editStartTrim.length === 10 ? editStartTrim : viewSchedule.date;
-    const saved24h = editStartTrim ? to24h(editStartAmPm, editStartTime) : to24h(editAmPm, editTime);
-    const startDateStr = editStartTrim ? `${editStartTrim} ${to24h(editStartAmPm, editStartTime)}` : '';
-    const endDateStr = editEndTrim ? `${editEndTrim} ${to24h(editEndAmPm, editEndTime)}` : '';
+  async function saveEditedSchedule(scheduleDate, saved24h, startDateStr, endDateStr) {
     const updated = await updateSchedule(viewSchedule.id, {
       date: scheduleDate,
       title: editTitle.trim(),
@@ -337,6 +344,35 @@ export default function ScheduleScreen({ navigation, route }) {
     setSchedules(updated);
     setViewSchedule((prev) => ({ ...prev, date: scheduleDate, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, startDate: startDateStr, endDate: endDateStr }));
     setEditMode(false);
+  }
+
+  async function handleEditSave() {
+    if (!editTitle.trim()) return;
+    const editStartTrim = editStartDate.trim();
+    const editEndTrim = editEndDate.trim();
+    if (editStartTrim.length === 10 && editEndTrim.length === 10 && editEndTrim < editStartTrim) {
+      Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
+      return;
+    }
+    const scheduleDate = editStartTrim.length === 10 ? editStartTrim : viewSchedule.date;
+    const saved24h = editStartTrim ? to24h(editStartAmPm, editStartTime) : to24h(editAmPm, editTime);
+    const startDateStr = editStartTrim ? `${editStartTrim} ${to24h(editStartAmPm, editStartTime)}` : '';
+    const endDateStr = editEndTrim ? `${editEndTrim} ${to24h(editEndAmPm, editEndTime)}` : '';
+
+    const rangeEnd = editEndTrim.length === 10 ? editEndTrim : scheduleDate;
+    const overlaps = findOverlappingItems({ start: scheduleDate, end: rangeEnd, schedules, projects, excludeId: viewSchedule.id, excludeType: 'schedule' });
+    if (overlaps.length > 0) {
+      Alert.alert(
+        '일정 겹침',
+        `다음 일정/프로젝트와 기간이 겹칩니다.\n\n${formatOverlapMessage(overlaps)}\n\n그래도 이 일자로 등록하시겠습니까?`,
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '그대로 등록', onPress: () => saveEditedSchedule(scheduleDate, saved24h, startDateStr, endDateStr) },
+        ]
+      );
+      return;
+    }
+    await saveEditedSchedule(scheduleDate, saved24h, startDateStr, endDateStr);
   }
 
   async function handleAIChat() {

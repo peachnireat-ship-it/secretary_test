@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert } from 'react-native';
 import { addProject, updateProject } from '../services/storage';
-import { dateTimeFromTimestamp } from '../utils/dateUtils';
+import { dateTimeFromTimestamp, findOverlappingItems, formatOverlapMessage } from '../utils/dateUtils';
 
 function getDaysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -80,9 +80,11 @@ function from24h(time24) {
  * 프로젝트 화면 생성/수정 모달 입력 상태·유효성 검사·저장 로직 공통 훅.
  * @param {object} params
  * @param {Array} params.meetingRecords 회의록 목록 (신규 프로젝트 추가 시 연결된 회의록 조회용, 읽기 전용)
+ * @param {Array} params.projects 기존 프로젝트 목록 (기간 겹침 검사용, 읽기 전용)
+ * @param {Array} params.schedules 기존 일정 목록 (기간 겹침 검사용, 읽기 전용)
  * @param {(projects: Array) => void} params.setProjects 프로젝트 목록 갱신 콜백
  */
-export function useProjectForm({ meetingRecords, setProjects }) {
+export function useProjectForm({ meetingRecords, projects = [], schedules = [], setProjects }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newStartDate, setNewStartDate] = useState('');
@@ -118,24 +120,8 @@ export function useProjectForm({ meetingRecords, setProjects }) {
   const [detailPersonPickerVisible, setDetailPersonPickerVisible] = useState(false);
   const [detailPersonPickerSearch, setDetailPersonPickerSearch] = useState('');
 
-  async function handleAdd() {
-    if (!newTitle.trim() || !newDeadline.trim()) {
-      Alert.alert('입력 필요', '제목과 마감일시는 필수 입력 항목입니다.');
-      return;
-    }
-    if (!isValidDeadline(newDeadline.trim())) {
-      Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
-      return;
-    }
-    const startDateNorm = normalizeDeadline(newStartDate.trim());
-    const deadlineDateNorm = normalizeDeadline(newDeadline.trim());
-    if (startDateNorm && isValidDeadline(startDateNorm) && deadlineDateNorm < startDateNorm) {
-      Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
-      return;
-    }
+  async function saveNewProject(startDateStr, deadlineStr) {
     const meetingRecord = pendingMeetingRecordId ? meetingRecords.find((r) => r.id === pendingMeetingRecordId) : null;
-    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(newStartAmPm, newStartTime)}` : dateTimeFromTimestamp(Date.now());
-    const deadlineStr = `${deadlineDateNorm} ${to24h(newDeadlineAmPm, newDeadlineTime)}`;
     const updated = await addProject({
       title: newTitle.trim(),
       startDate: startDateStr,
@@ -153,6 +139,41 @@ export function useProjectForm({ meetingRecords, setProjects }) {
     setNewDeadline(''); setNewDeadlineTime('06:00'); setNewDeadlineAmPm('오후');
     setNewStatus('진행중'); setNewProgress('0'); setNewPriority('보통'); setNewNotes('');
     setPendingMeetingRecordId(null);
+  }
+
+  async function handleAdd() {
+    if (!newTitle.trim() || !newDeadline.trim()) {
+      Alert.alert('입력 필요', '제목과 마감일시는 필수 입력 항목입니다.');
+      return;
+    }
+    if (!isValidDeadline(newDeadline.trim())) {
+      Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
+      return;
+    }
+    const startDateNorm = normalizeDeadline(newStartDate.trim());
+    const deadlineDateNorm = normalizeDeadline(newDeadline.trim());
+    if (startDateNorm && isValidDeadline(startDateNorm) && deadlineDateNorm < startDateNorm) {
+      Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
+      return;
+    }
+    const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(newStartAmPm, newStartTime)}` : dateTimeFromTimestamp(Date.now());
+    const deadlineStr = `${deadlineDateNorm} ${to24h(newDeadlineAmPm, newDeadlineTime)}`;
+
+    // 실제 저장될 startDate의 날짜 부분을 그대로 겹침 검사 기준으로 사용 (projectDateRange()와 동일한 방식)
+    const rangeStart = startDateStr.split(' ')[0];
+    const overlaps = findOverlappingItems({ start: rangeStart, end: deadlineDateNorm, schedules, projects, excludeType: 'project' });
+    if (overlaps.length > 0) {
+      Alert.alert(
+        '기간 겹침',
+        `다음 일정/프로젝트와 기간이 겹칩니다.\n\n${formatOverlapMessage(overlaps)}\n\n그래도 이 일자로 등록하시겠습니까?`,
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '그대로 등록', onPress: () => saveNewProject(startDateStr, deadlineStr) },
+        ]
+      );
+      return;
+    }
+    await saveNewProject(startDateStr, deadlineStr);
   }
 
   function openDetail(project) {
@@ -189,6 +210,23 @@ export function useProjectForm({ meetingRecords, setProjects }) {
     setShowDetail(true);
   }
 
+  async function saveEditedProject(startDateStr, deadlineStr) {
+    const updated = await updateProject(detailProject.id, {
+      title: editTitle.trim(),
+      startDate: startDateStr,
+      deadline: deadlineStr,
+      status: editStatus,
+      progress: editProgress,
+      priority: editPriority,
+      notes: editNotes.trim(),
+      clientIds: editClientIds,
+    });
+    setProjects(updated);
+    const refreshed = updated.find((p) => p.id === detailProject.id);
+    setDetailProject(refreshed);
+    setShowDetail(false);
+  }
+
   async function handleEditSave() {
     if (!editTitle.trim() || !editDeadline.trim()) {
       Alert.alert('입력 필요', '제목과 마감일시는 필수 입력 항목입니다.');
@@ -206,20 +244,22 @@ export function useProjectForm({ meetingRecords, setProjects }) {
     }
     const startDateStr = startDateNorm ? `${startDateNorm} ${to24h(editStartAmPm, editStartTime)}` : dateTimeFromTimestamp(detailProject.createdAt);
     const deadlineStr = `${deadlineDateNorm} ${to24h(editDeadlineAmPm, editDeadlineTime)}`;
-    const updated = await updateProject(detailProject.id, {
-      title: editTitle.trim(),
-      startDate: startDateStr,
-      deadline: deadlineStr,
-      status: editStatus,
-      progress: editProgress,
-      priority: editPriority,
-      notes: editNotes.trim(),
-      clientIds: editClientIds,
-    });
-    setProjects(updated);
-    const refreshed = updated.find((p) => p.id === detailProject.id);
-    setDetailProject(refreshed);
-    setShowDetail(false);
+
+    // 실제 저장될 startDate의 날짜 부분을 그대로 겹침 검사 기준으로 사용 (projectDateRange()와 동일한 방식)
+    const rangeStart = startDateStr.split(' ')[0];
+    const overlaps = findOverlappingItems({ start: rangeStart, end: deadlineDateNorm, schedules, projects, excludeId: detailProject.id, excludeType: 'project' });
+    if (overlaps.length > 0) {
+      Alert.alert(
+        '기간 겹침',
+        `다음 일정/프로젝트와 기간이 겹칩니다.\n\n${formatOverlapMessage(overlaps)}\n\n그래도 이 일자로 등록하시겠습니까?`,
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '그대로 등록', onPress: () => saveEditedProject(startDateStr, deadlineStr) },
+        ]
+      );
+      return;
+    }
+    await saveEditedProject(startDateStr, deadlineStr);
   }
 
   async function handleProgressUpdate(id, newProg) {
