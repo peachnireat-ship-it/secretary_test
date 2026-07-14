@@ -1,7 +1,8 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Modal, KeyboardAvoidingView, Platform, Alert,
+  TextInput, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { Alert } from '../utils/alertCompat';
 import { useState } from 'react';
 import { C } from '../theme';
 import { addHistory, updateHistory, deleteHistory } from '../services/storage';

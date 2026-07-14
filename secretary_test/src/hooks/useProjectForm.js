@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert } from '../utils/alertCompat';
 import { addProject, updateProject } from '../services/storage';
 import { dateTimeFromTimestamp, findOverlappingItems, formatOverlapMessage } from '../utils/dateUtils';
 

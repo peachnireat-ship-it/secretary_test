@@ -1,7 +1,8 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Animated,
+  TextInput, Modal, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
+import { Alert } from '../utils/alertCompat';
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';

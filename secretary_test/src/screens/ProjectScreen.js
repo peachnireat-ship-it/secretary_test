@@ -1,8 +1,9 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator,
   Animated,
 } from 'react-native';
+import { Alert } from '../utils/alertCompat';
 import Slider from '@react-native-community/slider';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

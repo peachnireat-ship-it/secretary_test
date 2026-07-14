@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert } from '../utils/alertCompat';
 import { diarizeSegments, diarizeWithPyannote, rediarizeTranscript } from '../services/groqStt';
 import { askClaude, buildMeetingSummarySystem, fixForeignWordsInText } from '../services/claude';
 import { updateMeetingRecord } from '../services/storage';

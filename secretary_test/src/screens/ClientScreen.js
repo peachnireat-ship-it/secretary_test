@@ -1,8 +1,9 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Linking,
+  TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Linking,
   Animated,
 } from 'react-native';
+import { Alert } from '../utils/alertCompat';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';

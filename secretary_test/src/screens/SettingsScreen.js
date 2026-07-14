@@ -1,4 +1,5 @@
-import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, Modal, KeyboardAvoidingView } from 'react-native';
+import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Platform, Modal, KeyboardAvoidingView } from 'react-native';
+import { Alert } from '../utils/alertCompat';
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
@@ -299,7 +300,7 @@ export default function SettingsScreen() {
               onPress={handleTestPyannote}
               disabled={pyannoteChecking || !pyannoteUrl}
             >
-              <Text style={{ color: pyannoteStatus === 'ok' ? C.accentTeal : pyannoteStatus === 'fail' ? C.red : C.textSecondary, fontSize: 14 }}>
+              <Text style={[s.pyannoteTestText, { color: pyannoteStatus === 'ok' ? C.accentTeal : pyannoteStatus === 'fail' ? C.red : C.textSecondary }]}>
                 {pyannoteChecking ? '확인 중…' : pyannoteStatus === 'ok' ? '연결 성공 ✓' : pyannoteStatus === 'fail' ? '연결 실패 ✗' : '연결 테스트'}
               </Text>
             </TouchableOpacity>
@@ -545,6 +546,7 @@ const s = StyleSheet.create({
   saveBtnText: { color: C.bg, fontSize: 14, fontWeight: '600' },
   clearBtn: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: C.red + '55', alignItems: 'center' },
   clearBtnText: { color: C.red, fontSize: 14 },
+  pyannoteTestText: { fontSize: 14 },
   hint: { backgroundColor: C.surfaceHigh, borderRadius: 8, padding: 12 },
   hintText: { color: C.textDim, fontSize: 11, lineHeight: 17 },
   featureCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, overflow: 'hidden' },

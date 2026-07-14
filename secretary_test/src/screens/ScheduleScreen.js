@@ -1,8 +1,9 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator,
   Animated, PanResponder, Linking,
 } from 'react-native';
+import { Alert } from '../utils/alertCompat';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -1210,7 +1211,7 @@ export default function ScheduleScreen({ navigation, route }) {
                       <View style={[s.pickerAvatar, selected && s.pickerAvatarSelected]}>
                         <Text style={[s.pickerAvatarText, selected && s.pickerAvatarTextSelected]}>{c.name[0]}</Text>
                       </View>
-                      <View style={{ flex: 1 }}>
+                      <View style={s.pickerNameWrap}>
                         <Text style={[s.pickerName, selected && s.pickerNameSelected]}>{c.name}</Text>
                         {c.company ? <Text style={s.pickerSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                       </View>
@@ -1480,6 +1481,7 @@ const s = StyleSheet.create({
   pickerAvatarSelected: { backgroundColor: C.accentBlue + '33' },
   pickerAvatarText: { color: C.textDim, fontSize: 14, fontWeight: '600' },
   pickerAvatarTextSelected: { color: C.accentBlue },
+  pickerNameWrap: { flex: 1 },
   pickerName: { color: C.textPrimary, fontSize: 14 },
   pickerNameSelected: { color: C.accentBlue, fontWeight: '500' },
   pickerSub: { color: C.textDim, fontSize: 11, marginTop: 2 },
