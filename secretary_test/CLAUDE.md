@@ -19,7 +19,7 @@
 
 - **플랫폼**: Expo SDK (v53), React Native
 - **네비게이션**: `@react-navigation/bottom-tabs`
-- **저장소**: AsyncStorage (로컬 전용, 서버 없음)
+- **저장소**: Supabase (Postgres + Auth) — 07-08 `9c2d6f8`에서 AsyncStorage 로컬 저장소를 클라우드로 마이그레이션 완료
 - **AI**: Groq API (llama-3.3-70b-versatile) 또는 Grok API (grok-3) — 설정에서 전환 가능
 - **음성 STT**: Groq Whisper (whisper-large-v3) + Pyannote 화자 분리(선택)
 
@@ -29,23 +29,46 @@
 
 ```
 secretary_test/
-├── App.js                    # 진입점, BottomTab 네비게이터
-├── app.json                  # Expo 설정 (expo-contacts, expo-audio, expo-media-library)
+├── App.js                     # 진입점, BottomTab 네비게이터
+├── app.json                   # Expo 설정 (expo-contacts, expo-audio, expo-media-library)
+├── docs/
+│   └── adr/                   # 아키텍처 결정 기록 0001~0006
+├── supabase/                  # 스키마·시드·1회성 관리자 스크립트 (schema.sql, seed.js, patch_*.sql 등)
+├── pyannote-server/           # Render 배포용 Flask 화자분리 서버 (sherpa-onnx/ONNX Runtime)
+│   └── app.py
+├── _review/                   # 코드 리뷰 아카이브 (완료된 리포트 보관)
 ├── src/
-│   ├── theme.js              # 전역 색상 팔레트 (C 객체)
+│   ├── theme.js               # 전역 색상 팔레트 (C 객체)
 │   ├── screens/
-│   │   ├── HomeScreen.js     # 대시보드 (오늘 일정, 통계 카드)
-│   │   ├── ScheduleScreen.js # 일정 관리 (달력, CRUD, AI 채팅)
-│   │   ├── ClientScreen.js   # 거래처 관리 (히스토리, AI 요약)
-│   │   ├── ProjectScreen.js  # 프로젝트 관리 (진행률 슬라이더, AI 지연 분석)
-│   │   ├── MessageScreen.js  # 메세지함 (받은/보낸, 우선순위·상태 관리)
-│   │   ├── MeetingScreen.js  # 회의록 (녹음, STT, 화자 분리, AI 요약)
-│   │   ├── SettingsScreen.js # 설정 (API 키, 계정 전환, AI 공급자 선택)
-│   │   └── LoginScreen.js    # 로그인
-│   └── services/
-│       ├── storage.js        # AsyncStorage CRUD + 샘플 데이터
-│       ├── claude.js         # AI 호출 (Groq/Grok), 시스템 프롬프트 빌더
-│       └── groqStt.js        # Whisper STT, 화자 분리(pyannote)
+│   │   ├── HomeScreen.js      # 대시보드 (오늘 일정, 통계 카드)
+│   │   ├── ScheduleScreen.js  # 일정 관리 (달력, CRUD, AI 채팅)
+│   │   ├── ClientScreen.js    # 거래처 관리 (히스토리, AI 요약)
+│   │   ├── ProjectScreen.js   # 프로젝트 관리 (진행률 슬라이더, AI 지연 분석)
+│   │   ├── MessageScreen.js   # 메세지함 (받은/보낸, 우선순위·상태 관리)
+│   │   ├── MeetingScreen.js   # 회의록 (녹음, STT, 화자 분리, AI 요약)
+│   │   ├── SettingsScreen.js  # 설정 (API 키, 계정 전환, AI 공급자 선택)
+│   │   └── LoginScreen.js     # 로그인
+│   ├── components/
+│   │   ├── ClientHistorySection.js  # ClientScreen에서 분리된 거래처 히스토리 섹션
+│   │   └── HomeMapCard(.web).js     # 홈 지도 카드 (네이티브: react-native-maps / 웹: OpenStreetMap 임베드)
+│   ├── hooks/
+│   │   ├── useAudioRecording.js     # MeetingScreen 녹음 로직
+│   │   ├── useDiarization.js        # 화자 분리 호출·상태(diarizeSource 포함)
+│   │   ├── useProjectAI.js          # ProjectScreen AI 지연 분석
+│   │   ├── useProjectForm.js        # 프로젝트 폼 입력 검증
+│   │   └── useSwipeClose.js         # 모달 스와이프-닫기 공통 훅
+│   ├── context/
+│   │   └── UserContext.js           # 전역 user 상태 (prop 드릴링 해소)
+│   ├── services/
+│   │   ├── storage.js         # Supabase CRUD
+│   │   ├── supabaseClient.js  # Supabase 클라이언트 초기화
+│   │   ├── claude.js          # AI 호출 (Groq/Grok), 시스템 프롬프트 빌더
+│   │   ├── groqStt.js         # Whisper STT, 화자 분리(pyannote/sherpa-onnx)
+│   │   └── location.js
+│   └── utils/
+│       ├── colors.js          # 상태·우선순위 색상 함수 통합
+│       ├── dateUtils.js
+│       └── transcript.js
 ```
 
 ---
