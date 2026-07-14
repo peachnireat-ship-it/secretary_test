@@ -26,6 +26,9 @@ Supabase 대시보드 > Edge Functions > notify-project-created > Settings 에�
 ## 4. `patch_clients_email.sql` 실행
 Supabase 대시보드 > SQL Editor에서 `supabase/patch_clients_email.sql` 내용을 붙여넣고 실행. `clients` 테이블에 `email` 컬럼을 추가한다(관련 인물 알림 수신자 식별용).
 
+## 4-1. (선택) `patch_clients_linked_profile.sql` 실행
+`clients` row가 실제 로그인 가능한 ROSTER 계정(=profiles row)과 동일 인물인 경우를 위한 것. 같은 사람을 여러 사용자가 각자 자기 `clients` row로 중복 등록하고 있어(예: 최수아가 가진 박지훈, 이서연이 가진 박지훈) 이메일을 매번 여러 row에 따로 갱신해야 하는 문제를 줄이기 위해, `clients.linked_profile_id`(→`profiles.id`) 컬럼을 추가하고 name+company 기준으로 기존 데이터를 백필한다. `linked_profile_id`가 채워진 row는 Edge Function이 `clients.email` 대신 `profiles.email`을 우선 사용한다. Supabase 대시보드 > SQL Editor에서 `supabase/patch_clients_linked_profile.sql` 내용을 붙여넣고 실행.
+
 ## 5. `patch_project_notify_trigger.sql` 실행
 1. `supabase/functions/notify-project-created/index.ts` 배포가 완료된 상태여야 한다 (2번 단계 완료 후).
 2. `patch_project_notify_trigger.sql` 상단의 `<PROJECT_REF>` 플레이스홀더를 실제 프로젝트 ref로 교체 (Project Settings > API에서 Project URL 확인).

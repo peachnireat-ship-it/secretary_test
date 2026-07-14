@@ -237,7 +237,7 @@ function fromRow(row, keymap) {
 }
 
 const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', createdAt: 'created_at' };
-const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', notes: 'notes', aiSummary: 'ai_summary', createdAt: 'created_at' };
+const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', notes: 'notes', aiSummary: 'ai_summary', linkedProfileId: 'linked_profile_id', createdAt: 'created_at' };
 const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', createdAt: 'created_at' };
 const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', createdAt: 'created_at', updatedAt: 'updated_at' };
 const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', diarizeSource: 'diarize_source', createdAt: 'created_at' };
@@ -245,7 +245,7 @@ const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'com
 
 // NOT NULL 컬럼 기본값 — 벌크 upsert 시 toRow()의 defaults 인자로 전달한다.
 const SCHEDULE_DEFAULTS = { notes: '', client_ids: [] };
-const CLIENT_DEFAULTS = { role: '', work_contact: '', email: '', notes: '', ai_summary: '' };
+const CLIENT_DEFAULTS = { role: '', work_contact: '', email: '', notes: '', ai_summary: '', linked_profile_id: null };
 const HISTORY_DEFAULTS = { content: '', result: '' };
 const PROJECT_DEFAULTS = { status: '진행중', priority: '보통', notes: '', progress: 0, client_ids: [], meeting_record_ids: [] };
 const MEETING_DEFAULTS = { transcript: '', summary: '', client_ids: [], tasks: [] };
@@ -309,7 +309,19 @@ export async function saveClients(clients) {
 
 export async function addClient(client) {
   const user = await getCurrentUser();
-  const row = { id: client.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(client, CLIENT_KEYMAP) };
+  // ROSTER(실제 로그인 계정)와 이름·회사가 정확히 일치하면 같은 인물로 간주해 linked_profile_id로 연결한다.
+  // clients.id는 PRIMARY KEY라 여러 사용자의 row를 profiles.id 하나로 통일할 수 없어, 별도 컬럼으로 연결한다.
+  const matched = ROSTER.find((r) => r.name === client.name && r.team === client.company);
+  const id = matched
+    ? client.id || Date.now().toString()
+    : client.id || `${findRoster({ id: user.id })?.legacyId}__${Date.now()}`;
+  const row = {
+    id,
+    user_id: user.id,
+    created_at: Date.now(),
+    ...toRow(client, CLIENT_KEYMAP),
+    linked_profile_id: matched ? matched.id : null,
+  };
   const { error } = await supabase.from('clients').insert(row);
   if (error) throw error;
   return getClients();
@@ -653,7 +665,14 @@ export async function migrateLocalDataToCloud() {
 
   const legacyClients = await readLegacyList(LEGACY_KEYS.clients, legacyId);
   if (legacyClients.length) {
-    const rows = legacyClients.map((c) => ({ id: ns(c.id), user_id: user.id, ...toRow(c, CLIENT_KEYMAP, CLIENT_DEFAULTS) }));
+    // addClient()와 동일하게 ROSTER(실제 로그인 계정)와 이름·회사가 일치하면 linked_profile_id로 연결한다.
+    const rows = legacyClients.map((c) => {
+      const matched = ROSTER.find((r) => r.name === c.name && r.team === c.company);
+      return {
+        id: ns(c.id), user_id: user.id, ...toRow(c, CLIENT_KEYMAP, CLIENT_DEFAULTS),
+        linked_profile_id: matched ? matched.id : null,
+      };
+    });
     const { error } = await supabase.from('clients').upsert(rows);
     if (error) throw error;
   }

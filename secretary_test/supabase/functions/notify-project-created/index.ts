@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
     if (clientIds.length > 0) {
       const { data: clients, error: clientsError } = await supabase
         .from('clients')
-        .select('email, name')
+        .select('email, name, linked_profile_id')
         .in('id', clientIds);
 
       if (clientsError) {
@@ -97,11 +97,28 @@ Deno.serve(async (req) => {
       relatedClients = clients || [];
     }
 
+    // ── 4-1) linked_profile_id가 있는 관련 인물은 clients.email 대신 profiles.email을
+    // 단일 소스로 우선 사용한다(계정별로 중복 저장된 clients.email이 서로 어긋나는 문제 방지) ──
+    const linkedProfileIds = [...new Set(relatedClients.map((c) => c.linked_profile_id).filter(Boolean))];
+    let linkedProfileEmailById = {};
+    if (linkedProfileIds.length > 0) {
+      const { data: linkedProfiles, error: linkedProfilesError } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .in('id', linkedProfileIds);
+
+      if (linkedProfilesError) {
+        throw new Error(`연결된 프로필 조회 실패(linked_profile_ids=${JSON.stringify(linkedProfileIds)}): ${linkedProfilesError.message}`);
+      }
+      linkedProfileEmailById = Object.fromEntries((linkedProfiles || []).map((p) => [p.id, p.email]));
+    }
+
     // ── 5) 수신자 목록 구성 (중복 제거, 빈 이메일 제외) ──
     const recipientSet = new Set();
     if (registrant?.email) recipientSet.add(registrant.email);
     for (const client of relatedClients) {
-      if (client.email) recipientSet.add(client.email);
+      const email = (client.linked_profile_id && linkedProfileEmailById[client.linked_profile_id]) || client.email;
+      if (email) recipientSet.add(email);
     }
     const recipients = Array.from(recipientSet);
 
