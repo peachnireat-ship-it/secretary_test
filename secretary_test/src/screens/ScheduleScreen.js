@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
+import { commonStyles } from '../styles/common';
 import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, updateProject, getClients, getMeetingRecords, addClient } from '../services/storage';
 import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
@@ -664,7 +665,7 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 일정 추가 모달 ── */}
       <Modal visible={showAdd} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.sheetBase, s.modalSheet, s.maxH90pct, swipeAdd.animStyle]}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.maxH90pct, swipeAdd.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeAdd.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -676,7 +677,7 @@ export default function ScheduleScreen({ navigation, route }) {
               <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
 
               <Text style={s.inputLabel}>시작일시</Text>
-              <TextInput style={[s.input, s.mb8]} value={newStartDate} onChangeText={(t) => setNewStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+              <TextInput style={[s.input, commonStyles.mb8]} value={newStartDate} onChangeText={(t) => setNewStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
               <View style={s.timeRow}>
                 <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오전' && s.optionActive]} onPress={() => setNewStartAmPm('오전')}>
                   <Text style={[s.ampmBtnText, newStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
@@ -684,11 +685,11 @@ export default function ScheduleScreen({ navigation, route }) {
                 <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오후' && s.optionActive]} onPress={() => setNewStartAmPm('오후')}>
                   <Text style={[s.ampmBtnText, newStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                 </TouchableOpacity>
-                <TextInput style={[s.input, s.flex1]} value={newStartTime} onChangeText={(t) => setNewStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                <TextInput style={[s.input, commonStyles.flex1]} value={newStartTime} onChangeText={(t) => setNewStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
               </View>
 
               <Text style={s.inputLabel}>마감일시 (선택)</Text>
-              <TextInput style={[s.input, s.mb8]} value={newEndDate} onChangeText={(t) => setNewEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+              <TextInput style={[s.input, commonStyles.mb8]} value={newEndDate} onChangeText={(t) => setNewEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
               <View style={s.timeRow}>
                 <TouchableOpacity style={[s.ampmBtn, newEndAmPm === '오전' && s.optionActive]} onPress={() => setNewEndAmPm('오전')}>
                   <Text style={[s.ampmBtnText, newEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
@@ -696,7 +697,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 <TouchableOpacity style={[s.ampmBtn, newEndAmPm === '오후' && s.optionActive]} onPress={() => setNewEndAmPm('오후')}>
                   <Text style={[s.ampmBtnText, newEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                 </TouchableOpacity>
-                <TextInput style={[s.input, s.flex1]} value={newEndTime} onChangeText={(t) => setNewEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                <TextInput style={[s.input, commonStyles.flex1]} value={newEndTime} onChangeText={(t) => setNewEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
               </View>
 
               <Text style={s.inputLabel}>분류</Text>
@@ -741,7 +742,7 @@ export default function ScheduleScreen({ navigation, route }) {
                   <Text style={s.modalConfirmText}>추가</Text>
                 </TouchableOpacity>
               </View>
-              <View style={s.spacerH20} />
+              <View style={commonStyles.spacerH20} />
             </ScrollView>
           </Animated.View>
         </KeyboardAvoidingView>
@@ -750,7 +751,7 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── AI 채팅 모달 ── */}
       <Modal visible={showAI} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.sheetBase, s.modalSheet, s.h85pct, swipeAI.animStyle]}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.h85pct, swipeAI.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeAI.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -792,7 +793,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 onSubmitEditing={handleAIChat}
                 returnKeyType="send"
               />
-              <TouchableOpacity style={[s.sendBtn, !chatInput.trim() && s.opacity40]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
+              <TouchableOpacity style={[s.sendBtn, !chatInput.trim() && commonStyles.opacity40]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
                 <Text style={s.sendBtnText}>↑</Text>
               </TouchableOpacity>
             </View>
@@ -803,7 +804,7 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 프로젝트 보기 모달 ── */}
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.sheetBase, s.modalSheet, s.maxH80pct, swipeProject.animStyle]}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.maxH80pct, swipeProject.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeProject.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -818,8 +819,8 @@ export default function ScheduleScreen({ navigation, route }) {
               return (
                 <ScrollView showsVerticalScrollIndicator={false}>
                   <View style={s.modalTitleRow}>
-                    <Text style={[s.modalTitle, s.flex1]} numberOfLines={2}>{viewProject.title}</Text>
-                    <TouchableOpacity onPress={() => setShowProjectView(false)} style={s.ml12}>
+                    <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>{viewProject.title}</Text>
+                    <TouchableOpacity onPress={() => setShowProjectView(false)} style={commonStyles.ml12}>
                       <Text style={s.closeBtn}>✕</Text>
                     </TouchableOpacity>
                   </View>
@@ -867,7 +868,7 @@ export default function ScheduleScreen({ navigation, route }) {
                             <View style={s.viewPersonAvatar}>
                               <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
                             </View>
-                            <View style={s.flex1}>
+                            <View style={commonStyles.flex1}>
                               <Text style={s.viewPersonName}>{c.name}</Text>
                               {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                             </View>
@@ -889,14 +890,14 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 일정 상세 모달 ── */}
       <Modal visible={showScheduleView} animationType="slide" transparent onRequestClose={() => { setShowScheduleView(false); setEditMode(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.sheetBase, s.modalSheet, s.maxH80pct, swipeSchedule.animStyle]}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.maxH80pct, swipeSchedule.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeSchedule.panHandlers}>
               <View style={s.modalHandle} />
             </View>
             {viewSchedule && (
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={s.modalTitleRow}>
-                  <Text style={[s.modalTitle, s.flex1]} numberOfLines={2}>
+                  <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>
                     {editMode ? '일정 수정' : viewSchedule.title}
                   </Text>
                   <View style={s.titleActionRow}>
@@ -936,7 +937,7 @@ export default function ScheduleScreen({ navigation, route }) {
                     <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
 
                     <Text style={s.inputLabel}>시작일시</Text>
-                    <TextInput style={[s.input, s.mb8]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+                    <TextInput style={[s.input, commonStyles.mb8]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
                     <View style={s.timeRow}>
                       <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.optionActive]} onPress={() => setEditStartAmPm('오전')}>
                         <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
@@ -944,11 +945,11 @@ export default function ScheduleScreen({ navigation, route }) {
                       <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.optionActive]} onPress={() => setEditStartAmPm('오후')}>
                         <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                       </TouchableOpacity>
-                      <TextInput style={[s.input, s.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                      <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
                     </View>
 
                     <Text style={s.inputLabel}>마감일시 (선택)</Text>
-                    <TextInput style={[s.input, s.mb8]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+                    <TextInput style={[s.input, commonStyles.mb8]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
                     <View style={s.timeRow}>
                       <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.optionActive]} onPress={() => setEditEndAmPm('오전')}>
                         <Text style={[s.ampmBtnText, editEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
@@ -956,7 +957,7 @@ export default function ScheduleScreen({ navigation, route }) {
                       <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.optionActive]} onPress={() => setEditEndAmPm('오후')}>
                         <Text style={[s.ampmBtnText, editEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                       </TouchableOpacity>
-                      <TextInput style={[s.input, s.flex1]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                      <TextInput style={[s.input, commonStyles.flex1]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
                     </View>
 
                     <Text style={s.inputLabel}>분류</Text>
@@ -1040,7 +1041,7 @@ export default function ScheduleScreen({ navigation, route }) {
                                 <View style={s.viewPersonAvatar}>
                                   <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
                                 </View>
-                                <View style={s.flex1}>
+                                <View style={commonStyles.flex1}>
                                   <Text style={s.viewPersonName}>{c.name}</Text>
                                   {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                                 </View>
@@ -1073,7 +1074,7 @@ export default function ScheduleScreen({ navigation, route }) {
                   <View style={s.personAvatar}>
                     <Text style={s.personAvatarText}>{viewPerson.name[0]}</Text>
                   </View>
-                  <View style={s.flex1}>
+                  <View style={commonStyles.flex1}>
                     <Text style={s.personName}>{viewPerson.name}</Text>
                     {viewPerson.company ? (
                       <Text style={s.personSub}>{viewPerson.company}{viewPerson.role ? ` · ${viewPerson.role}` : ''}</Text>
@@ -1468,16 +1469,8 @@ const s = StyleSheet.create({
 
   projectLabelTeal: { color: C.accentTeal },
   projectLabelBlue: { color: C.accentBlue },
-  mb8: { marginBottom: 8 },
-  flex1: { flex: 1 },
   h72: { height: 72 },
-  spacerH20: { height: 20 },
-  h85pct: { height: '85%' },
-  maxH90pct: { maxHeight: '90%' },
-  maxH80pct: { maxHeight: '80%' },
   maxH70pct: { maxHeight: '70%' },
-  opacity40: { opacity: 0.4 },
-  ml12: { marginLeft: 12 },
   spacerH16: { height: 16 },
   spacerH40: { height: 40 },
   titleActionRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },

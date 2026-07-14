@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
+import { commonStyles } from '../styles/common';
 import HomeMapCard from '../components/HomeMapCard';
 import { getSchedules, getClients, getProjects } from '../services/storage';
 import { watchLocation } from '../services/location';
@@ -273,7 +274,7 @@ export default function HomeScreen({ navigation }) {
             onPress={() => navigation.navigate('일정', { openAI: true })}
           >
             <View style={[s.aiDot, { backgroundColor: C.accentBlue }]} />
-            <View style={s.flex1}>
+            <View style={commonStyles.flex1}>
               <Text style={s.aiTitle}>AI 일정 관리</Text>
               <Text style={s.aiDesc}>자연어로 일정 추가 · 일정 충돌 감지 · AI 질문 응답</Text>
             </View>
@@ -284,7 +285,7 @@ export default function HomeScreen({ navigation }) {
             onPress={() => navigation.navigate('거래처', { openHistoryAI: true })}
           >
             <View style={[s.aiDot, { backgroundColor: C.accentTeal }]} />
-            <View style={s.flex1}>
+            <View style={commonStyles.flex1}>
               <Text style={s.aiTitle}>AI 거래처 히스토리</Text>
               <Text style={s.aiDesc}>관계 요약 · 히스토리 분석 · 후속 조치 제안</Text>
             </View>
@@ -295,7 +296,7 @@ export default function HomeScreen({ navigation }) {
             onPress={() => navigation.navigate('프로젝트', { openAI: true })}
           >
             <View style={[s.aiDot, { backgroundColor: C.red }]} />
-            <View style={s.flex1}>
+            <View style={commonStyles.flex1}>
               <Text style={s.aiTitle}>AI 프로젝트 지연 분석</Text>
               <Text style={s.aiDesc}>지연 원인 패턴 분석 · 위험 프로젝트 식별 · 개선 액션 플랜</Text>
             </View>
@@ -403,7 +404,6 @@ const s = StyleSheet.create({
   aiDot: { width: 8, height: 8, borderRadius: 4 },
   aiTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '500', marginBottom: 3 },
   aiDesc: { color: C.textSecondary, fontSize: 11, lineHeight: 17 },
-  flex1: { flex: 1 },
   sectionLast: { marginBottom: 48 },
   aiRowBordered: { borderTopWidth: 1, borderTopColor: C.border },
   projectRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },

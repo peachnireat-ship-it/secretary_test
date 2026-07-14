@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
+import { commonStyles } from '../styles/common';
 import { askClaude, buildWorkTopicsSystem, fixForeignWordsInText } from '../services/claude';
 import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects, getHistories } from '../services/storage';
 import { projectStatusColor as statusColor, typeColor as histTypeColor } from '../utils/colors';
@@ -446,7 +447,7 @@ export default function MeetingScreen({ navigation }) {
                 const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
                 return (
                   <View key={speaker} style={[s.speakerRow, isDeleted && s.speakerRowDeleted]}>
-                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && s.opacity40]} />
+                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && commonStyles.opacity40]} />
                     <Text style={[s.speakerOrigLabel, { color }, isDeleted && s.speakerOrigLabelDeleted]}>{speaker}</Text>
                     <Text style={s.speakerArrow}>→</Text>
                     <TextInput
@@ -595,7 +596,7 @@ export default function MeetingScreen({ navigation }) {
                         <Text style={[s.segSpeakerText, { color }]}>{seg.speaker}</Text>
                       </TouchableOpacity>
                       {isTextEditing ? (
-                        <View style={s.flex1}>
+                        <View style={commonStyles.flex1}>
                           <TextInput
                             style={s.segTextInput}
                             value={segTextEditValue}
@@ -616,7 +617,7 @@ export default function MeetingScreen({ navigation }) {
                         </View>
                       ) : (
                         <TouchableOpacity
-                          style={s.flex1}
+                          style={commonStyles.flex1}
                           onPress={() => {
                             setSegmentPickerIdx(null);
                             openSegTextEdit(idx);
@@ -688,7 +689,7 @@ export default function MeetingScreen({ navigation }) {
                       activeOpacity={0.7}
                     >
                       <View style={s.clientPickerItemRow}>
-                        <View style={s.flex1}>
+                        <View style={commonStyles.flex1}>
                           <Text style={[s.clientPickerName, isSelected && s.clientPickerNameSelected]}>{c.name}</Text>
                           {!!c.company && <Text style={s.clientPickerCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text>}
                         </View>
@@ -721,7 +722,7 @@ export default function MeetingScreen({ navigation }) {
             {clientPickerContext === 'addPerson' ? (
               <View style={s.addPersonBtnRow}>
                 <TouchableOpacity
-                  style={[s.newClientRegBtn, addPersonSelectedIds.size > 0 && s.clientConfirmBtn, s.flex1]}
+                  style={[s.newClientRegBtn, addPersonSelectedIds.size > 0 && s.clientConfirmBtn, commonStyles.flex1]}
                   onPress={confirmAddPersonClients}
                   activeOpacity={0.8}
                 >
@@ -730,7 +731,7 @@ export default function MeetingScreen({ navigation }) {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[s.newClientRegBtn, s.flex1]}
+                  style={[s.newClientRegBtn, commonStyles.flex1]}
                   onPress={() => { setClientPickerSpeaker(null); setAddPersonRecordId(null); setAddPersonSelectedIds(new Set()); }}
                   activeOpacity={0.7}
                 >
@@ -805,7 +806,7 @@ export default function MeetingScreen({ navigation }) {
                     <View style={s.personDetailAvatar}>
                       <Text style={s.personDetailAvatarText}>{selectedPersonClient.name[0]}</Text>
                     </View>
-                    <View style={s.flex1}>
+                    <View style={commonStyles.flex1}>
                       <Text style={s.personDetailName}>{selectedPersonClient.name}</Text>
                       {selectedPersonClient.company ? (
                         <Text style={s.personDetailCompany}>{selectedPersonClient.company}{selectedPersonClient.role ? ` · ${selectedPersonClient.role}` : ''}</Text>
@@ -840,7 +841,7 @@ export default function MeetingScreen({ navigation }) {
                   </View>
 
                   {/* 스크롤 영역 */}
-                  <ScrollView style={s.flex1} showsVerticalScrollIndicator={false}>
+                  <ScrollView style={commonStyles.flex1} showsVerticalScrollIndicator={false}>
                     {selectedPersonClient.notes ? (
                       <View style={s.personNotesBox}>
                         <Text style={s.personNotesText}>{selectedPersonClient.notes}</Text>
@@ -876,7 +877,7 @@ export default function MeetingScreen({ navigation }) {
                     )}
 
                     {linkedMeetings.length > 0 && (
-                      <View style={[s.personLinkedSection, s.mt16]}>
+                      <View style={[s.personLinkedSection, commonStyles.mt16]}>
                         <Text style={s.personSectionLabel}>연결된 회의록 {linkedMeetings.length}건</Text>
                         {linkedMeetings.map((r) => (
                           <View key={r.id} style={s.personMeetingItem}>
@@ -994,7 +995,7 @@ export default function MeetingScreen({ navigation }) {
                 <Text style={s.speakerCountLabel}>참석자 수</Text>
                 <View style={s.speakerCountRight}>
                   <TouchableOpacity
-                    style={[s.speakerCountBtn, !speakerCount && s.opacity40]}
+                    style={[s.speakerCountBtn, !speakerCount && commonStyles.opacity40]}
                     onPress={() => setSpeakerCount((prev) => (prev && prev > 2 ? prev - 1 : null))}
                     activeOpacity={0.7}
                     disabled={!speakerCount}
@@ -1114,7 +1115,7 @@ export default function MeetingScreen({ navigation }) {
             <View style={[s.section, s.mb16]}>
               <View style={s.transcriptHeader}>
                 <View style={s.transcriptHeaderLeft}>
-                  <Text style={[s.sectionLabel, s.mb0]}>TRANSCRIPT</Text>
+                  <Text style={[s.sectionLabel, commonStyles.mb0]}>TRANSCRIPT</Text>
                   {!!diarizeSource && (
                     <View style={[s.diarizeSourceBadge, diarizeSource === 'pyannote' ? s.diarizeSourceBadgePyannote : s.diarizeSourceBadgeAi]}>
                       <Text style={[s.diarizeSourceBadgeText, diarizeSource === 'pyannote' ? s.diarizeSourceBadgeTextPyannote : s.diarizeSourceBadgeTextAi]}>
@@ -1137,7 +1138,7 @@ export default function MeetingScreen({ navigation }) {
           {!!transcript && !loading && (tasks.length > 0 || tasksLoading) && (
             <View style={[s.section, s.mb16]}>
               <View style={s.taskHeader}>
-                <Text style={[s.sectionLabel, s.mb0]}>TASKS</Text>
+                <Text style={[s.sectionLabel, commonStyles.mb0]}>TASKS</Text>
                 {tasks.length > 0 && (
                   <TouchableOpacity
                     onPress={() => {
@@ -1176,7 +1177,7 @@ export default function MeetingScreen({ navigation }) {
                         <View style={[s.taskCheckbox, selected && s.taskCheckboxSelected]}>
                           {selected && <Text style={s.taskCheckmark}>✓</Text>}
                         </View>
-                        <View style={s.flex1}>
+                        <View style={commonStyles.flex1}>
                           <Text style={s.taskContent}>{task.content}</Text>
                           <View style={s.taskMeta}>
                             <Text style={s.taskMetaText}>{task.assignee}</Text>
@@ -1370,12 +1371,12 @@ export default function MeetingScreen({ navigation }) {
                           if (segs.length === 0) return <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>;
                           const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
                           return (
-                            <View style={s.gap12}>
+                            <View style={commonStyles.gap12}>
                               {segs.map((seg, i) => {
                                 const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
                                 return (
                                   <View key={i}>
-                                    <Text style={[s.speakerLabel, { color }]}>{seg.speaker}</Text>
+                                    <Text style={[commonStyles.speakerLabel, { color }]}>{seg.speaker}</Text>
                                     <Text style={[s.historyBody, { color: C.textSecondary }]}>{seg.text}</Text>
                                   </View>
                                 );
@@ -1400,7 +1401,7 @@ export default function MeetingScreen({ navigation }) {
                               <View style={s.linkedPersonAvatar}>
                                 <Text style={s.linkedPersonAvatarText}>{c.name[0]}</Text>
                               </View>
-                              <View style={s.flex1}>
+                              <View style={commonStyles.flex1}>
                                 <Text style={s.linkedClientName} numberOfLines={1}>{c.name}</Text>
                                 {!!c.company && (
                                   <Text style={s.linkedClientCompany} numberOfLines={1}>
@@ -1479,7 +1480,7 @@ export default function MeetingScreen({ navigation }) {
                                   <View style={[s.taskCheckbox, isSelected && s.taskCheckboxSelected]}>
                                     {isSelected && <Text style={s.taskCheckmark}>✓</Text>}
                                   </View>
-                                  <View style={s.flex1}>
+                                  <View style={commonStyles.flex1}>
                                     <Text style={s.taskContent}>{task.content}</Text>
                                     <View style={s.taskMeta}>
                                       <Text style={s.taskMetaText}>{task.assignee}</Text>
@@ -1952,22 +1953,16 @@ const s = StyleSheet.create({
   rediarizeBtn: { borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 7, paddingVertical: 5, paddingHorizontal: 6 },
   rediarizeBtnText: { color: C.accentBlue, fontSize: 11, fontWeight: '500' },
   rediarizeBtnDisabled: { opacity: 0.4 },
-  opacity40: { opacity: 0.4 },
   speakerInputFixed: { width: 64, flex: 0 },
-  flex1: { flex: 1 },
   modalOverlayCentered: Platform.OS === 'web'
     ? { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }
     : { justifyContent: 'center', paddingHorizontal: 32 },
   mb4: { marginBottom: 4 },
   addPersonBtnRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   clientPickerCancelBtn: { paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 10, marginTop: 4 },
-  mt16: { marginTop: 16 },
   mb16: { marginBottom: 16 },
-  mb0: { marginBottom: 0 },
   taskHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   mb48: { marginBottom: 48 },
   mt6: { marginTop: 6 },
-  gap12: { gap: 12 },
-  speakerLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 },
   emptyPersonText: { color: C.textDim, fontSize: 12, paddingVertical: 4 },
 });

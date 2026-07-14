@@ -5,6 +5,7 @@ import {
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
+import { commonStyles } from '../styles/common';
 import { getMessages, addMessage, addMessageForUser, updateMessage, updateMessageForUser, deleteMessage, getTestAccounts, getClients } from '../services/storage';
 import { useUser } from '../context/UserContext';
 import { useSwipeClose } from '../hooks/useSwipeClose';
@@ -334,7 +335,7 @@ export default function MessageScreen() {
       {/* 상세 모달 */}
       <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => { setShowDetail(false); setEditMode(false); setReplyMode(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.overlay}>
-          <Animated.View style={[s.sheet, s.maxH90pct, swipeDetail.animStyle]}>
+          <Animated.View style={[s.sheet, commonStyles.maxH90pct, swipeDetail.animStyle]}>
             <View style={s.handleWrap} {...swipeDetail.panHandlers}>
               <View style={s.handle} />
             </View>
@@ -342,7 +343,7 @@ export default function MessageScreen() {
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* 헤더 */}
                 <View style={s.detailHeader}>
-                  <View style={s.flex1}>
+                  <View style={commonStyles.flex1}>
                     {editMode ? (
                       <>
                         <Text style={s.inputLabel}>{detailMsg.direction === 'sent' ? '수신자' : '발신자'}</Text>
@@ -696,8 +697,6 @@ const s = StyleSheet.create({
   historyContent: { color: C.textDim, fontSize: 13, lineHeight: 20 },
 
   cardSubjectUnread: { color: C.textPrimary },
-  maxH90pct: { maxHeight: '90%' },
-  flex1: { flex: 1 },
   badgesRow: { flexDirection: 'row', gap: 8 },
   h120: { height: 120 },
   h100: { height: 100 },

@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
+import { commonStyles } from '../styles/common';
 import { getProjects, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
@@ -434,7 +435,7 @@ export default function ProjectScreen({ navigation, route }) {
                           <View style={s.cardPersonAvatar}>
                             <Text style={s.cardPersonAvatarText}>{c.name[0]}</Text>
                           </View>
-                          <View style={s.flex1}>
+                          <View style={commonStyles.flex1}>
                             <Text style={s.cardPersonName} numberOfLines={1}>{c.name}</Text>
                             {c.company ? <Text style={s.cardPersonCompany} numberOfLines={1}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                           </View>
@@ -486,7 +487,7 @@ export default function ProjectScreen({ navigation, route }) {
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* 헤더: 제목 + 닫기 */}
                 <View style={s.detailHeader}>
-                  <View style={s.flex1}>
+                  <View style={commonStyles.flex1}>
                     <Text style={s.inputLabel}>제목</Text>
                     <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholderTextColor={C.textDim} />
                   </View>
@@ -535,7 +536,7 @@ export default function ProjectScreen({ navigation, route }) {
                 {/* 시작일시 */}
                 <Text style={s.inputLabel}>시작일시 (선택)</Text>
                 <TextInput
-                  style={[s.input, s.mb8]}
+                  style={[s.input, commonStyles.mb8]}
                   value={editStartDate}
                   onChangeText={(t) => setEditStartDate(formatDeadline(t))}
                   placeholder="YYYY-MM-DD"
@@ -550,13 +551,13 @@ export default function ProjectScreen({ navigation, route }) {
                   <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오후')}>
                     <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                   </TouchableOpacity>
-                  <TextInput style={[s.input, s.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                  <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
                 </View>
 
                 {/* 마감일시 */}
                 <Text style={s.inputLabel}>마감일시</Text>
                 <TextInput
-                  style={[s.input, s.mb8]}
+                  style={[s.input, commonStyles.mb8]}
                   value={editDeadline}
                   onChangeText={(t) => setEditDeadline(formatDeadline(t))}
                   placeholder="YYYY-MM-DD"
@@ -571,7 +572,7 @@ export default function ProjectScreen({ navigation, route }) {
                   <TouchableOpacity style={[s.ampmBtn, editDeadlineAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditDeadlineAmPm('오후')}>
                     <Text style={[s.ampmBtnText, editDeadlineAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
                   </TouchableOpacity>
-                  <TextInput style={[s.input, s.flex1]} value={editDeadlineTime} onChangeText={(t) => setEditDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                  <TextInput style={[s.input, commonStyles.flex1]} value={editDeadlineTime} onChangeText={(t) => setEditDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
                 </View>
 
                 {/* 메모 */}
@@ -618,7 +619,7 @@ export default function ProjectScreen({ navigation, route }) {
                                   <View style={s.relatedPersonAvatar}>
                                     <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
                                   </View>
-                                  <View style={s.flex1}>
+                                  <View style={commonStyles.flex1}>
                                     <Text style={s.relatedPersonName}>{c.name}</Text>
                                     {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                                   </View>
@@ -676,7 +677,7 @@ export default function ProjectScreen({ navigation, route }) {
             <TextInput style={s.input} value={newTitle} onChangeText={setNewTitle} placeholder="프로젝트 이름" placeholderTextColor={C.textDim} />
 
             <Text style={s.inputLabel}>시작일시 (선택)</Text>
-            <TextInput style={[s.input, s.mb8]} value={newStartDate} onChangeText={(t) => setNewStartDate(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <TextInput style={[s.input, commonStyles.mb8]} value={newStartDate} onChangeText={(t) => setNewStartDate(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
             <View style={s.timeRow}>
               <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오전')}>
                 <Text style={[s.ampmBtnText, newStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
@@ -684,11 +685,11 @@ export default function ProjectScreen({ navigation, route }) {
               <TouchableOpacity style={[s.ampmBtn, newStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewStartAmPm('오후')}>
                 <Text style={[s.ampmBtnText, newStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
               </TouchableOpacity>
-              <TextInput style={[s.input, s.flex1]} value={newStartTime} onChangeText={(t) => setNewStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+              <TextInput style={[s.input, commonStyles.flex1]} value={newStartTime} onChangeText={(t) => setNewStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
             </View>
 
             <Text style={s.inputLabel}>마감일시</Text>
-            <TextInput style={[s.input, s.mb8]} value={newDeadline} onChangeText={(t) => setNewDeadline(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <TextInput style={[s.input, commonStyles.mb8]} value={newDeadline} onChangeText={(t) => setNewDeadline(formatDeadline(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
             <View style={s.timeRow}>
               <TouchableOpacity style={[s.ampmBtn, newDeadlineAmPm === '오전' && s.ampmBtnActive]} onPress={() => setNewDeadlineAmPm('오전')}>
                 <Text style={[s.ampmBtnText, newDeadlineAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
@@ -696,7 +697,7 @@ export default function ProjectScreen({ navigation, route }) {
               <TouchableOpacity style={[s.ampmBtn, newDeadlineAmPm === '오후' && s.ampmBtnActive]} onPress={() => setNewDeadlineAmPm('오후')}>
                 <Text style={[s.ampmBtnText, newDeadlineAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
               </TouchableOpacity>
-              <TextInput style={[s.input, s.flex1]} value={newDeadlineTime} onChangeText={(t) => setNewDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+              <TextInput style={[s.input, commonStyles.flex1]} value={newDeadlineTime} onChangeText={(t) => setNewDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
             </View>
 
             <Text style={s.inputLabel}>상태</Text>
@@ -723,7 +724,7 @@ export default function ProjectScreen({ navigation, route }) {
             <Text style={s.inputLabel}>메모 (선택)</Text>
             <TextInput style={[s.input, s.h64]} value={newNotes} onChangeText={setNewNotes} placeholder="지연 원인, 진행 상황 등" placeholderTextColor={C.textDim} multiline />
 
-            <View style={[s.modalBtns, s.mb8]}>
+            <View style={[s.modalBtns, commonStyles.mb8]}>
               <TouchableOpacity style={s.modalCancel} onPress={() => setShowAdd(false)}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
@@ -793,7 +794,7 @@ export default function ProjectScreen({ navigation, route }) {
                 onSubmitEditing={handleAIChat}
                 returnKeyType="send"
               />
-              <TouchableOpacity style={[s.sendBtn, !chatInput.trim() && s.opacity40]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
+              <TouchableOpacity style={[s.sendBtn, !chatInput.trim() && commonStyles.opacity40]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
                 <Text style={s.sendBtnText}>↑</Text>
               </TouchableOpacity>
             </View>
@@ -803,15 +804,15 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 회의록 상세 모달 ── */}
       <Modal visible={showMeetingDetail} animationType="slide" transparent onRequestClose={() => setShowMeetingDetail(false)}>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, s.maxH90pct, swipeMeetingDetail.animStyle]}>
+          <Animated.View style={[s.modalSheet, commonStyles.maxH90pct, swipeMeetingDetail.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeMeetingDetail.panHandlers}>
               <View style={s.modalHandle} />
             </View>
             {selectedMeeting && (
               <>
                 <View style={s.meetingDetailHeader}>
-                  <View style={s.flex1}>
-                    <Text style={[s.modalTitle, s.mb0]} numberOfLines={2}>{selectedMeeting.title || '회의록'}</Text>
+                  <View style={commonStyles.flex1}>
+                    <Text style={[s.modalTitle, commonStyles.mb0]} numberOfLines={2}>{selectedMeeting.title || '회의록'}</Text>
                     {selectedMeeting.createdAt && (
                       <Text style={s.meetingDetailDate}>
                         {new Date(selectedMeeting.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })}
@@ -828,11 +829,11 @@ export default function ProjectScreen({ navigation, route }) {
                   <TouchableOpacity onPress={() => openContentEditModal(selectedMeeting)} style={s.meetingEditBtn}>
                     <Text style={s.meetingEditBtnText}>내용 편집</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setShowMeetingDetail(false)} style={s.ml8}>
+                  <TouchableOpacity onPress={() => setShowMeetingDetail(false)} style={commonStyles.ml8}>
                     <Text style={s.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
-                <ScrollView showsVerticalScrollIndicator={false} style={s.mt8}>
+                <ScrollView showsVerticalScrollIndicator={false} style={commonStyles.mt8}>
                   {selectedMeeting.summary ? (
                     <>
                       <Text style={s.inputLabel}>요약</Text>
@@ -867,12 +868,12 @@ export default function ProjectScreen({ navigation, route }) {
                           if (segs.length === 0) return <Text style={s.meetingDetailText}>{selectedMeeting.transcript}</Text>;
                           const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
                           return (
-                            <View style={s.gap12}>
+                            <View style={commonStyles.gap12}>
                               {segs.map((seg, i) => {
                                 const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
                                 return (
                                   <View key={i}>
-                                    <Text style={[s.speakerLabel, { color }]}>{seg.speaker}</Text>
+                                    <Text style={[commonStyles.speakerLabel, { color }]}>{seg.speaker}</Text>
                                     <Text style={s.meetingDetailText}>{seg.text}</Text>
                                   </View>
                                 );
@@ -884,9 +885,9 @@ export default function ProjectScreen({ navigation, route }) {
                     </>
                   ) : null}
                   {!selectedMeeting.summary && !selectedMeeting.transcript && !selectedMeeting.tasks?.length && (
-                    <Text style={[s.emptyText, s.mt20]}>저장된 내용이 없습니다.</Text>
+                    <Text style={[s.emptyText, commonStyles.mt20]}>저장된 내용이 없습니다.</Text>
                   )}
-                  <View style={s.spacerH20} />
+                  <View style={commonStyles.spacerH20} />
                 </ScrollView>
               </>
             )}
@@ -909,7 +910,7 @@ export default function ProjectScreen({ navigation, route }) {
                 const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
                 return (
                   <View key={speaker} style={[s.speakerRow, isDeleted && s.speakerRowDeleted]}>
-                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && s.opacity40]} />
+                    <View style={[s.speakerColorDot, { backgroundColor: color }, isDeleted && commonStyles.opacity40]} />
                     <Text style={[s.speakerOrigLabel, { color }, isDeleted && s.speakerOrigLabelDeleted]}>{speaker}</Text>
                     <Text style={s.speakerArrow}>→</Text>
                     <TextInput
@@ -1135,7 +1136,7 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 인물 상세 모달 ── */}
       <Modal visible={showPersonDetail} animationType="slide" transparent onRequestClose={() => setShowPersonDetail(false)}>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, s.maxH85pct, swipePersonDetail.animStyle]}>
+          <Animated.View style={[s.modalSheet, commonStyles.maxH85pct, swipePersonDetail.animStyle]}>
             <View style={s.modalHandleWrap} {...swipePersonDetail.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -1145,7 +1146,7 @@ export default function ProjectScreen({ navigation, route }) {
                   <View style={s.personDetailAvatar}>
                     <Text style={s.relatedPersonAvatarText}>{personDetailClient.name[0]}</Text>
                   </View>
-                  <View style={s.flex1}>
+                  <View style={commonStyles.flex1}>
                     <Text style={s.personDetailName}>{personDetailClient.name}</Text>
                     {personDetailClient.company ? (
                       <Text style={s.personDetailCompany}>{personDetailClient.company}{personDetailClient.role ? ` · ${personDetailClient.role}` : ''}</Text>
@@ -1174,7 +1175,7 @@ export default function ProjectScreen({ navigation, route }) {
                       <>
                         <Text style={s.inputLabel}>히스토리 {personHistories.length}건</Text>
                         {personHistories.map((h, i) => (
-                          <View key={h.id} style={[s.personHistoryItem, i < personHistories.length - 1 && s.borderBottom]}>
+                          <View key={h.id} style={[s.personHistoryItem, i < personHistories.length - 1 && commonStyles.borderBottom]}>
                             <Text style={s.personHistoryDate}>{h.date}</Text>
                             <Text style={s.personHistoryTitle}>{h.title}</Text>
                             {h.content ? <Text style={s.personHistoryContent}>{h.content}</Text> : null}
@@ -1184,9 +1185,9 @@ export default function ProjectScreen({ navigation, route }) {
                     );
                   })()}
                   {!personDetailClient.notes && !histories.filter((h) => h.clientId === personDetailClient.id).length && (
-                    <Text style={[s.emptyText, s.mt20]}>저장된 정보가 없습니다.</Text>
+                    <Text style={[s.emptyText, commonStyles.mt20]}>저장된 정보가 없습니다.</Text>
                   )}
-                  <View style={s.spacerH20} />
+                  <View style={commonStyles.spacerH20} />
                 </ScrollView>
               </>
             )}
@@ -1235,7 +1236,7 @@ export default function ProjectScreen({ navigation, route }) {
       {/* ── 프로젝트 보기 모달 (읽기 전용) ── */}
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, s.maxH80pct, swipeProjectView.animStyle]}>
+          <Animated.View style={[s.modalSheet, commonStyles.maxH80pct, swipeProjectView.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeProjectView.panHandlers}>
               <View style={s.modalHandle} />
             </View>
@@ -1251,8 +1252,8 @@ export default function ProjectScreen({ navigation, route }) {
               return (
                 <ScrollView showsVerticalScrollIndicator={false}>
                   <View style={s.detailHeader}>
-                    <Text style={[s.modalTitle, s.flex1]} numberOfLines={2}>{viewProject.title}</Text>
-                    <TouchableOpacity onPress={() => setShowProjectView(false)} style={s.ml12}>
+                    <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>{viewProject.title}</Text>
+                    <TouchableOpacity onPress={() => setShowProjectView(false)} style={commonStyles.ml12}>
                       <Text style={s.closeBtn}>✕</Text>
                     </TouchableOpacity>
                   </View>
@@ -1294,7 +1295,7 @@ export default function ProjectScreen({ navigation, route }) {
                               <View style={s.relatedPersonAvatar}>
                                 <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
                               </View>
-                              <View style={s.flex1}>
+                              <View style={commonStyles.flex1}>
                                 <Text style={s.relatedPersonName}>{c.name}</Text>
                                 {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
                               </View>
@@ -1592,34 +1593,19 @@ const s = StyleSheet.create({
   qsSlider: { width: '100%', height: 44, marginBottom: 12 },
 
   deadlineWrap: { flex: 1, gap: 2 },
-  flex1: { flex: 1 },
   closeBtnOffset: { marginLeft: 12, marginTop: 20 },
-  mb8: { marginBottom: 8 },
   h80: { height: 80 },
   h64: { height: 64 },
   h88pct: { height: '88%' },
-  maxH90pct: { maxHeight: '90%' },
-  maxH85pct: { maxHeight: '85%' },
-  maxH80pct: { maxHeight: '80%' },
   inputLabelInline: { marginTop: 0, marginBottom: 0 },
   personChipInner: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   removePersonIcon: { color: C.textDim, fontSize: 13 },
   personChevron: { color: C.textDim, fontSize: 16, paddingLeft: 4 },
   textRed: { color: C.red },
-  opacity40: { opacity: 0.4 },
-  mb0: { marginBottom: 0 },
-  ml8: { marginLeft: 8 },
-  mt8: { marginTop: 8 },
-  gap12: { gap: 12 },
-  speakerLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 4 },
-  mt20: { marginTop: 20 },
-  spacerH20: { height: 20 },
   speakerInputFixed: { width: 64, flex: 0 },
   modalOverlayCentered: Platform.OS === 'web'
     ? { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }
     : { justifyContent: 'center', paddingHorizontal: 32 },
-  borderBottom: { borderBottomWidth: 1, borderBottomColor: C.border },
-  ml12: { marginLeft: 12 },
   progressLabelSpacing: { marginTop: 4, marginBottom: 12 },
   confirmBtnBlock: { marginTop: 16, marginHorizontal: 0, marginBottom: 8 },
   spacerH8: { height: 8 },
