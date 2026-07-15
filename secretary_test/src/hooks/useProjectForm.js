@@ -111,7 +111,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
   const [newDeadlineTime, setNewDeadlineTime] = useState('06:00');
   const [newDeadlineAmPm, setNewDeadlineAmPm] = useState('오후');
   const [newStatus, setNewStatus] = useState('진행중');
-  const [newProgress, setNewProgress] = useState('0');
+  const [newProgress, setNewProgress] = useState(0);
   const [newPriority, setNewPriority] = useState('보통');
   const [newNotes, setNewNotes] = useState('');
   const [pendingMeetingRecordId, setPendingMeetingRecordId] = useState(null);
@@ -153,7 +153,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
       startDate: startDateStr,
       deadline: deadlineStr,
       status: newStatus,
-      progress: parseInt(newProgress) || 0,
+      progress: newProgress,
       priority: newPriority,
       notes: newNotes.trim(),
       meetingRecordIds: pendingMeetingRecordId ? [pendingMeetingRecordId] : [],
@@ -163,7 +163,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setShowAdd(false);
     setNewTitle(''); setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전');
     setNewDeadline(''); setNewDeadlineTime('06:00'); setNewDeadlineAmPm('오후');
-    setNewStatus('진행중'); setNewProgress('0'); setNewPriority('보통'); setNewNotes('');
+    setNewStatus('진행중'); setNewProgress(0); setNewPriority('보통'); setNewNotes('');
     setPendingMeetingRecordId(null);
     setNewClientIds([]);
   }

@@ -158,7 +158,7 @@ export default function ProjectScreen({ navigation, route }) {
     setNewPriority(addTask.priority || '보통');
     setNewNotes(addTask.notes || '');
     setNewStatus('진행중');
-    setNewProgress('0');
+    setNewProgress(0);
     setPendingMeetingRecordId(route?.params?.meetingRecordId || null);
     setShowAdd(true);
     /* eslint-enable react-hooks/set-state-in-effect */
@@ -728,7 +728,20 @@ export default function ProjectScreen({ navigation, route }) {
             </View>
 
             <Text style={s.inputLabel}>진행률 (%)</Text>
-            <TextInput style={s.input} value={newProgress} onChangeText={setNewProgress} placeholder="0" placeholderTextColor={C.textDim} keyboardType="numeric" />
+            <View style={s.sliderWrap}>
+              <Text style={s.sliderVal}>{newProgress}%</Text>
+              <Slider
+                style={s.slider}
+                minimumValue={0}
+                maximumValue={100}
+                step={1}
+                value={newProgress}
+                onValueChange={(v) => setNewProgress(Math.round(v))}
+                minimumTrackTintColor={statusColor(newStatus)}
+                maximumTrackTintColor={C.border}
+                thumbTintColor={statusColor(newStatus)}
+              />
+            </View>
 
             <Text style={s.inputLabel}>메모 (선택)</Text>
             <TextInput style={[s.input, s.h64]} value={newNotes} onChangeText={setNewNotes} placeholder="지연 원인, 진행 상황 등" placeholderTextColor={C.textDim} multiline />
