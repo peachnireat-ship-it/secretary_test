@@ -76,6 +76,22 @@ function encodeRfc2047Subject(text: string): string {
   return words.map((w) => `${PREFIX}${w}${SUFFIX}`).join('\r\n ');
 }
 
+// denomailer의 본문 quoted-printable 인코더(quotedPrintableEncode)에도 subject와 같은 계열의
+// 버그가 있다: 74자 줄바꿈 지점을 정할 때 "=XX" 이스케이프 3바이트 경계를 잘못 계산해, 한글 등
+// 멀티바이트 문자의 이스케이프 시퀀스가 중간에서 깨진 채로 줄이 나뉘는 경우가 있다(예: "관련
+// 인물(ID): (없음)"의 "음"이 "ec�Œ" 형태로 깨져 수신됨). base64는 4문자 단위로만 줄을
+// 나누므로 이런 바이트 경계 문제 자체가 없어, 본문은 quoted-printable 대신 base64로 직접
+// 인코딩해 우회한다.
+function encodeBodyBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  const b64 = btoa(binary);
+  const lines: string[] = [];
+  for (let i = 0; i < b64.length; i += 76) lines.push(b64.slice(i, i + 76));
+  return lines.join('\r\n');
+}
+
 Deno.serve(async (req) => {
   try {
     // ── 0) 공유 시크릿 검증 (--no-verify-jwt 배포이므로 이 검증이 유일한 인증 수단) ──
@@ -234,10 +250,14 @@ Deno.serve(async (req) => {
         auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
       },
       client: {
-        // denomailer 내부의 버그 있는 제목 인코딩 결과를 우리가 직접 만든
-        // 올바른 RFC 2047 인코딩 결과로 교체한다(위 encodeRfc2047Subject 참고).
+        // denomailer 내부의 버그 있는 제목/본문 인코딩 결과를 우리가 직접 만든 안전한
+        // 인코딩 결과로 교체한다(위 encodeRfc2047Subject, encodeBodyBase64 참고).
         preprocessors: [(mail) => {
           mail.subject = encodeRfc2047Subject(subject);
+          mail.mimeContent = [
+            { mimeType: 'text/plain; charset="utf-8"', content: encodeBodyBase64(textBody), transferEncoding: 'base64' },
+            { mimeType: 'text/html; charset="utf-8"', content: encodeBodyBase64(htmlBody), transferEncoding: 'base64' },
+          ];
           return mail;
         }],
       },

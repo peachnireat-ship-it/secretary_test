@@ -82,6 +82,22 @@ function encodeRfc2047Subject(text: string): string {
   return words.map((w) => `${PREFIX}${w}${SUFFIX}`).join('\r\n ');
 }
 
+// denomailer의 본문 quoted-printable 인코더(quotedPrintableEncode)에도 subject와 같은 계열의
+// 버그가 있다: 74자 줄바꿈 지점을 정할 때 "=XX" 이스케이프 3바이트 경계를 잘못 계산해, 한글 등
+// 멀티바이트 문자의 이스케이프 시퀀스가 중간에서 깨진 채로 줄이 나뉘는 경우가 있다(예: "관련
+// 인물(ID): (없음)"의 "음"이 "ec�Œ" 형태로 깨져 수신됨 — 실제 보고된 버그). base64는 4문자
+// 단위로만 줄을 나누므로 이런 바이트 경계 문제 자체가 없어, 본문은 quoted-printable 대신
+// base64로 직접 인코딩해 우회한다.
+function encodeBodyBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  const b64 = btoa(binary);
+  const lines: string[] = [];
+  for (let i = 0; i < b64.length; i += 76) lines.push(b64.slice(i, i + 76));
+  return lines.join('\r\n');
+}
+
 // ── 변경 전/후 비교 대상 필드 (요구사항: 이 8개 중 실제로 값이 달라진 것만 표시) ──
 const COMPARE_FIELDS = [
   'title',
@@ -94,17 +110,6 @@ const COMPARE_FIELDS = [
   'client_ids',
 ];
 
-const FIELD_LABELS: Record<string, string> = {
-  title: '제목',
-  status: '상태',
-  priority: '우선순위',
-  progress: '진행률',
-  start_date: '시작일',
-  deadline: '마감일',
-  notes: '메모',
-  client_ids: '관련 인물(ID)',
-};
-
 // 값 비교용 정규화: null/undefined/빈 문자열은 "값 없음"으로 동일 취급하고, 배열(client_ids)은
 // 정렬 후 문자열화해서 순서만 바뀐 경우를 실제 변경으로 오탐하지 않도록 한다.
 // (요구사항: 과도하게 복잡한 diff 로직은 지양 — 단순 값 비교 수준으로만 정규화)
@@ -114,15 +119,22 @@ function normalizeForCompare(value: unknown): string | number | null {
   return value as string | number;
 }
 
-// 메일 본문에 표시할 사람이 읽기 좋은 값 포맷
-function formatFieldValue(field: string, value: unknown): string {
-  if (value === undefined || value === null || value === '') return '(없음)';
-  if (field === 'progress') return `${value}%`;
+// 메일 본문에 표시할 사람이 읽기 좋은 값 포맷 — notify-project-created(새 프로젝트 등록 메일)와
+// 동일한 표기 규칙을 따른다: 날짜 없음="미정", 관련 인물 없음="없음"이고 client_ids는 raw id가
+// 아니라 이름으로 표시한다(clientNameById에 없는 id는 이름을 못 찾은 경우이므로 id 그대로 표시).
+function formatDisplayValue(field: string, value: unknown, clientNameById: Record<string, string>): string {
+  if (field === 'progress') return `${(value as number) ?? 0}%`;
+  if (field === 'start_date' || field === 'deadline') return (value as string) || '미정';
   if (field === 'client_ids') {
-    return Array.isArray(value) && value.length > 0 ? value.join(', ') : '(없음)';
+    const ids = Array.isArray(value) ? (value as string[]) : [];
+    const names = ids.map((id) => clientNameById[id] || id).filter(Boolean);
+    return names.length > 0 ? names.join(', ') : '없음';
   }
-  return String(value);
+  return (value as string) || '';
 }
+
+// src/theme.js의 C.accentBlue(일정 탭 색상)와 동일한 파란색 — 변경된 값 강조용.
+const CHANGED_VALUE_COLOR = '#5B7FC4';
 
 Deno.serve(async (req) => {
   try {
@@ -170,23 +182,13 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // ── 2) old/new 비교로 변경된 필드 목록 산출 ──
-    const changes = COMPARE_FIELDS
-      .map((field) => ({
-        field,
-        label: FIELD_LABELS[field],
-        oldVal: oldData[field],
-        newVal: newData[field],
-      }))
-      .filter((c) => normalizeForCompare(c.oldVal) !== normalizeForCompare(c.newVal))
-      .map((c) => ({
-        ...c,
-        oldText: formatFieldValue(c.field, c.oldVal),
-        newText: formatFieldValue(c.field, c.newVal),
-      }));
+    const rawChanges = COMPARE_FIELDS
+      .map((field) => ({ field, oldVal: oldData[field], newVal: newData[field] }))
+      .filter((c) => normalizeForCompare(c.oldVal) !== normalizeForCompare(c.newVal));
 
     // DB 트리거의 WHEN 절이 이미 "의미 있는 필드가 하나도 안 바뀐 UPDATE"는 걸러내지만,
     // 이 함수를 다른 경로로 직접 호출하는 경우까지 대비해 방어적으로 한 번 더 스킵 처리한다.
-    if (changes.length === 0) {
+    if (rawChanges.length === 0) {
       console.log(`[notify-project-updated] project_id=${projectId}: 실질적인 변경 사항이 없어 메일 발송을 스킵합니다.`);
       return new Response(JSON.stringify({ ok: true, skipped: true, reason: 'no_changes' }), {
         status: 200,
@@ -205,20 +207,29 @@ Deno.serve(async (req) => {
       throw new Error(`등록자 프로필 조회 실패(user_id=${userId}): ${profileError.message}`);
     }
 
-    // ── 4) clients 테이블에서 관련 인물 조회 (수정 후 현재 client_ids 기준) ──
-    const clientIds = Array.isArray(newData.client_ids) ? newData.client_ids : [];
-    let relatedClients = [];
-    if (clientIds.length > 0) {
+    // ── 4) clients 테이블에서 관련 인물 조회. 변경 사항 표시에는 old/new 양쪽에 등장하는
+    // client_id 전체(제거된 사람의 이름도 표시하기 위해)가 필요하지만, 실제 메일 수신자는
+    // "수정 후 현재" 관련 인물로만 한정한다(제거된 사람에게는 발송하지 않음) ──
+    const oldClientIds = Array.isArray(oldData.client_ids) ? oldData.client_ids : [];
+    const newClientIds = Array.isArray(newData.client_ids) ? newData.client_ids : [];
+    const allClientIds = [...new Set([...oldClientIds, ...newClientIds])];
+
+    let allClients: { id: string; email: string; name: string; linked_profile_id: string | null }[] = [];
+    if (allClientIds.length > 0) {
       const { data: clients, error: clientsError } = await supabase
         .from('clients')
-        .select('email, name, linked_profile_id')
-        .in('id', clientIds);
+        .select('id, email, name, linked_profile_id')
+        .in('id', allClientIds);
 
       if (clientsError) {
-        throw new Error(`관련 거래처 조회 실패(client_ids=${JSON.stringify(clientIds)}): ${clientsError.message}`);
+        throw new Error(`관련 거래처 조회 실패(client_ids=${JSON.stringify(allClientIds)}): ${clientsError.message}`);
       }
-      relatedClients = clients || [];
+      allClients = clients || [];
     }
+    const clientNameById = Object.fromEntries(allClients.map((c) => [c.id, c.name]));
+    const relatedClients = allClients.filter((c) => newClientIds.includes(c.id));
+
+    const changedFieldSet = new Set(rawChanges.map((c) => c.field));
 
     // ── 4-1) linked_profile_id가 있는 관련 인물은 clients.email 대신 profiles.email을
     // 단일 소스로 우선 사용한다(계정별로 중복 저장된 clients.email이 서로 어긋나는 문제 방지) ──
@@ -259,39 +270,50 @@ Deno.serve(async (req) => {
     }
 
     // ── 7) Gmail SMTP로 이메일 발송 ──
+    // 양식은 notify-project-created(새 프로젝트 등록 메일)와 동일한 필드 목록/순서를 그대로 쓰되,
+    // 값이 바뀐 필드만 "이전 → 새 값" 형태로 표시하고 새 값에 파란색을 입힌다(plain text는
+    // 색을 표현할 수 없으므로 화살표 표기까지만 동일하게 유지).
     const projectTitle = newData.title || oldData.title || '(제목 없음)';
     const subject = `[secretary_test] 프로젝트 내용 수정: ${projectTitle}`;
     const organizerText = registrant?.name || '알 수 없음';
-    const relatedPeopleNames = relatedClients.map((c) => c.name).filter(Boolean);
-    const relatedPeopleText = relatedPeopleNames.length > 0 ? relatedPeopleNames.join(', ') : '없음';
 
-    const changeLines = changes.map((c) => `${c.label}: ${c.oldText} → ${c.newText}`);
+    function buildFieldValueDisplay(field: string, format: 'text' | 'html'): string {
+      if (!changedFieldSet.has(field)) return formatDisplayValue(field, newData[field], clientNameById);
+      const oldText = formatDisplayValue(field, oldData[field], clientNameById);
+      const newText = formatDisplayValue(field, newData[field], clientNameById);
+      const newDisplay = format === 'html' ? `<span style="color:${CHANGED_VALUE_COLOR}">${newText}</span>` : newText;
+      return `${oldText} → ${newDisplay}`;
+    }
 
     const textLines = [
       '프로젝트 내용이 수정되었습니다.',
       '',
-      `제목: ${projectTitle}`,
+      `제목: ${buildFieldValueDisplay('title', 'text')}`,
       `주최자: ${organizerText}`,
-      `관련 인물: ${relatedPeopleText}`,
-      '',
-      '변경 사항:',
-      ...changeLines.map((line) => `- ${line}`),
+      `상태: ${buildFieldValueDisplay('status', 'text')}`,
+      `우선순위: ${buildFieldValueDisplay('priority', 'text')}`,
+      `진행률: ${buildFieldValueDisplay('progress', 'text')}`,
+      `시작일: ${buildFieldValueDisplay('start_date', 'text')}`,
+      `마감일: ${buildFieldValueDisplay('deadline', 'text')}`,
+      `관련 인물: ${buildFieldValueDisplay('client_ids', 'text')}`,
     ];
+    const notesTextDisplay = buildFieldValueDisplay('notes', 'text');
+    if (notesTextDisplay || changedFieldSet.has('notes')) textLines.push(`메모: ${notesTextDisplay}`);
     const textBody = textLines.join('\n');
 
-    const changeListHtml = changes
-      .map((c) => `<li><strong>${c.label}:</strong> ${c.oldText} → ${c.newText}</li>`)
-      .join('');
-    const htmlBody = [
-      '<p>프로젝트 내용이 수정되었습니다.</p>',
-      '<ul>',
-      `<li><strong>제목:</strong> ${projectTitle}</li>`,
+    const htmlItems = [
+      `<li><strong>제목:</strong> ${buildFieldValueDisplay('title', 'html')}</li>`,
       `<li><strong>주최자:</strong> ${organizerText}</li>`,
-      `<li><strong>관련 인물:</strong> ${relatedPeopleText}</li>`,
-      '</ul>',
-      '<p><strong>변경 사항</strong></p>',
-      `<ul>${changeListHtml}</ul>`,
-    ].join('');
+      `<li><strong>상태:</strong> ${buildFieldValueDisplay('status', 'html')}</li>`,
+      `<li><strong>우선순위:</strong> ${buildFieldValueDisplay('priority', 'html')}</li>`,
+      `<li><strong>진행률:</strong> ${buildFieldValueDisplay('progress', 'html')}</li>`,
+      `<li><strong>시작일:</strong> ${buildFieldValueDisplay('start_date', 'html')}</li>`,
+      `<li><strong>마감일:</strong> ${buildFieldValueDisplay('deadline', 'html')}</li>`,
+      `<li><strong>관련 인물:</strong> ${buildFieldValueDisplay('client_ids', 'html')}</li>`,
+    ];
+    const notesHtmlDisplay = buildFieldValueDisplay('notes', 'html');
+    if (notesHtmlDisplay || changedFieldSet.has('notes')) htmlItems.push(`<li><strong>메모:</strong> ${notesHtmlDisplay}</li>`);
+    const htmlBody = `<p>프로젝트 내용이 수정되었습니다.</p><ul>${htmlItems.join('')}</ul>`;
 
     const smtpClient = new SMTPClient({
       connection: {
@@ -301,10 +323,14 @@ Deno.serve(async (req) => {
         auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
       },
       client: {
-        // denomailer 내부의 버그 있는 제목 인코딩 결과를 우리가 직접 만든
-        // 올바른 RFC 2047 인코딩 결과로 교체한다(위 encodeRfc2047Subject 참고).
+        // denomailer 내부의 버그 있는 제목/본문 인코딩 결과를 우리가 직접 만든 안전한
+        // 인코딩 결과로 교체한다(위 encodeRfc2047Subject, encodeBodyBase64 참고).
         preprocessors: [(mail) => {
           mail.subject = encodeRfc2047Subject(subject);
+          mail.mimeContent = [
+            { mimeType: 'text/plain; charset="utf-8"', content: encodeBodyBase64(textBody), transferEncoding: 'base64' },
+            { mimeType: 'text/html; charset="utf-8"', content: encodeBodyBase64(htmlBody), transferEncoding: 'base64' },
+          ];
           return mail;
         }],
       },
@@ -324,8 +350,8 @@ Deno.serve(async (req) => {
       await smtpClient.close();
     }
 
-    console.log(`[notify-project-updated] project_id=${projectId}: ${recipients.length}명에게 메일 발송 완료(변경 필드 ${changes.length}개).`);
-    return new Response(JSON.stringify({ ok: true, skipped: false, recipients, changedFields: changes.map((c) => c.field) }), {
+    console.log(`[notify-project-updated] project_id=${projectId}: ${recipients.length}명에게 메일 발송 완료(변경 필드 ${rawChanges.length}개).`);
+    return new Response(JSON.stringify({ ok: true, skipped: false, recipients, changedFields: rawChanges.map((c) => c.field) }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
