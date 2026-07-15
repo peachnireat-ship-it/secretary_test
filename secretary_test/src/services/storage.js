@@ -236,6 +236,15 @@ function fromRow(row, keymap) {
   return obj;
 }
 
+// clients.email <-> profiles.email 동기화 헬퍼. saveUserProfile/updateClient/addClient가 각각
+// "자신이 수정한 테이블"에서 linked_profile_id로 연결된 반대편 테이블로 1홉만 전파할 때 사용한다.
+// (A→B 전파만 하고 B가 다시 A를 갱신하는 재귀 호출은 만들지 않는다.)
+async function syncEmail(table, matchColumn, matchValue, email) {
+  if (!matchValue || email === undefined) return;
+  const { error } = await supabase.from(table).update({ email }).eq(matchColumn, matchValue);
+  if (error) throw error;
+}
+
 const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', createdAt: 'created_at' };
 const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', notes: 'notes', aiSummary: 'ai_summary', linkedProfileId: 'linked_profile_id', createdAt: 'created_at' };
 const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', createdAt: 'created_at' };
@@ -324,13 +333,22 @@ export async function addClient(client) {
   };
   const { error } = await supabase.from('clients').insert(row);
   if (error) throw error;
+  // 신규 거래처가 ROSTER 계정과 연결됐고 email이 입력된 경우, 해당 profiles.email도 동기화한다.
+  if (matched && client.email !== undefined) await syncEmail('profiles', 'id', matched.id, client.email);
   return getClients();
 }
 
 export async function updateClient(id, fields) {
   const user = await getCurrentUser();
-  const { error } = await supabase.from('clients').update(toRow(fields, CLIENT_KEYMAP)).eq('id', id).eq('user_id', user.id);
+  if (fields.email === undefined) {
+    const { error } = await supabase.from('clients').update(toRow(fields, CLIENT_KEYMAP)).eq('id', id).eq('user_id', user.id);
+    if (error) throw error;
+    return getClients();
+  }
+  // email을 변경하는 경우에만 linked_profile_id를 함께 반환받아 profiles.email 동기화에 사용한다.
+  const { data, error } = await supabase.from('clients').update(toRow(fields, CLIENT_KEYMAP)).eq('id', id).eq('user_id', user.id).select('linked_profile_id').single();
   if (error) throw error;
+  await syncEmail('profiles', 'id', data?.linked_profile_id, fields.email);
   return getClients();
 }
 
@@ -577,9 +595,11 @@ export async function toggleClientFavorite(clientId) {
 export async function getUserProfile() {
   const user = await getCurrentUser();
   if (!user) return null;
-  const { data, error } = await supabase.from('profiles').select('contact, notes').eq('id', user.id).single();
+  const { data, error } = await supabase.from('profiles').select('contact, notes, email').eq('id', user.id).single();
   if (error) throw error;
-  return { contact: data?.contact || '', notes: data?.notes || '', ...user };
+  // 주의: user.email은 로그인용 Supabase Auth 이메일(계정 아이디)이므로, 알림 수신용 profiles.email로
+  // 덮어쓰이지 않도록 ...user를 먼저 펼치고 profiles 필드를 뒤에 덮어쓴다.
+  return { ...user, contact: data?.contact || '', notes: data?.notes || '', email: data?.email || '' };
 }
 
 export async function saveUserProfile(fields) {
@@ -587,6 +607,8 @@ export async function saveUserProfile(fields) {
   if (!user) return;
   const { error } = await supabase.from('profiles').update(fields).eq('id', user.id);
   if (error) throw error;
+  // 로그인 계정 본인의 email이 바뀐 경우, 이 계정을 linked_profile_id로 연결해둔 모든 clients row도 동기화한다.
+  await syncEmail('clients', 'linked_profile_id', user.id, fields.email);
 }
 
 // ── Pyannote Server URL (기기별 설정 — 마이그레이션 범위 밖, 변경 없음) ──

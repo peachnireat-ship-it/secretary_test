@@ -52,6 +52,7 @@ export default function SettingsScreen() {
   const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [editContact, setEditContact] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editEmail, setEditEmail] = useState('');
 
   const [switchTarget, setSwitchTarget] = useState(null);
   const [switchPassword, setSwitchPassword] = useState('');
@@ -337,6 +338,7 @@ export default function SettingsScreen() {
                 <Text style={s.accountEmail}>{user.email}</Text>
                 {user.team && <Text style={s.accountTeam}>{user.team}{user.role ? ` · ${user.role}` : ''}</Text>}
                 {profile?.contact ? <Text style={s.profileContact}>{profile.contact}</Text> : null}
+                {profile?.email && profile.email !== user.email ? <Text style={s.profileEmail}>{`알림 수신: ${profile.email}`}</Text> : null}
                 {profile?.notes ? <Text style={s.profileNotes}>{profile.notes}</Text> : null}
               </View>
               <View style={s.profileActions}>
@@ -346,6 +348,7 @@ export default function SettingsScreen() {
                   onPress={() => {
                     setEditContact(profile?.contact || '');
                     setEditNotes(profile?.notes || '');
+                    setEditEmail(profile?.email || '');
                     setShowProfileEdit(true);
                   }}
                 >
@@ -475,6 +478,17 @@ export default function SettingsScreen() {
               keyboardType="phone-pad"
             />
 
+            <Text style={[s.inputLabel, s.mt16]}>이메일 (알림 수신용)</Text>
+            <TextInput
+              style={s.profileInput}
+              value={editEmail}
+              onChangeText={setEditEmail}
+              placeholder="example@email.com"
+              placeholderTextColor={C.textDim}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
             <Text style={[s.inputLabel, s.mt16]}>메모 / 소개</Text>
             <TextInput
               style={[s.profileInput, s.h80]}
@@ -492,7 +506,11 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={s.modalConfirm}
                 onPress={async () => {
-                  await saveUserProfile({ contact: editContact.trim(), notes: editNotes.trim() });
+                  if (editEmail.trim() && !editEmail.trim().includes('@')) {
+                    Alert.alert('이메일 형식 오류', '올바른 이메일 형식이 아닙니다.');
+                    return;
+                  }
+                  await saveUserProfile({ contact: editContact.trim(), notes: editNotes.trim(), email: editEmail.trim() });
                   const p = await getUserProfile();
                   setProfile(p);
                   setShowProfileEdit(false);
@@ -555,6 +573,7 @@ const s = StyleSheet.create({
   featureTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '500', marginBottom: 4 },
   featureDesc: { color: C.textSecondary, fontSize: 12, lineHeight: 18 },
   profileContact: { color: C.accentTeal, fontSize: 12, marginTop: 3 },
+  profileEmail: { color: C.accentTeal, fontSize: 11, marginTop: 2 },
   profileNotes: { color: C.textDim, fontSize: 11, marginTop: 2, lineHeight: 16 },
   profileEditBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 7, borderWidth: 1, borderColor: C.accentBlue + '55', backgroundColor: C.accentBlue + '11' },
   profileEditBtnText: { color: C.accentBlue, fontSize: 11, fontWeight: '500' },

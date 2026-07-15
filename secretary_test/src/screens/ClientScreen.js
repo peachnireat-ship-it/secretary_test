@@ -138,7 +138,7 @@ export default function ClientScreen({ navigation, route }) {
       }
 
       const { data } = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name, Contacts.Fields.Company, Contacts.Fields.JobTitle],
+        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name, Contacts.Fields.Company, Contacts.Fields.JobTitle, Contacts.Fields.Emails],
       });
 
       const withPhone = data
@@ -156,6 +156,7 @@ export default function ClientScreen({ navigation, route }) {
     setNewContact(phone);
     setNewCompany(contact.company || '');
     setNewRole(contact.jobTitle || '');
+    setNewEmail(contact.emails?.[0]?.email || '');
     setShowContactPicker(false);
     setContactSearch('');
     setShowAddClient(true);
@@ -188,6 +189,10 @@ export default function ClientScreen({ navigation, route }) {
       Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.\n모두 입력 후 추가해주세요.');
       return;
     }
+    if (newEmail.trim() && !newEmail.trim().includes('@')) {
+      Alert.alert('이메일 형식 오류', '올바른 이메일 형식이 아닙니다.');
+      return;
+    }
     const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), email: newEmail.trim(), notes: newNotes.trim() });
     setClients(updated);
     setShowAddClient(false);
@@ -208,6 +213,10 @@ export default function ClientScreen({ navigation, route }) {
   async function handleEditClient() {
     if (!newName.trim() || !newCompany.trim() || !newContact.trim()) {
       Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.');
+      return;
+    }
+    if (newEmail.trim() && !newEmail.trim().includes('@')) {
+      Alert.alert('이메일 형식 오류', '올바른 이메일 형식이 아닙니다.');
       return;
     }
     const updated = await updateClient(selectedClient.id, { name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), email: newEmail.trim(), notes: newNotes.trim() });
