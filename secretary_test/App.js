@@ -41,11 +41,13 @@ function TabNavigator() {
         tabBarActiveTintColor: tabColor(route.name),
         tabBarInactiveTintColor: C.textDim,
         // 웹에서 react-navigation Label은 numberOfLines=1 때문에 overflow:hidden이 걸리는데,
-        // CSS flexbox 규칙상 overflow가 visible이 아닌 flex item은 자동 최소 높이가 0이 되어
-        // 부모(탭 아이템) 공간이 부족하면 lineHeight(14px)보다 낮게(예: 9px) 찌그러들고,
-        // 그 안의 텍스트(특히 한글 받침)가 자체 overflow:hidden에 잘려 보인다.
-        // flexShrink:0으로 라벨이 항상 lineHeight만큼의 높이를 확보하도록 고정한다.
-        tabBarLabelStyle: { fontSize: 10, lineHeight: 14, letterSpacing: 0.5, fontWeight: '500', flexShrink: 0 },
+        // CSS flexbox 규칙상 overflow가 visible이 아닌 flex item은 자동 최소 높이(min-height:auto)가
+        // 0으로 resolve되어, 부모(탭 아이템) 공간이 부족하면 lineHeight(14px)보다 낮게(심하면 0px까지)
+        // 찌그러들고 그 안의 텍스트(특히 한글 받침)가 자체 overflow:hidden에 잘려 안 보인다.
+        // flexShrink:0만으로는 "찌그러들지 않게"만 막을 뿐 애초에 min-height:auto가 0으로
+        // resolve되는 것 자체는 못 막아서(레이아웃 타이밍에 따라 재현될 수 있음), minHeight를
+        // lineHeight와 동일하게 명시로 고정해 텍스트 높이가 절대 0으로 붕괴하지 않게 한다.
+        tabBarLabelStyle: { fontSize: 10, lineHeight: 14, minHeight: 14, letterSpacing: 0.5, fontWeight: '500', flexShrink: 0 },
         tabBarIcon: ({ focused, color }) => (
           <Text style={{ fontSize: 18, color }}>{ICONS[route.name]?.[focused ? 'active' : 'inactive']}</Text>
         ),
