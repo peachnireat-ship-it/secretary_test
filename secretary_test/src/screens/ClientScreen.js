@@ -10,8 +10,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
-import { getClients, addClient, updateClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite } from '../services/storage';
-import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText } from '../services/claude';
+import { getClients, addClient, updateClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail } from '../services/storage';
+import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
 import { priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
@@ -60,6 +60,8 @@ export default function ClientScreen({ navigation, route }) {
   ]);
   const [chatInput, setChatInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [fixingMsgIndex, setFixingMsgIndex] = useState(null);
+  const [sendingEmailIndex, setSendingEmailIndex] = useState(null);
   const chatScrollRef = useRef(null);
 
   const swipeClient = useSwipeClose(() => setSelectedClient(null), !!selectedClient);
@@ -248,11 +250,46 @@ export default function ClientScreen({ navigation, route }) {
         .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
       const systemPrompt = buildClientSystem(clients, histories);
       const reply = await askClaude(apiMessages, systemPrompt, { raw: true });
+
+      // 메일 초안 요청인지 먼저 확인 — JSON을 fixForeignWordsInText에 통째로 넣으면
+      // AI가 자연어로 다시 써버려 파싱이 깨지므로, 파싱 후 subject/body 필드만 교정한다.
+      const jsonMatch = reply.match(/\{[\s\S]*"action"\s*:\s*"draft_email"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = parseLooseJson(jsonMatch[0]);
+        if (parsed) {
+          if (parsed.action === 'draft_email' && parsed.clientId && parsed.subject && parsed.body) {
+            const draftClient = clients.find((c) => c.id === parsed.clientId);
+            const clientName = draftClient?.name || '거래처';
+            let subject = parsed.subject;
+            let body = parsed.body;
+            try {
+              subject = await fixForeignWordsInText(subject);
+              body = await fixForeignWordsInText(body);
+            } catch {
+              subject = stripForeignScripts(subject);
+              body = stripForeignScripts(body);
+            }
+            setChatMessages([...history, {
+              role: 'assistant',
+              kind: 'emailDraft',
+              clientId: parsed.clientId,
+              clientName,
+              subject,
+              body,
+              text: `${clientName}에게 보낼 메일 초안입니다. 확인 후 발송해주세요.`,
+            }]);
+            return;
+          }
+        }
+        // parsed가 null이거나 draft_email 형태가 아니면 아래 일반 텍스트 응답 경로로 폴백
+      }
+
       let fixedReply = reply;
       try {
         fixedReply = await fixForeignWordsInText(reply);
       } catch {
         // 외국어 교정 실패는 채팅 응답 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+        fixedReply = stripForeignScripts(fixedReply);
       }
       setChatMessages([...history, { role: 'assistant', text: fixedReply }]);
     } catch (e) {
@@ -264,6 +301,50 @@ export default function ClientScreen({ navigation, route }) {
       setAiLoading(false);
       setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
+  }
+
+  async function handleFixMessageForeignWords(index) {
+    if (fixingMsgIndex !== null) return;
+    setFixingMsgIndex(index);
+    try {
+      const original = chatMessages[index].text;
+      let fixed;
+      try {
+        fixed = await fixForeignWordsInText(original);
+      } catch {
+        // 외국어 교정 실패는 메시지 자체를 지우지 않고, 한자·일본어 가나만 결정적으로 제거
+        fixed = stripForeignScripts(original);
+      }
+      setChatMessages((prev) => prev.map((m, i) => (i === index ? { ...m, text: fixed } : m)));
+    } finally {
+      setFixingMsgIndex(null);
+    }
+  }
+
+  function handleSendDraftEmail(index) {
+    const msg = chatMessages[index];
+    if (!msg || msg.kind !== 'emailDraft' || msg.sent || sendingEmailIndex !== null) return;
+    Alert.alert(
+      '메일 발송',
+      `${msg.clientName}님에게 아래 내용으로 메일을 보내시겠습니까?\n\n제목: ${msg.subject}`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '발송',
+          onPress: async () => {
+            setSendingEmailIndex(index);
+            try {
+              await sendClientEmail(msg.clientId, msg.subject, msg.body);
+              setChatMessages((prev) => prev.map((m, i) => (i === index ? { ...m, sent: true } : m)));
+            } catch (e) {
+              Alert.alert('메일 발송 실패', e.message || '알 수 없는 오류가 발생했습니다.');
+            } finally {
+              setSendingEmailIndex(null);
+            }
+          },
+        },
+      ]
+    );
   }
 
   // AI 요약 for selected client
@@ -292,6 +373,7 @@ export default function ClientScreen({ navigation, route }) {
         fixedReply = await fixForeignWordsInText(reply);
       } catch {
         // 외국어 교정 실패는 요약 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+        fixedReply = stripForeignScripts(fixedReply);
       }
       const normalized = normalizeAIDates(fixedReply);
       clientSummaryCache.current[client.id] = normalized;
@@ -347,6 +429,7 @@ export default function ClientScreen({ navigation, route }) {
         fixedReply = await fixForeignWordsInText(reply);
       } catch {
         // 외국어 교정 실패는 요약 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+        fixedReply = stripForeignScripts(fixedReply);
       }
       setHistorySummary(normalizeAIDates(fixedReply));
     } catch (e) {
@@ -451,7 +534,12 @@ export default function ClientScreen({ navigation, route }) {
           <TouchableOpacity style={commonStyles.flex1} activeOpacity={1} onPress={() => setShowSourcePicker(false)} />
           <View style={s.sourceSheet}>
             <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>거래처 추가</Text>
+            <View style={s.chatHeader}>
+              <Text style={s.modalTitle}>거래처 추가</Text>
+              <TouchableOpacity onPress={() => setShowSourcePicker(false)}>
+                <Text style={s.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity style={s.sourceOption} onPress={() => { setShowSourcePicker(false); setTimeout(() => setShowAddClient(true), 300); }}>
               <Text style={s.sourceIcon}>✏️</Text>
               <Text style={s.sourceOptionText}>직접 입력</Text>
@@ -835,6 +923,40 @@ export default function ClientScreen({ navigation, route }) {
               {chatMessages.map((m, i) => (
                 <View key={i} style={[s.bubble, m.role === 'user' ? s.bubbleUser : s.bubbleAI]}>
                   <Text style={[s.bubbleText, m.role === 'user' ? s.bubbleTextUser : s.bubbleTextAI]}>{m.text}</Text>
+                  {m.kind === 'emailDraft' && (
+                    <View style={s.emailDraftCard}>
+                      <Text style={s.emailDraftLabel}>제목</Text>
+                      <Text style={s.emailDraftSubject}>{m.subject}</Text>
+                      <Text style={s.emailDraftLabel}>본문</Text>
+                      <Text style={s.emailDraftBody}>{m.body}</Text>
+                      {m.sent ? (
+                        <Text style={s.emailDraftSentText}>✓ 발송 완료</Text>
+                      ) : (
+                        <TouchableOpacity
+                          style={[s.emailDraftSendBtn, sendingEmailIndex !== null && s.fixForeignBtnDisabled]}
+                          onPress={() => handleSendDraftEmail(i)}
+                          disabled={sendingEmailIndex !== null}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={s.emailDraftSendBtnText}>
+                            {sendingEmailIndex === i ? '발송 중…' : '메일 발송'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                  {m.role !== 'user' && i > 0 && m.kind !== 'emailDraft' && (
+                    <TouchableOpacity
+                      style={[s.fixForeignBtn, fixingMsgIndex !== null && s.fixForeignBtnDisabled]}
+                      onPress={() => handleFixMessageForeignWords(i)}
+                      disabled={fixingMsgIndex !== null}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={s.fixForeignBtnText}>
+                        {fixingMsgIndex === i ? '수정 중…' : '외국어 재수정'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))}
               {aiLoading && (
@@ -1013,6 +1135,21 @@ export default function ClientScreen({ navigation, route }) {
       </Modal>
     </View>
   );
+}
+
+// 메일 본문처럼 여러 줄인 필드가 있으면 AI가 JSON 문자열 값 안의 줄바꿈을 이스케이프하지
+// 않고 그대로 출력하는 경우가 있어 JSON.parse가 깨진다. 원본 그대로 먼저 시도하고,
+// 실패하면 남아있는 원본 줄바꿈을 \n으로 치환해 한 번 더 시도한다.
+function parseLooseJson(jsonText) {
+  try {
+    return JSON.parse(jsonText);
+  } catch {
+    try {
+      return JSON.parse(jsonText.replace(/\r\n|\r|\n/g, '\\n'));
+    } catch {
+      return null;
+    }
+  }
 }
 
 function projDaysUntil(deadlineStr) {
@@ -1198,6 +1335,24 @@ const s = StyleSheet.create({
   bubbleText: { fontSize: 13, lineHeight: 20 },
   bubbleTextAI: { color: C.textSecondary },
   bubbleTextUser: { color: C.textPrimary },
+  fixForeignBtn: {
+    alignSelf: 'flex-start', marginTop: 8,
+    borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 7,
+    paddingVertical: 5, paddingHorizontal: 8,
+  },
+  fixForeignBtnText: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
+  fixForeignBtnDisabled: { opacity: 0.4 },
+  emailDraftCard: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border },
+  emailDraftLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1, marginBottom: 3 },
+  emailDraftSubject: { color: C.textPrimary, fontSize: 13, fontWeight: '600', marginBottom: 8 },
+  emailDraftBody: { color: C.textSecondary, fontSize: 13, lineHeight: 20, marginBottom: 12 },
+  emailDraftSendBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: C.accentTeal, borderRadius: 8,
+    paddingVertical: 8, paddingHorizontal: 14,
+  },
+  emailDraftSendBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  emailDraftSentText: { color: C.accentTeal, fontSize: 12, fontWeight: '500' },
   chatInputRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   chatInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 24, color: C.textPrimary, fontSize: 14, paddingHorizontal: 18, paddingVertical: 12 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: C.accentTeal },

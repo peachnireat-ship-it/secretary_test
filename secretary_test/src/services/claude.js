@@ -65,6 +65,21 @@ export function stripNonKorean(text) {
   return text.replace(/[^\p{Script=Hangul}\s0-9.?!,:\[\]]/gu, '');
 }
 
+// fixForeignWordsInText는 "문맥에 맞지 않는 외국어"를 AI가 판단해 고치는 방식이라,
+// 한자 병기(예: "계약(契約)")나 일본어 히라가나·가타카나처럼 AI가 자연스럽다고 판단해
+// 남겨두는 경우가 있다. 이를 보완하는 결정적 후처리로, 한자(CJK 통합 표의문자)와
+// 일본어 가나(히라가나·가타카나·반각 가타카나)를 무조건 제거한다.
+// 괄호로 병기된 경우는 괄호째 제거하고, 그 외에는 문자 단위로 제거한다.
+const FOREIGN_SCRIPT_CHARS = '\\u4E00-\\u9FFF\\u3400-\\u4DBF\\uF900-\\uFAFF\\u3040-\\u30FF\\uFF66-\\uFF9F';
+export function stripForeignScripts(text) {
+  if (!text) return text;
+  return text
+    .replace(new RegExp(`[(（][${FOREIGN_SCRIPT_CHARS}]+[)）]`, 'g'), '')
+    .replace(new RegExp(`[${FOREIGN_SCRIPT_CHARS}]`, 'g'), '')
+    .replace(/ {2,}/g, ' ')
+    .replace(/ +([,.!?])/g, '$1');
+}
+
 export async function askClaude(messages, systemPrompt, { raw = false } = {}) {
   const provider = await getAiProvider();
   let result;
@@ -202,8 +217,7 @@ export function buildTaskExtractionSystem() {
 태스크가 없으면 빈 배열 []을 출력하세요.`;
 }
 
-export async function fixForeignWordsInText(text) {
-  const provider = await getAiProvider();
+async function callFixForeignWordsOnce(text, provider) {
   const systemPrompt = `[언어 규칙] 반드시 한국어로만 응답하세요.
 
 주어진 텍스트에서 문맥에 맞지 않는 외국어(영어, 일본어, 한자 등)를 자연스러운 한국어로 수정하세요.
@@ -224,6 +238,20 @@ export async function fixForeignWordsInText(text) {
     if (!apiKey) throw new Error('API_KEY_MISSING');
     return (await callGroq([{ role: 'user', content: text }], systemPrompt, apiKey)).trim();
   }
+}
+
+// 1차 AI 교정 후에도 한자·일본어 가나가 남는 경우가 있어(모델이 병기를 자연스럽다고 판단),
+// stripForeignScripts로 결정적으로 제거한 뒤 실제로 제거된 게 있으면(=1차 교정이 불완전했다는 뜻)
+// 잘려나간 자리로 어색해진 문장을 자연스럽게 다듬기 위해 자동으로 한 번 더 AI 교정을 거친다.
+// 제거된 게 없으면(1차에서 이미 완전히 교정됨) 불필요한 API 호출 없이 바로 반환한다.
+export async function fixForeignWordsInText(text) {
+  const provider = await getAiProvider();
+  const firstPass = await callFixForeignWordsOnce(text, provider);
+  const stripped = stripForeignScripts(firstPass);
+  if (stripped === firstPass) return stripped;
+
+  const secondPass = await callFixForeignWordsOnce(stripped, provider);
+  return stripForeignScripts(secondPass);
 }
 
 function fmtDate(dateStr) {
@@ -250,7 +278,15 @@ export function buildClientSystem(clients, histories) {
         .filter((h) => h.clientId === c.id)
         .sort((a, b) => b.createdAt - a.createdAt);
       const lastContact = cHistory[0]?.date ? fmtDate(cHistory[0].date) : '기록 없음';
-      return `## ${c.company} — ${c.name} (${c.role})\n연락처: ${tokenizeContact(c.contact)}\n메모: ${c.notes}\n마지막 연락: ${lastContact}\n히스토리:\n${cHistory.map((h) => `  - [${fmtDate(h.date)}] ${h.type}: ${h.title} → 결과: ${h.result}`).join('\n') || '  (없음)'}`;
+      const historyLines = cHistory
+        .map((h) => `  - [${fmtDate(h.date)}] ${h.type}: ${h.title} → 결과: ${h.result}${h.content ? `\n    내용: ${h.content}` : ''}`)
+        .join('\n') || '  (없음)';
+      // 이메일 실주소는 AI 응답 생성에 필요 없으므로(존재 여부만 유의미) 등록 여부만 전달한다.
+      // 실제 발송 시 주소는 서버(Edge Function)가 clientId로 직접 조회한다.
+      // "등록됨"/"미등록" 판정만 던지면 모델이 이를 아래 응답 규칙과 스스로 연결짓지 못하고
+      // 이메일이 있어도 없다고 답하는 경우가 있어, 결론(메일 작성 가능 여부)을 항목에 직접 명시한다.
+      const emailStatus = c.email ? '등록됨 (메일 작성 가능)' : '미등록 (메일 작성 불가)';
+      return `## ${c.company} — ${c.name} (${c.role}) [ID: ${c.id}]\n연락처: ${tokenizeContact(c.contact)}\n이메일: ${emailStatus}\n메모: ${c.notes}\n마지막 연락: ${lastContact}\n히스토리:\n${historyLines}`;
     })
     .join('\n\n');
 
@@ -271,6 +307,16 @@ ${clientList || '(등록된 거래처 없음)'}
 2. 마지막 연락/미팅 일자 조회
 3. 후속 조치 및 다음 스텝 제안
 4. 거래처 관계 분석 및 전략적 조언
+5. 거래처에게 보낼 메일 초안 작성
+
+## 응답 규칙
+- 일반 질문·조회·조언: 자연스러운 한국어 텍스트로만 응답하세요. JSON을 절대 포함하지 마세요.
+- 사용자가 특정 거래처에게 보낼 메일 작성/발송을 요청하면, 반드시 위 목록에서 해당 거래처의 "이메일" 항목에 적힌 판정만 그대로 따르세요. 다른 정보(연락처 등록 여부 등)로 이메일 존재 여부를 추측하지 마세요.
+  - "등록됨 (메일 작성 가능)"이면: 아래 JSON 형식 한 줄만 출력하세요. 다른 텍스트는 포함하지 마세요.
+    {"action":"draft_email","clientId":"위 목록의 [ID: ...] 값","subject":"메일 제목","body":"메일 본문"}
+    - clientId는 반드시 위 목록에 명시된 ID 값을 그대로 사용하세요. 대상 거래처를 특정할 수 없으면 JSON 대신 어느 거래처인지 되물으세요.
+    - subject는 간결한 한 줄, body는 히스토리·맥락을 반영한 정중한 비즈니스 메일체(인사말·본문·맺음말 포함)로 작성하세요.
+  - "미등록 (메일 작성 불가)"이면: JSON을 출력하지 말고, 이메일이 등록되어 있지 않아 메일을 작성할 수 없다고 안내하세요.
 
 모든 응답은 자연스러운 한국어로만 작성하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.
 날짜를 언급할 때는 반드시 'yyyy년 mm월 dd일' 형식으로 표기하세요 (예: 2024년 01월 15일). YYYY-MM-DD, YYYY.MM.DD, YYYYMMDD 등 다른 형식은 절대 사용하지 마세요.`;

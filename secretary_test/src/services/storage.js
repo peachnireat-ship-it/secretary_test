@@ -352,6 +352,27 @@ export async function updateClient(id, fields) {
   return getClients();
 }
 
+// AI 거래처 비서가 작성한 메일 초안을 사용자가 확인 후 실제로 발송할 때 호출.
+// Edge Function이 clients.user_id와 로그인 세션의 user.id 일치 여부로 소유권을 검증하므로,
+// 여기서는 별도 검사 없이 그대로 호출한다. 자세한 내용은 supabase/README_send_client_email.md 참고.
+export async function sendClientEmail(clientId, subject, body) {
+  const { data, error } = await supabase.functions.invoke('send-client-email', {
+    body: { client_id: clientId, subject, body },
+  });
+  if (error) {
+    // Edge Function이 오류 시 { error: '메시지' } JSON을 반환하므로, 가능하면 그 메시지를 그대로 노출한다.
+    let message = error.message;
+    try {
+      const parsed = await error.context?.json();
+      if (parsed?.error) message = parsed.error;
+    } catch {
+      // 응답 본문 파싱 실패 시 기본 에러 메시지 사용
+    }
+    throw new Error(message);
+  }
+  return data;
+}
+
 // ── Histories ─────────────────────────────────────────────
 export async function getHistories() {
   const user = await getCurrentUser();
