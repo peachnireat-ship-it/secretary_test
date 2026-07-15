@@ -155,8 +155,10 @@ export default function HomeScreen({ navigation }) {
               style={s.statCard}
               onPress={() => item.tab && navigation.navigate(item.tab)}
             >
-              <Text style={[s.statValue, { color: item.color }]}>{item.value}</Text>
-              <Text style={s.statUnit}>{item.unit}</Text>
+              <View style={s.statValueRow}>
+                <Text style={[s.statValue, { color: item.color }]}>{item.value}</Text>
+                <Text style={s.statUnit}>{item.unit}</Text>
+              </View>
               <Text style={s.statLabel}>{item.label}</Text>
             </TouchableOpacity>
           ))}
@@ -360,6 +362,7 @@ const s = StyleSheet.create({
   sectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2.5, fontWeight: '600', marginBottom: 14 },
   statsRow: { flexDirection: 'row', gap: 10 },
   statCard: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 14, alignItems: 'center', gap: 2 },
+  statValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
   statValue: { fontSize: 22, fontWeight: '300' },
   statUnit: { color: C.textDim, fontSize: 10 },
   statLabel: { color: C.textSecondary, fontSize: 11, marginTop: 2 },

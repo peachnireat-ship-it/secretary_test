@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
+import { useUser } from '../context/UserContext';
 import { getProjects, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
@@ -71,6 +72,7 @@ function getUrgency(deadlineStr, status) {
 
 export default function ProjectScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  const { user: currentUser } = useUser();
   const [projects, setProjects] = useState([]);
   const [meetingRecords, setMeetingRecords] = useState([]);
   const [clients, setClients] = useState([]);
@@ -99,6 +101,16 @@ export default function ProjectScreen({ navigation, route }) {
   const [clientPickerSpeaker, setClientPickerSpeaker] = useState(null);
   const [clientPickerSearch, setClientPickerSearch] = useState('');
 
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerTempIds, setPickerTempIds] = useState([]);
+  const pickerCallback = useRef(null);
+  const [showPickerAddClient, setShowPickerAddClient] = useState(false);
+  const [pickerNewName, setPickerNewName] = useState('');
+  const [pickerNewCompany, setPickerNewCompany] = useState('');
+  const [pickerNewRole, setPickerNewRole] = useState('');
+  const [pickerNewContact, setPickerNewContact] = useState('');
+
   const {
     showAI, setShowAI, chatMessages, chatInput, setChatInput, aiLoading, chatScrollRef,
     handleAIChat, handleQuickAnalysis,
@@ -111,15 +123,13 @@ export default function ProjectScreen({ navigation, route }) {
     newProgress, setNewProgress, newPriority, setNewPriority, newNotes, setNewNotes,
     setPendingMeetingRecordId,
     newClientIds, setNewClientIds,
-    addPersonPickerVisible, setAddPersonPickerVisible,
-    addPersonPickerSearch, setAddPersonPickerSearch,
 
     showDetail, setShowDetail, detailProject, showProjectView, setShowProjectView,
     viewProject, setViewProject, editTitle, setEditTitle, editStartDate, setEditStartDate,
     editStartTime, setEditStartTime, editStartAmPm, setEditStartAmPm, editDeadline, setEditDeadline,
     editDeadlineTime, setEditDeadlineTime, editDeadlineAmPm, setEditDeadlineAmPm, editStatus, setEditStatus,
     editProgress, setEditProgress, editPriority, setEditPriority, editNotes, setEditNotes,
-    editClientIds, setEditClientIds, quickSlider, setQuickSlider,
+    editClientIds, setEditClientIds,
 
     detailPersonPickerVisible, setDetailPersonPickerVisible,
     detailPersonPickerSearch, setDetailPersonPickerSearch,
@@ -127,7 +137,7 @@ export default function ProjectScreen({ navigation, route }) {
     missingEmailModalVisible, missingEmailPeople, missingEmailDrafts, setMissingEmailDrafts,
     confirmMissingEmailAndSave, skipMissingEmailAndSave,
 
-    handleAdd, openDetail, handleEditSave, handleProgressUpdate, addClientToDetail, addClientToNew,
+    handleAdd, openDetail, handleEditSave, addClientToDetail,
   } = useProjectForm({ meetingRecords, projects, schedules, clients, setProjects });
 
   const swipeDetail = useSwipeClose(() => setShowDetail(false), showDetail);
@@ -221,6 +231,31 @@ export default function ProjectScreen({ navigation, route }) {
   function openClientPicker(speaker) {
     setClientPickerSpeaker(speaker);
     setClientPickerSearch('');
+  }
+
+  function openRelatedClientPicker(currentIds, onConfirm) {
+    setPickerTempIds([...new Set(currentIds)]);
+    setPickerSearch('');
+    pickerCallback.current = onConfirm;
+    setShowClientPicker(true);
+  }
+
+  function confirmRelatedClientPicker() {
+    if (pickerCallback.current) pickerCallback.current(pickerTempIds);
+    setShowClientPicker(false);
+  }
+
+  async function handlePickerAddClient() {
+    if (!pickerNewName.trim() || !pickerNewCompany.trim() || !pickerNewContact.trim()) {
+      Alert.alert('필수 항목 누락', '이름, 회사명, 연락처는 필수입니다.');
+      return;
+    }
+    const updated = await addClient({ name: pickerNewName.trim(), company: pickerNewCompany.trim(), role: pickerNewRole.trim(), contact: pickerNewContact.trim(), notes: '' });
+    setClients(updated);
+    const newClient = updated[0]; // addClient prepends, so index 0 is the new entry
+    if (newClient) setPickerTempIds((prev) => prev.includes(newClient.id) ? prev : [...prev, newClient.id]);
+    setPickerNewName(''); setPickerNewCompany(''); setPickerNewRole(''); setPickerNewContact('');
+    setShowPickerAddClient(false);
   }
 
   async function addAndSelectClient() {
@@ -398,7 +433,7 @@ export default function ProjectScreen({ navigation, route }) {
                       <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
                         <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
                       </View>
-                      <TouchableOpacity style={s.editProgressChip} onPress={() => setQuickSlider({ id: item.id, value: item.progress })}>
+                      <TouchableOpacity style={s.editProgressChip} onPress={() => openDetail(item)}>
                         <Text style={s.editProgress}>수정</Text>
                       </TouchableOpacity>
                     </View>
@@ -747,38 +782,27 @@ export default function ProjectScreen({ navigation, route }) {
             <TextInput style={[s.input, s.h64]} value={newNotes} onChangeText={setNewNotes} placeholder="지연 원인, 진행 상황 등" placeholderTextColor={C.textDim} multiline />
 
             {/* 관련 인물 */}
-            <View style={s.relatedPeopleHeaderRow}>
-              <Text style={[s.inputLabel, s.inputLabelInline]}>관련 인물</Text>
-              <TouchableOpacity
-                onPress={() => { setAddPersonPickerVisible(true); setAddPersonPickerSearch(''); }}
-                style={s.addPersonBtn}
-              >
-                <Text style={s.addPersonBtnText}>+ 추가</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={s.inputLabel}>관련 인물 · 거래처 (선택)</Text>
             {newClientIds.length > 0 && (
-              <View style={s.relatedPeopleRow}>
-                {newClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean).map((c) => (
-                  <View key={c.id} style={s.relatedPersonChip}>
-                    <View style={s.personChipInner}>
-                      <View style={s.relatedPersonAvatar}>
-                        <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
-                      </View>
-                      <View style={commonStyles.flex1}>
-                        <Text style={s.relatedPersonName}>{c.name}</Text>
-                        {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => setNewClientIds((prev) => prev.filter((cid) => cid !== c.id))}
-                      hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
-                    >
-                      <Text style={s.removePersonIcon}>✕</Text>
+              <View style={s.selectedPeopleRow}>
+                {newClientIds.map((id) => {
+                  const c = clients.find((cl) => cl.id === id);
+                  if (!c) return null;
+                  return (
+                    <TouchableOpacity key={id} style={s.selectedPersonChip} onPress={() => setNewClientIds((prev) => prev.filter((x) => x !== id))}>
+                      <Text style={s.selectedPersonChipText}>{c.name}</Text>
+                      <Text style={s.selectedPersonChipX}> ✕</Text>
                     </TouchableOpacity>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             )}
+            <TouchableOpacity style={s.pickerTrigger} onPress={() => openRelatedClientPicker(newClientIds, setNewClientIds)}>
+              <Text style={[s.pickerTriggerText, newClientIds.length > 0 && s.pickerTriggerTextActive]}>
+                {newClientIds.length > 0 ? `${newClientIds.length}명 선택됨 · 변경` : '거래처 인원 선택'}
+              </Text>
+              <Text style={s.pickerTriggerIcon}>›</Text>
+            </TouchableOpacity>
 
             <View style={[s.modalBtns, commonStyles.mb8]}>
               <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); }}>
@@ -1289,43 +1313,108 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* ── 인물 추가 피커 모달 (프로젝트 추가) ── */}
-      <Modal visible={addPersonPickerVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setAddPersonPickerVisible(false)}>
-        <View style={[s.modalOverlay, s.modalOverlayCentered]}>
-          <View style={[s.speakerModalBox, s.clientPickerBox]}>
-            <Text style={s.speakerModalTitle}>인물 추가</Text>
-            <TextInput
-              style={s.clientPickerInput}
-              value={addPersonPickerSearch}
-              onChangeText={setAddPersonPickerSearch}
-              placeholder="이름 또는 회사 검색"
-              placeholderTextColor={C.textDim}
-              autoFocus
-            />
-            <ScrollView style={s.clientPickerList} keyboardShouldPersistTaps="handled">
-              {clients
-                .filter((c) => !addPersonPickerSearch || c.name.includes(addPersonPickerSearch) || (c.company || '').includes(addPersonPickerSearch))
-                .map((c) => {
-                  const selected = newClientIds.includes(c.id);
+      {/* ── 거래처 인원 피커 팝업 (프로젝트 추가) ── */}
+      <Modal visible={showClientPicker} animationType="slide" transparent onRequestClose={() => setShowClientPicker(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.pickerSheetBase, s.pickerSheet]}>
+            <View style={s.pickerHeader}>
+              <TouchableOpacity onPress={() => setShowClientPicker(false)} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={s.pickerTitle}>거래처 인원 선택</Text>
+              <TouchableOpacity onPress={confirmRelatedClientPicker} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerConfirmText}>
+                  확인{pickerTempIds.length > 0 ? ` (${pickerTempIds.length})` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.pickerSearchWrap}>
+              <TextInput
+                style={s.pickerSearchInput}
+                value={pickerSearch}
+                onChangeText={setPickerSearch}
+                placeholder="이름 또는 회사 검색"
+                placeholderTextColor={C.textDim}
+              />
+            </View>
+
+            <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity style={s.pickerAddNewBtn} onPress={() => setShowPickerAddClient(true)}>
+                <Text style={s.pickerAddNewText}>+ 신규 거래처 인원 등록</Text>
+              </TouchableOpacity>
+              {(() => {
+                const isSelf = (c) =>
+                  currentUser &&
+                  c.name === currentUser.name &&
+                  (c.role || '') === (currentUser.role || '') &&
+                  (c.company || '') === (currentUser.team || '');
+                const filtered = clients.filter((c) =>
+                  !isSelf(c) &&
+                  (pickerSearch.trim() === '' ||
+                    c.name.includes(pickerSearch.trim()) ||
+                    (c.company || '').includes(pickerSearch.trim()))
+                );
+                if (filtered.length === 0) {
+                  return <Text style={s.clientSearchEmpty}>검색 결과 없음</Text>;
+                }
+                return filtered.map((c) => {
+                  const selected = pickerTempIds.includes(c.id);
                   return (
-                    <TouchableOpacity key={c.id} style={[s.clientPickerItem, selected && s.clientPickerItemSelected]} onPress={() => addClientToNew(c)} activeOpacity={0.7}>
-                      <Text style={s.clientPickerName}>{selected && <Text style={s.clientPickerCheckMark}>✓ </Text>}{c.name}</Text>
-                      {!!c.company && <Text style={s.clientPickerCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text>}
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[s.pickerRow, selected && s.pickerRowSelected]}
+                      onPress={() => setPickerTempIds((prev) =>
+                        selected ? prev.filter((x) => x !== c.id) : prev.includes(c.id) ? prev : [...prev, c.id]
+                      )}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[s.pickerAvatar, selected && s.pickerAvatarSelected]}>
+                        <Text style={[s.pickerAvatarText, selected && s.pickerAvatarTextSelected]}>{c.name[0]}</Text>
+                      </View>
+                      <View style={s.pickerNameWrap}>
+                        <Text style={[s.pickerName, selected && s.pickerNameSelected]}>{c.name}</Text>
+                        {c.company ? <Text style={s.pickerSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                      </View>
+                      <View style={[s.pickerCheck, selected && s.pickerCheckSelected]}>
+                        {selected && <Text style={s.pickerCheckMark}>✓</Text>}
+                      </View>
                     </TouchableOpacity>
                   );
-                })
-              }
-              {clients
-                .filter((c) => !addPersonPickerSearch || c.name.includes(addPersonPickerSearch) || (c.company || '').includes(addPersonPickerSearch))
-                .length === 0 && (
-                <Text style={s.clientPickerEmpty}>검색 결과가 없습니다</Text>
-              )}
+                });
+              })()}
+              <View style={s.spacerH40} />
             </ScrollView>
-            <TouchableOpacity style={s.speakerCancelBtn} onPress={() => setAddPersonPickerVisible(false)} activeOpacity={0.7}>
-              <Text style={s.speakerCancelText}>확인</Text>
-            </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* ── 신규 거래처 인원 등록 (피커에서 진입) ── */}
+      <Modal visible={showPickerAddClient} animationType="slide" transparent onRequestClose={() => setShowPickerAddClient(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <View style={[s.pickerSheetBase, s.pickerSheet]}>
+            <View style={s.pickerHeader}>
+              <TouchableOpacity onPress={() => setShowPickerAddClient(false)} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={s.pickerTitle}>신규 거래처 인원 등록</Text>
+              <TouchableOpacity onPress={handlePickerAddClient} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerConfirmText}>추가</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={s.pickerAddForm} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={s.inputLabel}>이름 *</Text>
+              <TextInput style={s.input} value={pickerNewName} onChangeText={setPickerNewName} placeholder="홍길동" placeholderTextColor={C.textDim} />
+              <Text style={s.inputLabel}>회사명 *</Text>
+              <TextInput style={s.input} value={pickerNewCompany} onChangeText={setPickerNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
+              <Text style={s.inputLabel}>직책</Text>
+              <TextInput style={s.input} value={pickerNewRole} onChangeText={setPickerNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
+              <Text style={s.inputLabel}>연락처 *</Text>
+              <TextInput style={s.input} value={pickerNewContact} onChangeText={setPickerNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <View style={s.spacerH40} />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── 이메일 미등록 인물 모달 (프로젝트 추가/수정 저장 직전) ── */}
@@ -1447,40 +1536,6 @@ export default function ProjectScreen({ navigation, route }) {
           </Animated.View>
         </View>
       </Modal>
-
-      {/* ── 진행률 슬라이더 모달 ── */}
-      {quickSlider && (
-        <Modal visible animationType="fade" transparent onRequestClose={() => setQuickSlider(null)}>
-          <TouchableOpacity style={s.qsOverlay} activeOpacity={1} onPress={() => setQuickSlider(null)}>
-            <TouchableOpacity activeOpacity={1} style={s.qsSheet} onPress={() => {}}>
-              <Text style={s.inputLabel}>진행률</Text>
-              <Text style={s.qsValue}>{quickSlider.value}%</Text>
-              <Slider
-                style={s.qsSlider}
-                minimumValue={0}
-                maximumValue={100}
-                step={1}
-                value={quickSlider.value}
-                onValueChange={(v) => setQuickSlider((q) => ({ ...q, value: Math.round(v) }))}
-                minimumTrackTintColor={C.gold}
-                maximumTrackTintColor={C.border}
-                thumbTintColor={C.gold}
-              />
-              <View style={s.modalBtns}>
-                <TouchableOpacity style={s.modalCancel} onPress={() => setQuickSlider(null)}>
-                  <Text style={s.modalCancelText}>취소</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.modalConfirm} onPress={async () => {
-                  await handleProgressUpdate(quickSlider.id, quickSlider.value);
-                  setQuickSlider(null);
-                }}>
-                  <Text style={s.modalConfirmText}>저장</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </Modal>
-      )}
     </View>
   );
 }
@@ -1669,6 +1724,46 @@ const s = StyleSheet.create({
   relatedPersonName: { color: C.textPrimary, fontSize: 13, fontWeight: '500' },
   relatedPersonCompany: { color: C.textDim, fontSize: 11, marginTop: 1 },
 
+  // 관련 인물 선택 (프로젝트 추가 — 일정 등록 화면과 동일한 트리거+피커 패턴)
+  selectedPeopleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  selectedPersonChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, backgroundColor: C.red + '22', borderWidth: 1, borderColor: C.red + '55', borderRadius: 12 },
+  selectedPersonChipText: { color: C.red, fontSize: 12, fontWeight: '500' },
+  selectedPersonChipX: { color: C.red, fontSize: 11 },
+  clientSearchEmpty: { color: C.textDim, fontSize: 12, padding: 12, textAlign: 'center' },
+  pickerTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  pickerTriggerText: { color: C.textDim, fontSize: 14, flex: 1 },
+  pickerTriggerTextActive: { color: C.red, fontWeight: '500' },
+  pickerTriggerIcon: { color: C.textDim, fontSize: 18 },
+  pickerSheetBase: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, width: '100%', maxWidth: 480, alignSelf: 'center' }
+    : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  pickerSheet: { height: '80%' },
+  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerHeaderBtn: { minWidth: 52 },
+  pickerTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '500' },
+  pickerCancelText: { color: C.textSecondary, fontSize: 15 },
+  pickerConfirmText: { color: C.red, fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  pickerSearchWrap: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerSearchInput: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 10 },
+  pickerList: { flex: 1 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerRowSelected: { backgroundColor: C.red + '0D' },
+  pickerAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  pickerAvatarSelected: { backgroundColor: C.red + '33' },
+  pickerAvatarText: { color: C.textDim, fontSize: 14, fontWeight: '600' },
+  pickerAvatarTextSelected: { color: C.red },
+  pickerNameWrap: { flex: 1 },
+  pickerName: { color: C.textPrimary, fontSize: 14 },
+  pickerNameSelected: { color: C.red, fontWeight: '500' },
+  pickerSub: { color: C.textDim, fontSize: 11, marginTop: 2 },
+  pickerCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  pickerCheckSelected: { backgroundColor: C.red, borderColor: C.red },
+  pickerCheckMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  pickerAddNewBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.red + '0A' },
+  pickerAddNewText: { color: C.red, fontSize: 14, fontWeight: '500' },
+  pickerAddForm: { flex: 1, paddingHorizontal: 20 },
+  spacerH40: { height: 40 },
+
   personDetailHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
   personDetailAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
   personDetailName: { color: C.textPrimary, fontSize: 16, fontWeight: '500' },
@@ -1712,15 +1807,6 @@ const s = StyleSheet.create({
   ampmBtnActive: { borderColor: C.gold + '88', backgroundColor: C.gold + '22' },
   ampmBtnText: { color: C.textDim, fontSize: 13 },
   ampmBtnTextActive: { color: C.gold, fontWeight: '600' },
-
-  qsOverlay: Platform.OS === 'web'
-    ? { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center' }
-    : { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  qsSheet: Platform.OS === 'web'
-    ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 24, alignItems: 'center', width: '100%', maxWidth: 480 }
-    : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 24, alignItems: 'center' },
-  qsValue: { color: C.textPrimary, fontSize: 48, fontWeight: '200', letterSpacing: -2, marginBottom: 4 },
-  qsSlider: { width: '100%', height: 44, marginBottom: 12 },
 
   deadlineWrap: { flex: 1, gap: 2 },
   closeBtnOffset: { marginLeft: 12, marginTop: 20 },

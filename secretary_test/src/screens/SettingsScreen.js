@@ -404,27 +404,6 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      {/* ── AI 기능 안내 ── */}
-      <View style={s.section}>
-        <Text style={s.sectionLabel}>AI 기능 안내</Text>
-        <View style={s.featureCard}>
-          {[
-            { color: C.accentBlue, title: '일정 AI 비서', desc: '자연어로 "다음 주 화요일 오후 2시 미팅 잡아줘" 처럼 입력하면 AI가 일정을 자동으로 파싱하여 추가합니다.' },
-            { color: C.accentBlue, title: '일정 조회 및 요약', desc: '"이번 주 바쁜 날이 언제야?", "오늘 일정 요약해줘" 같은 질문에 답합니다.' },
-            { color: C.accentTeal, title: '거래처 관계 요약', desc: '거래처를 탭하면 AI가 관계 히스토리를 분석해 현황과 다음 액션을 자동 요약합니다.' },
-            { color: C.accentTeal, title: '거래처 히스토리 AI', desc: '"삼성물산이랑 마지막 만난 게 언제야?", "LG전자 다음 미팅 전에 뭘 준비해야 해?" 같은 질문에 답합니다.' },
-          ].map((f, i) => (
-            <View key={i} style={[s.featureRow, i > 0 && s.featureRowBorder]}>
-              <View style={[s.featureDot, { backgroundColor: f.color }]} />
-              <View style={s.flex1}>
-                <Text style={s.featureTitle}>{f.title}</Text>
-                <Text style={s.featureDesc}>{f.desc}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
-
       <View style={s.h60} />
     </ScrollView>
 
@@ -567,11 +546,6 @@ const s = StyleSheet.create({
   pyannoteTestText: { fontSize: 14 },
   hint: { backgroundColor: C.surfaceHigh, borderRadius: 8, padding: 12 },
   hintText: { color: C.textDim, fontSize: 11, lineHeight: 17 },
-  featureCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, overflow: 'hidden' },
-  featureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16 },
-  featureDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4 },
-  featureTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '500', marginBottom: 4 },
-  featureDesc: { color: C.textSecondary, fontSize: 12, lineHeight: 18 },
   profileContact: { color: C.accentTeal, fontSize: 12, marginTop: 3 },
   profileEmail: { color: C.accentTeal, fontSize: 11, marginTop: 2 },
   profileNotes: { color: C.textDim, fontSize: 11, marginTop: 2, lineHeight: 16 },
@@ -610,7 +584,6 @@ const s = StyleSheet.create({
   accountAvatarAlt: { backgroundColor: C.accentTeal + '22', borderColor: C.accentTeal + '44' },
   accountAvatarTextAlt: { color: C.accentTeal },
   mt10: { marginTop: 10 },
-  featureRowBorder: { borderTopWidth: 1, borderTopColor: C.border },
   h60: { height: 60 },
   mt16: { marginTop: 16 },
   h80: { height: 80 },
