@@ -190,9 +190,8 @@ export function getTestAccounts() {
 export async function switchAccount(accountId, currentPassword) {
   if (!__DEV__) throw new Error('계정 전환은 개발 모드에서만 사용 가능합니다.');
   const current = await getCurrentUser();
-  const currentEntry = current && findRoster({ id: current.id });
-  if (!currentEntry) throw new Error('현재 계정 비밀번호가 일치하지 않습니다.');
-  const { error: verifyErr } = await supabase.auth.signInWithPassword({ email: currentEntry.email, password: currentPassword || '' });
+  if (!current) throw new Error('현재 로그인된 계정이 없습니다.');
+  const { error: verifyErr } = await supabase.auth.signInWithPassword({ email: current.email, password: currentPassword || '' });
   if (verifyErr) throw new Error('현재 계정 비밀번호가 일치하지 않습니다.');
   const target = findRoster({ id: accountId });
   if (!target) throw new Error('계정을 찾을 수 없습니다.');
