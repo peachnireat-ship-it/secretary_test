@@ -75,7 +75,29 @@ let _cachedUser = null;
 async function hydrateUserFromSession(session) {
   if (!session?.user) return null;
   const entry = findRoster({ id: session.user.id });
-  return entry ? rosterToUser(entry) : null;
+  if (entry) return rosterToUser(entry);
+  // ROSTER에 없는 계정(회원가입으로 새로 생성된 계정)은 profiles 테이블에서 직접 조회한다.
+  const { data, error } = await supabase.from('profiles').select('id, email, name, role, team, contact').eq('id', session.user.id).single();
+  if (data) return { id: data.id, email: data.email, name: data.name, role: data.role, team: data.team, contact: data.contact };
+  // profiles 행이 아직 없는 경우(이메일 인증이 필요한 프로젝트에서는 signUp 시점에
+  // auth.uid()가 없어 RLS 때문에 즉시 생성할 수 없었다) 최초 로그인 시점에 생성한다.
+  if (error?.code === 'PGRST116') {
+    const displayName = session.user.user_metadata?.name?.trim() || session.user.email.split('@')[0];
+    const contact = session.user.user_metadata?.contact?.trim() || '';
+    const role = session.user.user_metadata?.role?.trim() || '';
+    const team = session.user.user_metadata?.team?.trim() || '';
+    const { data: inserted, error: insertErr } = await supabase.from('profiles').insert({
+      id: session.user.id,
+      email: session.user.email,
+      name: displayName,
+      role,
+      team,
+      contact,
+    }).select('id, email, name, role, team, contact').single();
+    if (insertErr || !inserted) return null;
+    return { id: inserted.id, email: inserted.email, name: inserted.name, role: inserted.role, team: inserted.team, contact: inserted.contact };
+  }
+  return null;
 }
 
 // ── 로그인 시도 제한 (인메모리, 앱 재시작 시 초기화) ─────────
@@ -113,6 +135,32 @@ export async function login(email, password) {
     throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
   }
   resetLoginAttempts(email);
+  _cachedUser = await hydrateUserFromSession(data.session);
+  return _cachedUser;
+}
+
+export async function signup(email, password, name, contact, team, role) {
+  const displayName = name?.trim() || email.split('@')[0];
+  // name/contact/team/role은 auth 사용자 메타데이터에 저장해 둔다. 이메일 인증이 필요한 프로젝트는
+  // signUp 직후 세션이 없어(auth.uid() 없음) profiles 행을 바로 만들 수 없으므로,
+  // 실제 profiles 행 생성은 세션이 생기는 시점(hydrateUserFromSession)에 지연 처리한다.
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { name: displayName, contact: contact?.trim() || '', team: team?.trim() || '', role: role?.trim() || '' } },
+  });
+  if (error) {
+    if (error.message?.includes('already registered') || error.message?.includes('already been registered')) {
+      throw new Error('이미 가입된 이메일입니다.');
+    }
+    throw new Error(error.message || '회원가입에 실패했습니다.');
+  }
+  if (!data.user) throw new Error('회원가입에 실패했습니다.');
+
+  // 이메일 인증이 활성화된 프로젝트는 signUp 직후 세션이 발급되지 않는다.
+  // 이 경우 로그인 화면으로 돌아가 인증 완료 후 다시 로그인하도록 안내한다.
+  if (!data.session) return null;
+
   _cachedUser = await hydrateUserFromSession(data.session);
   return _cachedUser;
 }
@@ -245,18 +293,18 @@ async function syncEmail(table, matchColumn, matchValue, email) {
   if (error) throw error;
 }
 
-const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', createdAt: 'created_at' };
-const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', notes: 'notes', aiSummary: 'ai_summary', linkedProfileId: 'linked_profile_id', createdAt: 'created_at' };
+const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', notifyEmail: 'notify_email', createdAt: 'created_at' };
+const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', sns: 'sns', notes: 'notes', aiSummary: 'ai_summary', linkedProfileId: 'linked_profile_id', createdAt: 'created_at' };
 const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', createdAt: 'created_at' };
-const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', createdAt: 'created_at', updatedAt: 'updated_at' };
+const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', notifyEmail: 'notify_email', createdAt: 'created_at', updatedAt: 'updated_at' };
 const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', diarizeSource: 'diarize_source', createdAt: 'created_at' };
 const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'company', subject: 'subject', content: 'content', priority: 'priority', status: 'status', fromId: 'sender_id', toId: 'to_id', linkedReceivedId: 'linked_received_id', editHistory: 'edit_history', createdAt: 'created_at', updatedAt: 'updated_at' };
 
 // NOT NULL 컬럼 기본값 — 벌크 upsert 시 toRow()의 defaults 인자로 전달한다.
-const SCHEDULE_DEFAULTS = { notes: '', client_ids: [] };
-const CLIENT_DEFAULTS = { role: '', work_contact: '', email: '', notes: '', ai_summary: '', linked_profile_id: null };
+const SCHEDULE_DEFAULTS = { notes: '', client_ids: [], notify_email: true };
+const CLIENT_DEFAULTS = { role: '', work_contact: '', email: '', sns: '', notes: '', ai_summary: '', linked_profile_id: null };
 const HISTORY_DEFAULTS = { content: '', result: '' };
-const PROJECT_DEFAULTS = { status: '진행중', priority: '보통', notes: '', progress: 0, client_ids: [], meeting_record_ids: [] };
+const PROJECT_DEFAULTS = { status: '진행중', priority: '보통', notes: '', progress: 0, client_ids: [], meeting_record_ids: [], notify_email: true };
 const MEETING_DEFAULTS = { transcript: '', summary: '', client_ids: [], tasks: [] };
 const MESSAGE_DEFAULTS = { sender: '', company: '', subject: '', content: '', priority: '일반', status: '미확인', edit_history: [] };
 
@@ -616,11 +664,11 @@ export async function toggleClientFavorite(clientId) {
 export async function getUserProfile() {
   const user = await getCurrentUser();
   if (!user) return null;
-  const { data, error } = await supabase.from('profiles').select('contact, notes, email').eq('id', user.id).single();
+  const { data, error } = await supabase.from('profiles').select('contact, notes, email, sns').eq('id', user.id).single();
   if (error) throw error;
   // 주의: user.email은 로그인용 Supabase Auth 이메일(계정 아이디)이므로, 알림 수신용 profiles.email로
   // 덮어쓰이지 않도록 ...user를 먼저 펼치고 profiles 필드를 뒤에 덮어쓴다.
-  return { ...user, contact: data?.contact || '', notes: data?.notes || '', email: data?.email || '' };
+  return { ...user, contact: data?.contact || '', notes: data?.notes || '', email: data?.email || '', sns: data?.sns || '' };
 }
 
 export async function saveUserProfile(fields) {

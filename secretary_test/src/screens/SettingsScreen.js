@@ -53,6 +53,7 @@ export default function SettingsScreen() {
   const [editContact, setEditContact] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editSns, setEditSns] = useState('');
 
   const [switchTarget, setSwitchTarget] = useState(null);
   const [switchPassword, setSwitchPassword] = useState('');
@@ -118,8 +119,13 @@ export default function SettingsScreen() {
   });
 
   async function handleSavePyannoteUrl() {
+    const trimmedUrl = pyannoteUrl.trim();
+    if (trimmedUrl && !/^https?:\/\//.test(trimmedUrl)) {
+      Alert.alert('URL 형식 오류', 'http:// 또는 https://로 시작하는 URL을 입력해주세요.');
+      return;
+    }
     try {
-      await setPyannoteUrl(pyannoteUrl.trim());
+      await setPyannoteUrl(trimmedUrl);
     } catch (err) {
       Alert.alert('오류', err.message);
       return;
@@ -339,6 +345,7 @@ export default function SettingsScreen() {
                 {user.team && <Text style={s.accountTeam}>{user.team}{user.role ? ` · ${user.role}` : ''}</Text>}
                 {profile?.contact ? <Text style={s.profileContact}>{profile.contact}</Text> : null}
                 {profile?.email && profile.email !== user.email ? <Text style={s.profileEmail}>{`알림 수신: ${profile.email}`}</Text> : null}
+                {profile?.sns ? <Text style={s.profileEmail}>{`SNS: ${profile.sns}`}</Text> : null}
                 {profile?.notes ? <Text style={s.profileNotes}>{profile.notes}</Text> : null}
               </View>
               <View style={s.profileActions}>
@@ -349,6 +356,7 @@ export default function SettingsScreen() {
                     setEditContact(profile?.contact || '');
                     setEditNotes(profile?.notes || '');
                     setEditEmail(profile?.email || '');
+                    setEditSns(profile?.sns || '');
                     setShowProfileEdit(true);
                   }}
                 >
@@ -468,6 +476,16 @@ export default function SettingsScreen() {
               autoCapitalize="none"
             />
 
+            <Text style={[s.inputLabel, s.mt16]}>SNS 계정</Text>
+            <TextInput
+              style={s.profileInput}
+              value={editSns}
+              onChangeText={setEditSns}
+              placeholder="instagram.com/username"
+              placeholderTextColor={C.textDim}
+              autoCapitalize="none"
+            />
+
             <Text style={[s.inputLabel, s.mt16]}>메모 / 소개</Text>
             <TextInput
               style={[s.profileInput, s.h80]}
@@ -489,7 +507,7 @@ export default function SettingsScreen() {
                     Alert.alert('이메일 형식 오류', '올바른 이메일 형식이 아닙니다.');
                     return;
                   }
-                  await saveUserProfile({ contact: editContact.trim(), notes: editNotes.trim(), email: editEmail.trim() });
+                  await saveUserProfile({ contact: editContact.trim(), notes: editNotes.trim(), email: editEmail.trim(), sns: editSns.trim() });
                   const p = await getUserProfile();
                   setProfile(p);
                   setShowProfileEdit(false);

@@ -23,6 +23,22 @@ function formatDateTime(ms) {
 }
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
+// 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
+const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
+
+// 하이픈 없이 입력해도 기존 회원 데이터와 동일한 010-0000-0000 형식으로 자동 정렬
+function fmtPhone(text) {
+  const d = text.replace(/\D/g, '').slice(0, 11);
+  if (d.length < 4) return d;
+  if (d.startsWith('02')) {
+    if (d.length <= 5) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (d.length <= 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}`;
+  }
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (d.length <= 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
+}
 
 export default function MeetingScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -187,6 +203,10 @@ export default function MeetingScreen({ navigation }) {
   async function handleNewClientRegister() {
     if (!newClientName.trim() || !newClientCompany.trim() || !newClientContact.trim()) {
       Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.');
+      return;
+    }
+    if (!PHONE_REGEX.test(newClientContact.trim())) {
+      Alert.alert('연락처 형식 오류', '올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)');
       return;
     }
     const updated = await addClient({
@@ -773,7 +793,7 @@ export default function MeetingScreen({ navigation }) {
                 <Text style={s.newClientInputLabel}>연락처</Text>
                 <Text style={s.newClientRequiredMark}>*</Text>
               </View>
-              <TextInput style={s.newClientInput} value={newClientContact} onChangeText={setNewClientContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <TextInput style={s.newClientInput} value={newClientContact} onChangeText={(v) => setNewClientContact(fmtPhone(v))} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
               <Text style={s.newClientInputLabel}>메모</Text>
               <TextInput style={s.newClientInput} value={newClientNotes} onChangeText={setNewClientNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
               <View style={s.newClientModalBtns}>

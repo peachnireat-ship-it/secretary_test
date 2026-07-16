@@ -14,11 +14,29 @@ import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/clau
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
 import { priorityColor, tagColor, statusColor } from '../utils/colors';
-import { daysUntil, daysLabel, findOverlappingItems, formatOverlapMessage } from '../utils/dateUtils';
+import { daysUntil, daysLabel, findOverlappingItems, formatOverlapMessage, isValidOptionalDateStr } from '../utils/dateUtils';
 
 const TAGS = ['회의', '업무', '영업', '개인', '기타'];
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const DELAY_EXEMPT_STATUSES = ['완료', '취소', '지연'];
+const TITLE_MAX_LENGTH = 200;
+const NOTES_MAX_LENGTH = 2000;
+// 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
+const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
+
+// 하이픈 없이 입력해도 기존 회원 데이터와 동일한 010-0000-0000 형식으로 자동 정렬
+function fmtPhone(text) {
+  const d = text.replace(/\D/g, '').slice(0, 11);
+  if (d.length < 4) return d;
+  if (d.startsWith('02')) {
+    if (d.length <= 5) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (d.length <= 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}`;
+  }
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (d.length <= 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
+}
 
 // 마감일이 지났는데도 완료/취소/지연 상태가 아닌 프로젝트를 '지연'으로 자동 전환하고 서버에 반영
 async function autoMarkDelayedProjects(projectList) {
@@ -80,6 +98,7 @@ export default function ScheduleScreen({ navigation, route }) {
   const [editClientIds, setEditClientIds] = useState([]);
   const [editStartDate, setEditStartDate] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
+  const [editNotifyEmail, setEditNotifyEmail] = useState(true);
 
   const [showClientPicker, setShowClientPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
@@ -105,6 +124,7 @@ export default function ScheduleScreen({ navigation, route }) {
   const [newEndTime, setNewEndTime] = useState('06:00');
   const [newEndAmPm, setNewEndAmPm] = useState('오후');
   const [newAmPm, setNewAmPm] = useState('오전');
+  const [newNotifyEmail, setNewNotifyEmail] = useState(true);
   const [editAmPm, setEditAmPm] = useState('오전');
   const [editStartTime, setEditStartTime] = useState('09:00');
   const [editStartAmPm, setEditStartAmPm] = useState('오전');
@@ -265,18 +285,35 @@ export default function ScheduleScreen({ navigation, route }) {
   moveMonthRef.current = moveMonth;
 
   async function saveNewSchedule(scheduleDate, startDateStr, endDateStr) {
-    const updated = await addSchedule({ date: scheduleDate, time: to24h(newStartAmPm, newStartTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: startDateStr, endDate: endDateStr });
+    const updated = await addSchedule({ date: scheduleDate, time: to24h(newStartAmPm, newStartTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: startDateStr, endDate: endDateStr, notifyEmail: newNotifyEmail });
     setSchedules(updated);
     setShowAdd(false);
     setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]);
     setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전');
     setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전');
+    setNewNotifyEmail(true);
   }
 
   async function handleAdd() {
     if (!newTitle.trim()) return;
+    if (newTitle.trim().length > TITLE_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `제목은 최대 ${TITLE_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
+    if (newNotes.trim().length > NOTES_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `메모는 최대 ${NOTES_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
     const startTrim = newStartDate.trim();
     const endTrim = newEndDate.trim();
+    if (!isValidOptionalDateStr(startTrim)) {
+      Alert.alert('날짜 오류', '날짜를 YYYY-MM-DD 형식으로 완전히 입력해주세요.');
+      return;
+    }
+    if (!isValidOptionalDateStr(endTrim)) {
+      Alert.alert('날짜 오류', '날짜를 YYYY-MM-DD 형식으로 완전히 입력해주세요.');
+      return;
+    }
     if (startTrim.length === 10 && endTrim.length === 10 && endTrim < startTrim) {
       Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
       return;
@@ -318,6 +355,10 @@ export default function ScheduleScreen({ navigation, route }) {
       Alert.alert('필수 항목 누락', '이름, 회사명, 연락처는 필수입니다.');
       return;
     }
+    if (!PHONE_REGEX.test(pickerNewContact.trim())) {
+      Alert.alert('연락처 형식 오류', '올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)');
+      return;
+    }
     const updated = await addClient({ name: pickerNewName.trim(), company: pickerNewCompany.trim(), role: pickerNewRole.trim(), contact: pickerNewContact.trim(), notes: '' });
     setClients(updated);
     const newClient = updated[0]; // addClient prepends, so index 0 is the new entry
@@ -341,16 +382,33 @@ export default function ScheduleScreen({ navigation, route }) {
       clientIds: editClientIds,
       startDate: startDateStr,
       endDate: endDateStr,
+      notifyEmail: editNotifyEmail,
     });
     setSchedules(updated);
-    setViewSchedule((prev) => ({ ...prev, date: scheduleDate, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, startDate: startDateStr, endDate: endDateStr }));
+    setViewSchedule((prev) => ({ ...prev, date: scheduleDate, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, startDate: startDateStr, endDate: endDateStr, notifyEmail: editNotifyEmail }));
     setEditMode(false);
   }
 
   async function handleEditSave() {
     if (!editTitle.trim()) return;
+    if (editTitle.trim().length > TITLE_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `제목은 최대 ${TITLE_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
+    if (editNotes.trim().length > NOTES_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `메모는 최대 ${NOTES_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
     const editStartTrim = editStartDate.trim();
     const editEndTrim = editEndDate.trim();
+    if (!isValidOptionalDateStr(editStartTrim)) {
+      Alert.alert('날짜 오류', '날짜를 YYYY-MM-DD 형식으로 완전히 입력해주세요.');
+      return;
+    }
+    if (!isValidOptionalDateStr(editEndTrim)) {
+      Alert.alert('날짜 오류', '날짜를 YYYY-MM-DD 형식으로 완전히 입력해주세요.');
+      return;
+    }
     if (editStartTrim.length === 10 && editEndTrim.length === 10 && editEndTrim < editStartTrim) {
       Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
       return;
@@ -771,8 +829,20 @@ export default function ScheduleScreen({ navigation, route }) {
               <Text style={s.inputLabel}>메모 (선택)</Text>
               <TextInput style={[s.input, s.h72]} value={newNotes} onChangeText={setNewNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
 
+              {/* 알림 메일 발송 여부 */}
+              <TouchableOpacity
+                style={s.notifyEmailRow}
+                activeOpacity={0.7}
+                onPress={() => setNewNotifyEmail((prev) => !prev)}
+              >
+                <View style={[s.notifyEmailCheckbox, newNotifyEmail && s.notifyEmailCheckboxChecked]}>
+                  {newNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
+                </View>
+                <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
+              </TouchableOpacity>
+
               <View style={s.modalBtns}>
-                <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전'); setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전'); }}>
+                <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전'); setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전'); setNewNotifyEmail(true); }}>
                   <Text style={s.modalCancelText}>취소</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.modalConfirm} onPress={handleAdd}>
@@ -944,6 +1014,7 @@ export default function ScheduleScreen({ navigation, route }) {
                           const { ampm, time12 } = from24h(viewSchedule.time);
                           setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm);
                           setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []);
+                          setEditNotifyEmail(viewSchedule.notifyEmail !== false);
                           const sp = (viewSchedule.startDate || '').split(' ');
                           setEditStartDate(sp[0] || '');
                           if (sp[1]) { const r = from24h(sp[1]); setEditStartAmPm(r.ampm); setEditStartTime(r.time12); } else { setEditStartAmPm('오전'); setEditStartTime('09:00'); }
@@ -1013,10 +1084,14 @@ export default function ScheduleScreen({ navigation, route }) {
                           const c = clients.find((cl) => cl.id === id);
                           if (!c) return null;
                           return (
-                            <TouchableOpacity key={id} style={s.selectedPersonChip} onPress={() => setEditClientIds((prev) => prev.filter((x) => x !== id))}>
-                              <Text style={s.selectedPersonChipText}>{c.name}</Text>
-                              <Text style={s.selectedPersonChipX}> ✕</Text>
-                            </TouchableOpacity>
+                            <View key={id} style={s.selectedPersonChip}>
+                              <TouchableOpacity onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
+                                <Text style={s.selectedPersonChipText}>{c.name}</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => setEditClientIds((prev) => prev.filter((x) => x !== id))}>
+                                <Text style={s.selectedPersonChipX}> ✕</Text>
+                              </TouchableOpacity>
+                            </View>
                           );
                         })}
                       </View>
@@ -1030,6 +1105,18 @@ export default function ScheduleScreen({ navigation, route }) {
 
                     <Text style={s.inputLabel}>메모 (선택)</Text>
                     <TextInput style={[s.input, s.h72]} value={editNotes} onChangeText={setEditNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
+
+                    {/* 알림 메일 발송 여부 */}
+                    <TouchableOpacity
+                      style={s.notifyEmailRow}
+                      activeOpacity={0.7}
+                      onPress={() => setEditNotifyEmail((prev) => !prev)}
+                    >
+                      <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
+                        {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
+                      </View>
+                      <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
+                    </TouchableOpacity>
 
                     <View style={s.modalBtns}>
                       <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
@@ -1134,6 +1221,15 @@ export default function ScheduleScreen({ navigation, route }) {
                       ]
                     )}>
                       <Text style={[s.viewText, s.contactLink]}>{viewPerson.contact}</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+
+                {viewPerson.email ? (
+                  <>
+                    <Text style={s.viewLabel}>이메일</Text>
+                    <TouchableOpacity onPress={() => Linking.openURL(`mailto:${viewPerson.email}`)}>
+                      <Text style={[s.viewText, s.contactLink]}>{viewPerson.email}</Text>
                     </TouchableOpacity>
                   </>
                 ) : null}
@@ -1249,7 +1345,7 @@ export default function ScheduleScreen({ navigation, route }) {
               <Text style={s.inputLabel}>직책</Text>
               <TextInput style={s.input} value={pickerNewRole} onChangeText={setPickerNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
               <Text style={s.inputLabel}>연락처 *</Text>
-              <TextInput style={s.input} value={pickerNewContact} onChangeText={setPickerNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <TextInput style={s.input} value={pickerNewContact} onChangeText={(v) => setPickerNewContact(fmtPhone(v))} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
               <View style={s.spacerH40} />
             </ScrollView>
           </View>
@@ -1445,6 +1541,16 @@ const s = StyleSheet.create({
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
   modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentBlue, alignItems: 'center' },
   modalConfirmText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+
+  notifyEmailRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
+  notifyEmailCheckbox: {
+    width: 20, height: 20, borderRadius: 5,
+    borderWidth: 1.5, borderColor: C.borderHigh,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  notifyEmailCheckboxChecked: { backgroundColor: C.accentBlue, borderColor: C.accentBlue },
+  notifyEmailCheckmark: { color: '#fff', fontSize: 12, fontWeight: '700', lineHeight: 14 },
+  notifyEmailLabel: { color: C.textSecondary, fontSize: 13 },
 
   // AI Chat
   chatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },

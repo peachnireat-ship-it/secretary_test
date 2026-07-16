@@ -88,7 +88,19 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// DB 트리거로 서버 대 서버로만 호출되는 notify-project-*와 달리, 이 함수는 앱(웹 포함)이
+// 브라우저에서 직접 호출하므로 CORS preflight(OPTIONS)와 응답 헤더 처리가 필요하다.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('SUPABASE_URL, SUPABASE_ANON_KEY 또는 SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다.');
@@ -103,7 +115,7 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     }
 
@@ -141,7 +153,7 @@ Deno.serve(async (req) => {
     if (clientError || !client) {
       return new Response(JSON.stringify({ error: '본인 소유의 거래처가 아니거나 존재하지 않습니다.' }), {
         status: 404,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     }
 
@@ -160,7 +172,7 @@ Deno.serve(async (req) => {
     if (!recipientEmail) {
       return new Response(JSON.stringify({ error: '이 거래처는 이메일이 등록되어 있지 않습니다.' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     }
 
@@ -169,7 +181,12 @@ Deno.serve(async (req) => {
     }
 
     // ── 3) Gmail SMTP로 이메일 발송 ──
-    const htmlBody = `<p>${body.split('\n').map(escapeHtml).join('</p><p>')}</p>`;
+    // AI가 작성한 body는 문단 사이 빈 줄(\n\n)과 문단 내 문장별 줄바꿈(\n)을 구분해 담고 있으므로,
+    // 문단은 별도 <p>로, 문단 내 줄바꿈은 <br>로 렌더링해 시각적 구조를 그대로 유지한다.
+    const htmlBody = body
+      .split(/\n{2,}/)
+      .map((para) => `<p>${para.split('\n').map(escapeHtml).join('<br>')}</p>`)
+      .join('');
 
     const smtpClient = new SMTPClient({
       connection: {
@@ -207,13 +224,13 @@ Deno.serve(async (req) => {
     console.log(`[send-client-email] user_id=${user.id} client_id=${clientId}: 메일 발송 완료 (${recipientEmail}).`);
     return new Response(JSON.stringify({ ok: true, recipient: recipientEmail }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   } catch (err) {
     console.error('[send-client-email] 에러:', err);
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 });

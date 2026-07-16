@@ -28,6 +28,27 @@ export function daysLabel(days) {
   return `${Math.abs(days)}일 초과`;
 }
 
+// 'YYYY-MM-DD' 문자열이 실제로 존재하는 날짜인지 검증 (예: 2026-13-45, 2026-02-30 등 방지)
+// 길이·자릿수만 맞으면 통과하는 정규식/사전순 비교와 달리, Date 객체로 재구성 후 연/월/일을 역검증한다.
+export function isValidDateStr(str) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str || '');
+  if (!match) return false;
+  const y = Number(match[1]);
+  const mo = Number(match[2]);
+  const d = Number(match[3]);
+  const dt = new Date(y, mo - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d;
+}
+
+// 선택(optional) 날짜 필드용 검증: 완전히 빈 값(0자)은 통과, 값이 있으면 반드시
+// 10자('YYYY-MM-DD')이면서 실제 존재하는 날짜여야 통과. 1~9자 부분 입력은 차단.
+// isValidDateStr 자체는 빈 값 처리 없이 순수 날짜 유효성만 검사하므로, 이 함수가 그 위에서
+// "선택 필드는 비워도 되지만 쓰려면 완전히 써야 한다"는 규칙을 캡슐화한다.
+export function isValidOptionalDateStr(str) {
+  if (!str) return true;
+  return str.length === 10 && isValidDateStr(str);
+}
+
 // 타임스탬프(ms)를 'YYYY-MM-DD HH:MM' 형식으로 변환 (Project.startDate 자동 채움용)
 export function dateTimeFromTimestamp(ms) {
   const d = new Date(ms);

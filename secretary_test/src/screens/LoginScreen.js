@@ -1,18 +1,39 @@
 import {
   Text, View, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
-import { login } from '../services/storage';
+import { login, signup } from '../services/storage';
+
+// 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
+const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
 
 export default function LoginScreen({ onLogin }) {
   const insets = useSafeAreaInsets();
+  const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [team, setTeam] = useState('');
+  const [role, setRole] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
+
+  function switchMode(next) {
+    setMode(next);
+    setError('');
+    setInfo('');
+    setPasswordConfirm('');
+    setName('');
+    setPhone('');
+    setTeam('');
+    setRole('');
+  }
 
   async function handleLogin() {
     const e = email.trim();
@@ -30,6 +51,32 @@ export default function LoginScreen({ onLogin }) {
     }
   }
 
+  async function handleSignup() {
+    const e = email.trim();
+    const p = password.trim();
+    if (!e || !p) { setError('이메일과 비밀번호를 입력하세요.'); return; }
+    if (p.length < 6) { setError('비밀번호는 6자 이상이어야 합니다.'); return; }
+    if (p !== passwordConfirm.trim()) { setError('비밀번호가 일치하지 않습니다.'); return; }
+    const ph = phone.trim();
+    if (ph && !PHONE_REGEX.test(ph)) { setError('올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      const user = await signup(e, p, name, ph, team, role);
+      if (user) {
+        onLogin(user);
+      } else {
+        setInfo('가입 확인 이메일을 보냈습니다. 메일함에서 인증 후 로그인해주세요.');
+        switchMode('login');
+        setEmail(e);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function fillTest() {
     setEmail('test@secretary.app');
     setPassword('test1234');
@@ -38,7 +85,12 @@ export default function LoginScreen({ onLogin }) {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.root}>
-      <View style={[s.inner, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 40 }]}>
+      <ScrollView
+        style={s.root}
+        contentContainerStyle={[s.inner, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 40 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={s.logoWrap}>
           <Text style={s.logoGlyph}>◈</Text>
           <Text style={s.logoTitle}>Secretary</Text>
@@ -46,6 +98,50 @@ export default function LoginScreen({ onLogin }) {
         </View>
 
         <View style={s.form}>
+          {mode === 'signup' && (
+            <>
+              <Text style={s.label}>이름 (선택)</Text>
+              <TextInput
+                style={s.input}
+                value={name}
+                onChangeText={(v) => { setName(v); setError(''); }}
+                placeholder="이름"
+                placeholderTextColor={C.textDim}
+                autoCorrect={false}
+              />
+
+              <Text style={s.label}>핸드폰 번호 (선택)</Text>
+              <TextInput
+                style={s.input}
+                value={phone}
+                onChangeText={(v) => { setPhone(v); setError(''); }}
+                placeholder="010-0000-0000"
+                placeholderTextColor={C.textDim}
+                keyboardType="phone-pad"
+              />
+
+              <Text style={s.label}>소속 회사 (선택)</Text>
+              <TextInput
+                style={s.input}
+                value={team}
+                onChangeText={(v) => { setTeam(v); setError(''); }}
+                placeholder="회사명"
+                placeholderTextColor={C.textDim}
+                autoCorrect={false}
+              />
+
+              <Text style={s.label}>직급 (선택)</Text>
+              <TextInput
+                style={s.input}
+                value={role}
+                onChangeText={(v) => { setRole(v); setError(''); }}
+                placeholder="예: 대리, 과장, 팀장"
+                placeholderTextColor={C.textDim}
+                autoCorrect={false}
+              />
+            </>
+          )}
+
           <Text style={s.label}>이메일</Text>
           <TextInput
             style={s.input}
@@ -66,21 +162,54 @@ export default function LoginScreen({ onLogin }) {
             placeholder="비밀번호"
             placeholderTextColor={C.textDim}
             secureTextEntry
-            onSubmitEditing={handleLogin}
-            returnKeyType="done"
+            onSubmitEditing={mode === 'login' ? handleLogin : undefined}
+            returnKeyType={mode === 'login' ? 'done' : 'next'}
           />
 
-          {!!error && <Text style={s.error}>{error}</Text>}
+          {mode === 'signup' && (
+            <>
+              <Text style={s.label}>비밀번호 확인</Text>
+              <TextInput
+                style={s.input}
+                value={passwordConfirm}
+                onChangeText={(v) => { setPasswordConfirm(v); setError(''); }}
+                placeholder="비밀번호 확인"
+                placeholderTextColor={C.textDim}
+                secureTextEntry
+                onSubmitEditing={handleSignup}
+                returnKeyType="done"
+              />
+            </>
+          )}
 
-          <TouchableOpacity style={[s.loginBtn, loading && s.loginBtnDisabled]} onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
-            {loading
-              ? <ActivityIndicator color="#09090E" />
-              : <Text style={s.loginBtnText}>로그인</Text>
-            }
+          {!!error && <Text style={s.error}>{error}</Text>}
+          {!!info && <Text style={s.info}>{info}</Text>}
+
+          {mode === 'login' ? (
+            <TouchableOpacity style={[s.loginBtn, loading && s.loginBtnDisabled]} onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
+              {loading
+                ? <ActivityIndicator color="#09090E" />
+                : <Text style={s.loginBtnText}>로그인</Text>
+              }
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={[s.loginBtn, loading && s.loginBtnDisabled]} onPress={handleSignup} disabled={loading} activeOpacity={0.8}>
+              {loading
+                ? <ActivityIndicator color="#09090E" />
+                : <Text style={s.loginBtnText}>회원가입</Text>
+              }
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={s.switchModeBtn} onPress={() => switchMode(mode === 'login' ? 'signup' : 'login')} activeOpacity={0.7}>
+            <Text style={s.switchModeText}>
+              {mode === 'login' ? '계정이 없으신가요? ' : '이미 계정이 있으신가요? '}
+              <Text style={s.switchModeLink}>{mode === 'login' ? '회원가입' : '로그인'}</Text>
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {__DEV__ && (
+        {__DEV__ && mode === 'login' && (
           <View style={s.testAccountWrap}>
             <Text style={s.testAccountLabel}>테스트 계정 (개발 전용)</Text>
             <TouchableOpacity style={s.testAccountBtn} onPress={fillTest} activeOpacity={0.7}>
@@ -99,14 +228,14 @@ export default function LoginScreen({ onLogin }) {
             </TouchableOpacity>
           </View>
         )}
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  inner: { flex: 1, paddingHorizontal: 32 },
+  inner: { flexGrow: 1, paddingHorizontal: 32 },
   logoWrap: { alignItems: 'center', marginBottom: 48 },
   logoGlyph: { color: C.accentBlue, fontSize: 40, marginBottom: 12 },
   logoTitle: { color: C.textPrimary, fontSize: 28, fontWeight: '300', letterSpacing: 2 },
@@ -115,9 +244,13 @@ const s = StyleSheet.create({
   label: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginTop: 20, marginBottom: 8 },
   input: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, color: C.textPrimary, fontSize: 14, paddingHorizontal: 16, paddingVertical: 14 },
   error: { color: C.red, fontSize: 12, marginTop: 8 },
+  info: { color: C.accentTeal, fontSize: 12, marginTop: 8 },
   loginBtn: { marginTop: 28, backgroundColor: C.accentBlue, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   loginBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   loginBtnDisabled: { opacity: 0.6 },
+  switchModeBtn: { marginTop: 20, alignItems: 'center' },
+  switchModeText: { color: C.textDim, fontSize: 13 },
+  switchModeLink: { color: C.accentBlue, fontWeight: '600' },
   testAccountWrap: { marginTop: 40, gap: 10 },
   testAccountLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 4 },
   testAccountBtn: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 14, gap: 4 },

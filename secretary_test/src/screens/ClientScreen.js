@@ -20,6 +20,23 @@ import { parseTranscriptSegments } from '../utils/transcript';
 import ClientHistorySection from '../components/ClientHistorySection';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
+// 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
+const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
+const NOTES_MAX_LENGTH = 2000;
+
+// 하이픈 없이 입력해도 기존 회원 데이터와 동일한 010-0000-0000 형식으로 자동 정렬
+function fmtPhone(text) {
+  const d = text.replace(/\D/g, '').slice(0, 11);
+  if (d.length < 4) return d;
+  if (d.startsWith('02')) {
+    if (d.length <= 5) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (d.length <= 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}`;
+  }
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (d.length <= 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
+}
 
 export default function ClientScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -43,6 +60,7 @@ export default function ClientScreen({ navigation, route }) {
   const [newContact, setNewContact] = useState('');
   const [newWorkContact, setNewWorkContact] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newSns, setNewSns] = useState('');
   const [newNotes, setNewNotes] = useState('');
 
   const [showSourcePicker, setShowSourcePicker] = useState(false);
@@ -191,14 +209,26 @@ export default function ClientScreen({ navigation, route }) {
       Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.\n모두 입력 후 추가해주세요.');
       return;
     }
+    if (!PHONE_REGEX.test(newContact.trim())) {
+      Alert.alert('연락처 형식 오류', '올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)');
+      return;
+    }
+    if (newWorkContact.trim() && !PHONE_REGEX.test(newWorkContact.trim())) {
+      Alert.alert('연락처 형식 오류', '올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)');
+      return;
+    }
     if (newEmail.trim() && !newEmail.trim().includes('@')) {
       Alert.alert('이메일 형식 오류', '올바른 이메일 형식이 아닙니다.');
       return;
     }
-    const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), email: newEmail.trim(), notes: newNotes.trim() });
+    if (newNotes.trim().length > NOTES_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `메모는 최대 ${NOTES_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
+    const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), email: newEmail.trim(), sns: newSns.trim(), notes: newNotes.trim() });
     setClients(updated);
     setShowAddClient(false);
-    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewNotes('');
+    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes('');
   }
 
   function openEditClient(client) {
@@ -208,6 +238,7 @@ export default function ClientScreen({ navigation, route }) {
     setNewContact(client.contact || '');
     setNewWorkContact(client.workContact || '');
     setNewEmail(client.email || '');
+    setNewSns(client.sns || '');
     setNewNotes(client.notes || '');
     setShowEditClient(true);
   }
@@ -217,16 +248,28 @@ export default function ClientScreen({ navigation, route }) {
       Alert.alert('필수 항목 누락', '담당자 이름, 회사명, 연락처는 필수 입력 항목입니다.');
       return;
     }
+    if (!PHONE_REGEX.test(newContact.trim())) {
+      Alert.alert('연락처 형식 오류', '올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)');
+      return;
+    }
+    if (newWorkContact.trim() && !PHONE_REGEX.test(newWorkContact.trim())) {
+      Alert.alert('연락처 형식 오류', '올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)');
+      return;
+    }
     if (newEmail.trim() && !newEmail.trim().includes('@')) {
       Alert.alert('이메일 형식 오류', '올바른 이메일 형식이 아닙니다.');
       return;
     }
-    const updated = await updateClient(selectedClient.id, { name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), email: newEmail.trim(), notes: newNotes.trim() });
+    if (newNotes.trim().length > NOTES_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `메모는 최대 ${NOTES_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
+    const updated = await updateClient(selectedClient.id, { name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), email: newEmail.trim(), sns: newSns.trim(), notes: newNotes.trim() });
     setClients(updated);
     const updatedClient = updated.find((c) => c.id === selectedClient.id);
     setSelectedClient(updatedClient);
     setShowEditClient(false);
-    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewNotes('');
+    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes('');
   }
 
   function handleHistoriesChange(updated) {
@@ -307,7 +350,23 @@ export default function ClientScreen({ navigation, route }) {
     if (fixingMsgIndex !== null) return;
     setFixingMsgIndex(index);
     try {
-      const original = chatMessages[index].text;
+      const msg = chatMessages[index];
+      if (msg.kind === 'emailDraft') {
+        // 메일 초안은 subject/body가 별도 필드라 text 하나만 고쳐서는 반영되지 않으므로 둘을 함께 교정한다.
+        let subject, body;
+        try {
+          [subject, body] = await Promise.all([
+            fixForeignWordsInText(msg.subject),
+            fixForeignWordsInText(msg.body),
+          ]);
+        } catch {
+          subject = stripForeignScripts(msg.subject);
+          body = stripForeignScripts(msg.body);
+        }
+        setChatMessages((prev) => prev.map((m, i) => (i === index ? { ...m, subject, body } : m)));
+        return;
+      }
+      const original = msg.text;
       let fixed;
       try {
         fixed = await fixForeignWordsInText(original);
@@ -319,6 +378,10 @@ export default function ClientScreen({ navigation, route }) {
     } finally {
       setFixingMsgIndex(null);
     }
+  }
+
+  function handleDraftFieldChange(index, field, value) {
+    setChatMessages((prev) => prev.map((m, i) => (i === index ? { ...m, [field]: value } : m)));
   }
 
   function handleSendDraftEmail(index) {
@@ -336,6 +399,7 @@ export default function ClientScreen({ navigation, route }) {
             try {
               await sendClientEmail(msg.clientId, msg.subject, msg.body);
               setChatMessages((prev) => prev.map((m, i) => (i === index ? { ...m, sent: true } : m)));
+              Alert.alert('메일 발송 완료', `${msg.clientName}님에게 메일을 발송했습니다.`);
             } catch (e) {
               Alert.alert('메일 발송 실패', e.message || '알 수 없는 오류가 발생했습니다.');
             } finally {
@@ -367,7 +431,7 @@ export default function ClientScreen({ navigation, route }) {
       const lastWord = client.role?.trim() || client.name;
       const particle = josa과와(lastWord);
       const nameWithRole = client.role?.trim() ? `${client.name} ${client.role}` : client.name;
-      const reply = await askClaude([{ role: 'user', content: `${client.company} ${nameWithRole}${particle}의 관계를 3~4문장으로 자연스럽게 요약해줘. 마지막 연락 날짜, 현재 상황, 다음 필요한 액션을 포함해줘. 반드시 한국어로만 작성해줘.` }], systemPrompt, { raw: true });
+      const reply = await askClaude([{ role: 'user', content: `${client.company} ${nameWithRole}${particle}의 관계를 3~4문장으로 자연스럽게 요약해줘. 마지막 연락 날짜, 현재 상황, 다음 필요한 액션을 포함해줘. 메모에 기록된 내용도 반드시 참고해줘. 반드시 한국어로만 작성해줘.` }], systemPrompt, { raw: true });
       let fixedReply = reply;
       try {
         fixedReply = await fixForeignWordsInText(reply);
@@ -420,7 +484,7 @@ export default function ClientScreen({ navigation, route }) {
       // clients/histories는 이미 컴포넌트 state에 로드되어 있으므로 재조회하지 않고 그대로 사용
       const systemPrompt = buildClientSystem(clients, histories);
       const reply = await askClaude(
-        [{ role: 'user', content: `등록된 모든 거래처 인원의 관계 히스토리를 종합해서 보고서 형식으로 작성해줘. 각 거래처별로 현재 관계 상태, 마지막 연락 시점, 주요 히스토리 요약, 다음에 필요한 액션을 포함해줘. 히스토리가 없는 거래처는 간략히 언급만 해줘. 반드시 한국어로만 작성해줘.` }],
+        [{ role: 'user', content: `등록된 모든 거래처 인원의 관계 히스토리를 종합해서 보고서 형식으로 작성해줘. 각 거래처별로 현재 관계 상태, 마지막 연락 시점, 주요 히스토리 요약, 다음에 필요한 액션을 포함해줘. 메모에 기록된 내용도 반드시 참고해줘. 히스토리가 없는 거래처는 간략히 언급만 해줘. 반드시 한국어로만 작성해줘.` }],
         systemPrompt,
         { raw: true }
       );
@@ -670,7 +734,7 @@ export default function ClientScreen({ navigation, route }) {
             </View>
 
             {/* 연락처 */}
-            {(selectedClient?.contact || selectedClient?.workContact || selectedClient?.email) && (
+            {(selectedClient?.contact || selectedClient?.workContact || selectedClient?.email || selectedClient?.sns) && (
               <View style={s.contactSection}>
                 {selectedClient.contact ? (
                   <View style={s.contactRow}>
@@ -714,6 +778,21 @@ export default function ClientScreen({ navigation, route }) {
                       ]
                     )}>
                       <Text style={s.contactNumber}>{selectedClient.email}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+                {selectedClient.sns ? (
+                  <View style={s.contactRow}>
+                    <Text style={s.contactLabel}>SNS</Text>
+                    <TouchableOpacity onPress={() => Alert.alert(
+                      'SNS로 이동',
+                      `${selectedClient.name}님의 SNS 계정으로 이동하시겠습니까?\n\n${selectedClient.sns}`,
+                      [
+                        { text: '취소', style: 'cancel' },
+                        { text: '이동', onPress: () => Linking.openURL(/^https?:\/\//i.test(selectedClient.sns) ? selectedClient.sns : `https://${selectedClient.sns}`) },
+                      ]
+                    )}>
+                      <Text style={s.contactNumber}>{selectedClient.sns}</Text>
                     </TouchableOpacity>
                   </View>
                 ) : null}
@@ -807,16 +886,18 @@ export default function ClientScreen({ navigation, route }) {
                 <Text style={s.inputLabel}>연락처</Text>
                 <Text style={s.requiredMark}>*</Text>
               </View>
-              <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <TextInput style={s.input} value={newContact} onChangeText={(v) => setNewContact(fmtPhone(v))} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>직장 연락처</Text>
-              <TextInput style={s.input} value={newWorkContact} onChangeText={setNewWorkContact} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <TextInput style={s.input} value={newWorkContact} onChangeText={(v) => setNewWorkContact(fmtPhone(v))} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>이메일</Text>
               <TextInput style={s.input} value={newEmail} onChangeText={setNewEmail} placeholder="example@company.com" placeholderTextColor={C.textDim} keyboardType="email-address" autoCapitalize="none" />
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>SNS 계정</Text>
+              <TextInput style={s.input} value={newSns} onChangeText={setNewSns} placeholder="instagram.com/company" placeholderTextColor={C.textDim} autoCapitalize="none" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>메모</Text>
               <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
             </ScrollView>
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewNotes(''); }}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes(''); }}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.modalConfirm} onPress={handleEditClient}>
@@ -850,11 +931,13 @@ export default function ClientScreen({ navigation, route }) {
                 <Text style={s.inputLabel}>연락처</Text>
                 <Text style={s.requiredMark}>*</Text>
               </View>
-              <TextInput style={s.input} value={newContact} onChangeText={setNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <TextInput style={s.input} value={newContact} onChangeText={(v) => setNewContact(fmtPhone(v))} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>직장 연락처</Text>
-              <TextInput style={s.input} value={newWorkContact} onChangeText={setNewWorkContact} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <TextInput style={s.input} value={newWorkContact} onChangeText={(v) => setNewWorkContact(fmtPhone(v))} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>이메일</Text>
               <TextInput style={s.input} value={newEmail} onChangeText={setNewEmail} placeholder="example@company.com" placeholderTextColor={C.textDim} keyboardType="email-address" autoCapitalize="none" />
+              <Text style={[s.inputLabel, s.inputLabelSpacing]}>SNS 계정</Text>
+              <TextInput style={s.input} value={newSns} onChangeText={setNewSns} placeholder="instagram.com/company" placeholderTextColor={C.textDim} autoCapitalize="none" />
               <Text style={[s.inputLabel, s.inputLabelSpacing]}>메모</Text>
               <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
             </ScrollView>
@@ -926,22 +1009,48 @@ export default function ClientScreen({ navigation, route }) {
                   {m.kind === 'emailDraft' && (
                     <View style={s.emailDraftCard}>
                       <Text style={s.emailDraftLabel}>제목</Text>
-                      <Text style={s.emailDraftSubject}>{m.subject}</Text>
+                      <TextInput
+                        style={[s.emailDraftSubject, s.emailDraftSubjectInput, m.sent && s.emailDraftInputSent]}
+                        value={m.subject}
+                        onChangeText={(t) => handleDraftFieldChange(i, 'subject', t)}
+                        editable={!m.sent}
+                        placeholderTextColor={C.textDim}
+                      />
                       <Text style={s.emailDraftLabel}>본문</Text>
-                      <Text style={s.emailDraftBody}>{m.body}</Text>
+                      <TextInput
+                        style={[s.emailDraftBody, s.emailDraftBodyInput, m.sent && s.emailDraftInputSent]}
+                        value={m.body}
+                        onChangeText={(t) => handleDraftFieldChange(i, 'body', t)}
+                        editable={!m.sent}
+                        multiline
+                        textAlignVertical="top"
+                        placeholderTextColor={C.textDim}
+                      />
                       {m.sent ? (
                         <Text style={s.emailDraftSentText}>✓ 발송 완료</Text>
                       ) : (
-                        <TouchableOpacity
-                          style={[s.emailDraftSendBtn, sendingEmailIndex !== null && s.fixForeignBtnDisabled]}
-                          onPress={() => handleSendDraftEmail(i)}
-                          disabled={sendingEmailIndex !== null}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={s.emailDraftSendBtnText}>
-                            {sendingEmailIndex === i ? '발송 중…' : '메일 발송'}
-                          </Text>
-                        </TouchableOpacity>
+                        <View style={s.emailDraftActionRow}>
+                          <TouchableOpacity
+                            style={[s.fixForeignBtn, s.fixForeignBtnInRow, fixingMsgIndex !== null && s.fixForeignBtnDisabled]}
+                            onPress={() => handleFixMessageForeignWords(i)}
+                            disabled={fixingMsgIndex !== null}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={s.fixForeignBtnText}>
+                              {fixingMsgIndex === i ? '수정 중…' : '외국어 재수정'}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[s.emailDraftSendBtn, sendingEmailIndex !== null && s.fixForeignBtnDisabled]}
+                            onPress={() => handleSendDraftEmail(i)}
+                            disabled={sendingEmailIndex !== null}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={s.emailDraftSendBtnText}>
+                              {sendingEmailIndex === i ? '발송 중…' : '메일 발송'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
                       )}
                     </View>
                   )}
@@ -1340,18 +1449,29 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 7,
     paddingVertical: 5, paddingHorizontal: 8,
   },
+  fixForeignBtnInRow: { marginTop: 0 },
   fixForeignBtnText: { color: C.accentTeal, fontSize: 11, fontWeight: '500' },
   fixForeignBtnDisabled: { opacity: 0.4 },
   emailDraftCard: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border },
   emailDraftLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1, marginBottom: 3 },
   emailDraftSubject: { color: C.textPrimary, fontSize: 13, fontWeight: '600', marginBottom: 8 },
   emailDraftBody: { color: C.textSecondary, fontSize: 13, lineHeight: 20, marginBottom: 12 },
+  emailDraftSubjectInput: {
+    borderWidth: 1, borderColor: C.border, borderRadius: 8, backgroundColor: C.surface,
+    paddingHorizontal: 10, paddingVertical: 8,
+  },
+  emailDraftBodyInput: {
+    borderWidth: 1, borderColor: C.border, borderRadius: 8, backgroundColor: C.surface,
+    paddingHorizontal: 10, paddingVertical: 8, minHeight: 100,
+  },
+  emailDraftInputSent: { borderColor: 'transparent', backgroundColor: 'transparent', paddingHorizontal: 0, paddingVertical: 0 },
+  emailDraftActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   emailDraftSendBtn: {
     alignSelf: 'flex-start',
-    backgroundColor: C.accentTeal, borderRadius: 8,
-    paddingVertical: 8, paddingHorizontal: 14,
+    backgroundColor: C.accentTeal, borderRadius: 7,
+    paddingVertical: 5, paddingHorizontal: 8,
   },
-  emailDraftSendBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  emailDraftSendBtnText: { color: '#fff', fontSize: 11, fontWeight: '500' },
   emailDraftSentText: { color: C.accentTeal, fontSize: 12, fontWeight: '500' },
   chatInputRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   chatInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 24, color: C.textPrimary, fontSize: 14, paddingHorizontal: 18, paddingVertical: 12 },

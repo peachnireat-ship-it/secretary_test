@@ -18,6 +18,8 @@ const BOXES = [
   { key: 'received', label: '받은 메세지함' },
   { key: 'sent', label: '보낸 메세지함' },
 ];
+const SUBJECT_MAX_LENGTH = 200;
+const CONTENT_MAX_LENGTH = 2000;
 
 function priorityColor(p) {
   return { 긴급: C.red, 일반: C.accentBlue, 낮음: C.textDim }[p] || C.textDim;
@@ -104,6 +106,14 @@ export default function MessageScreen() {
 
   async function handleAdd() {
     if (!newSender.trim() || !newSubject.trim()) return;
+    if (newSubject.trim().length > SUBJECT_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `제목은 최대 ${SUBJECT_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
+    if (newContent.trim().length > CONTENT_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `내용은 최대 ${CONTENT_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
     const ts = Date.now();
     const sentMsgId = String(ts);
     const receivedMsgId = (newDirection === 'sent' && newToId) ? String(ts + 1) : undefined;
@@ -169,6 +179,14 @@ export default function MessageScreen() {
 
   async function handleEditSave() {
     if (!editSender.trim() || !editSubject.trim()) return;
+    if (editSubject.trim().length > SUBJECT_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `제목은 최대 ${SUBJECT_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
+    if (editContent.trim().length > CONTENT_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `내용은 최대 ${CONTENT_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
     const historyEntry = {
       subject: detailMsg.subject,
       content: detailMsg.content,
@@ -204,6 +222,14 @@ export default function MessageScreen() {
 
   async function handleReply() {
     if (!replyContent.trim()) return;
+    if (replySubject.trim().length > SUBJECT_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `제목은 최대 ${SUBJECT_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
+    if (replyContent.trim().length > CONTENT_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `내용은 최대 ${CONTENT_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
     const toId = detailMsg.fromId;
     const ts = Date.now();
     const sentMsgId = String(ts);

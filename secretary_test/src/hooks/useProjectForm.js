@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Alert } from '../utils/alertCompat';
 import { addProject, updateProject, updateClient, getTestAccounts } from '../services/storage';
-import { dateTimeFromTimestamp, findOverlappingItems, formatOverlapMessage } from '../utils/dateUtils';
+import { dateTimeFromTimestamp, findOverlappingItems, formatOverlapMessage, isValidOptionalDateStr } from '../utils/dateUtils';
+
+const TITLE_MAX_LENGTH = 200;
+const NOTES_MAX_LENGTH = 2000;
 
 function getDaysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
@@ -116,6 +119,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
   const [newNotes, setNewNotes] = useState('');
   const [pendingMeetingRecordId, setPendingMeetingRecordId] = useState(null);
   const [newClientIds, setNewClientIds] = useState([]);
+  const [newNotifyEmail, setNewNotifyEmail] = useState(true);
 
   const [showDetail, setShowDetail] = useState(false);
   const [detailProject, setDetailProject] = useState(null);
@@ -133,6 +137,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
   const [editPriority, setEditPriority] = useState('보통');
   const [editNotes, setEditNotes] = useState('');
   const [editClientIds, setEditClientIds] = useState([]);
+  const [editNotifyEmail, setEditNotifyEmail] = useState(true);
 
   const [detailPersonPickerVisible, setDetailPersonPickerVisible] = useState(false);
   const [detailPersonPickerSearch, setDetailPersonPickerSearch] = useState('');
@@ -154,6 +159,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
       notes: newNotes.trim(),
       meetingRecordIds: pendingMeetingRecordId ? [pendingMeetingRecordId] : [],
       clientIds: [...new Set([...(meetingRecord?.clientIds || []), ...newClientIds])],
+      notifyEmail: newNotifyEmail,
     });
     setProjects(updated);
     setShowAdd(false);
@@ -162,6 +168,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setNewStatus('진행중'); setNewProgress(0); setNewPriority('보통'); setNewNotes('');
     setPendingMeetingRecordId(null);
     setNewClientIds([]);
+    setNewNotifyEmail(true);
   }
 
   function proceedToSaveNew(startDateStr, deadlineStr) {
@@ -181,12 +188,24 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
       Alert.alert('입력 필요', '제목과 마감일시는 필수 입력 항목입니다.');
       return;
     }
+    if (newTitle.trim().length > TITLE_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `제목은 최대 ${TITLE_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
+    if (newNotes.trim().length > NOTES_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `메모는 최대 ${NOTES_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
     if (!isValidDeadline(newDeadline.trim())) {
       Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
       return;
     }
     const startDateNorm = normalizeDeadline(newStartDate.trim());
     const deadlineDateNorm = normalizeDeadline(newDeadline.trim());
+    if (!isValidOptionalDateStr(startDateNorm)) {
+      Alert.alert('날짜 오류', '날짜를 YYYY-MM-DD 형식으로 완전히 입력해주세요.');
+      return;
+    }
     if (startDateNorm && isValidDeadline(startDateNorm) && deadlineDateNorm < startDateNorm) {
       Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
       return;
@@ -242,6 +261,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setEditPriority(project.priority);
     setEditNotes(project.notes || '');
     setEditClientIds(project.clientIds || []);
+    setEditNotifyEmail(project.notifyEmail !== false);
     setShowDetail(true);
   }
 
@@ -255,6 +275,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
       priority: editPriority,
       notes: editNotes.trim(),
       clientIds: editClientIds,
+      notifyEmail: editNotifyEmail,
     });
     setProjects(updated);
     const refreshed = updated.find((p) => p.id === detailProject.id);
@@ -279,12 +300,24 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
       Alert.alert('입력 필요', '제목과 마감일시는 필수 입력 항목입니다.');
       return;
     }
+    if (editTitle.trim().length > TITLE_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `제목은 최대 ${TITLE_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
+    if (editNotes.trim().length > NOTES_MAX_LENGTH) {
+      Alert.alert('입력 길이 초과', `메모는 최대 ${NOTES_MAX_LENGTH}자까지 입력 가능합니다.`);
+      return;
+    }
     if (!isValidDeadline(editDeadline.trim())) {
       Alert.alert('날짜 오류', '올바른 날짜를 입력하세요.\n월은 1~12, 일은 해당 달의 마지막 날 이내여야 합니다.');
       return;
     }
     const startDateNorm = normalizeDeadline(editStartDate.trim());
     const deadlineDateNorm = normalizeDeadline(editDeadline.trim());
+    if (!isValidOptionalDateStr(startDateNorm)) {
+      Alert.alert('날짜 오류', '날짜를 YYYY-MM-DD 형식으로 완전히 입력해주세요.');
+      return;
+    }
     if (startDateNorm && isValidDeadline(startDateNorm) && deadlineDateNorm < startDateNorm) {
       Alert.alert('날짜 오류', '마감일시는 시작일시보다 빠를 수 없습니다.');
       return;
@@ -342,14 +375,14 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     newDeadlineTime, setNewDeadlineTime, newDeadlineAmPm, setNewDeadlineAmPm, newStatus, setNewStatus,
     newProgress, setNewProgress, newPriority, setNewPriority, newNotes, setNewNotes,
     pendingMeetingRecordId, setPendingMeetingRecordId,
-    newClientIds, setNewClientIds,
+    newClientIds, setNewClientIds, newNotifyEmail, setNewNotifyEmail,
 
     showDetail, setShowDetail, detailProject, setDetailProject, showProjectView, setShowProjectView,
     viewProject, setViewProject, editTitle, setEditTitle, editStartDate, setEditStartDate,
     editStartTime, setEditStartTime, editStartAmPm, setEditStartAmPm, editDeadline, setEditDeadline,
     editDeadlineTime, setEditDeadlineTime, editDeadlineAmPm, setEditDeadlineAmPm, editStatus, setEditStatus,
     editProgress, setEditProgress, editPriority, setEditPriority, editNotes, setEditNotes,
-    editClientIds, setEditClientIds,
+    editClientIds, setEditClientIds, editNotifyEmail, setEditNotifyEmail,
 
     detailPersonPickerVisible, setDetailPersonPickerVisible,
     detailPersonPickerSearch, setDetailPersonPickerSearch,

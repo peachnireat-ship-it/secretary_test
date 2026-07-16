@@ -20,6 +20,22 @@ import { daysUntil, daysLabel, dateTimeFromTimestamp } from '../utils/dateUtils'
 import { parseTranscriptSegments } from '../utils/transcript';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
+// 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
+const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
+
+// 하이픈 없이 입력해도 기존 회원 데이터와 동일한 010-0000-0000 형식으로 자동 정렬
+function fmtPhone(text) {
+  const d = text.replace(/\D/g, '').slice(0, 11);
+  if (d.length < 4) return d;
+  if (d.startsWith('02')) {
+    if (d.length <= 5) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (d.length <= 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}`;
+  }
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (d.length <= 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 11)}`;
+}
 
 function extractSpeakers(text) {
   const found = new Set();
@@ -122,14 +138,14 @@ export default function ProjectScreen({ navigation, route }) {
     newDeadlineTime, setNewDeadlineTime, newDeadlineAmPm, setNewDeadlineAmPm, newStatus, setNewStatus,
     newProgress, setNewProgress, newPriority, setNewPriority, newNotes, setNewNotes,
     setPendingMeetingRecordId,
-    newClientIds, setNewClientIds,
+    newClientIds, setNewClientIds, newNotifyEmail, setNewNotifyEmail,
 
     showDetail, setShowDetail, detailProject, showProjectView, setShowProjectView,
     viewProject, setViewProject, editTitle, setEditTitle, editStartDate, setEditStartDate,
     editStartTime, setEditStartTime, editStartAmPm, setEditStartAmPm, editDeadline, setEditDeadline,
     editDeadlineTime, setEditDeadlineTime, editDeadlineAmPm, setEditDeadlineAmPm, editStatus, setEditStatus,
     editProgress, setEditProgress, editPriority, setEditPriority, editNotes, setEditNotes,
-    editClientIds, setEditClientIds,
+    editClientIds, setEditClientIds, editNotifyEmail, setEditNotifyEmail,
 
     detailPersonPickerVisible, setDetailPersonPickerVisible,
     detailPersonPickerSearch, setDetailPersonPickerSearch,
@@ -248,6 +264,10 @@ export default function ProjectScreen({ navigation, route }) {
   async function handlePickerAddClient() {
     if (!pickerNewName.trim() || !pickerNewCompany.trim() || !pickerNewContact.trim()) {
       Alert.alert('필수 항목 누락', '이름, 회사명, 연락처는 필수입니다.');
+      return;
+    }
+    if (!PHONE_REGEX.test(pickerNewContact.trim())) {
+      Alert.alert('연락처 형식 오류', '올바른 전화번호 형식이 아닙니다. (예: 010-1234-5678)');
       return;
     }
     const updated = await addClient({ name: pickerNewName.trim(), company: pickerNewCompany.trim(), role: pickerNewRole.trim(), contact: pickerNewContact.trim(), notes: '' });
@@ -687,6 +707,18 @@ export default function ProjectScreen({ navigation, route }) {
                   );
                 })()}
 
+                {/* 알림 메일 발송 여부 */}
+                <TouchableOpacity
+                  style={s.notifyEmailRow}
+                  activeOpacity={0.7}
+                  onPress={() => setEditNotifyEmail((prev) => !prev)}
+                >
+                  <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
+                    {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
+                  </View>
+                  <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
+                </TouchableOpacity>
+
                 {/* 버튼 */}
                 <View style={s.modalBtns}>
                   <TouchableOpacity style={s.modalCancel} onPress={() => {
@@ -804,8 +836,20 @@ export default function ProjectScreen({ navigation, route }) {
               <Text style={s.pickerTriggerIcon}>›</Text>
             </TouchableOpacity>
 
+            {/* 알림 메일 발송 여부 */}
+            <TouchableOpacity
+              style={s.notifyEmailRow}
+              activeOpacity={0.7}
+              onPress={() => setNewNotifyEmail((prev) => !prev)}
+            >
+              <View style={[s.notifyEmailCheckbox, newNotifyEmail && s.notifyEmailCheckboxChecked]}>
+                {newNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
+              </View>
+              <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
+            </TouchableOpacity>
+
             <View style={[s.modalBtns, commonStyles.mb8]}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); }}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setNewNotifyEmail(true); }}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.modalConfirm} onPress={handleAdd}>
@@ -1410,7 +1454,7 @@ export default function ProjectScreen({ navigation, route }) {
               <Text style={s.inputLabel}>직책</Text>
               <TextInput style={s.input} value={pickerNewRole} onChangeText={setPickerNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
               <Text style={s.inputLabel}>연락처 *</Text>
-              <TextInput style={s.input} value={pickerNewContact} onChangeText={setPickerNewContact} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+              <TextInput style={s.input} value={pickerNewContact} onChangeText={(v) => setPickerNewContact(fmtPhone(v))} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
               <View style={s.spacerH40} />
             </ScrollView>
           </View>
@@ -1713,6 +1757,16 @@ const s = StyleSheet.create({
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
   modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.gold, alignItems: 'center' },
   modalConfirmText: { color: '#09090E', fontSize: 14, fontWeight: '600' },
+
+  notifyEmailRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
+  notifyEmailCheckbox: {
+    width: 20, height: 20, borderRadius: 5,
+    borderWidth: 1.5, borderColor: C.borderHigh,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  notifyEmailCheckboxChecked: { backgroundColor: C.red, borderColor: C.red },
+  notifyEmailCheckmark: { color: '#fff', fontSize: 12, fontWeight: '700', lineHeight: 14 },
+  notifyEmailLabel: { color: C.textSecondary, fontSize: 13 },
 
   relatedPeopleHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, marginBottom: 8 },
   addPersonBtn: { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: C.accentTeal + '18', borderWidth: 1, borderColor: C.accentTeal + '44', borderRadius: 6 },
