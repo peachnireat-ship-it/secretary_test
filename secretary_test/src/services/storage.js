@@ -131,6 +131,11 @@ export async function login(email, password) {
   assertNotLocked(email);
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
+    // 이메일 인증 미완료는 자격증명 오류가 아니라 별도 상태이므로, 로그인 실패 횟수에도
+    // 포함시키지 않고(잠금 로직 오작동 방지) 사용자가 실제 원인을 알 수 있게 그대로 안내한다.
+    if (error.code === 'email_not_confirmed' || error.message?.includes('Email not confirmed')) {
+      throw new Error('이메일 인증이 완료되지 않았습니다. 가입 시 받은 확인 메일의 링크를 클릭한 후 다시 로그인해주세요.');
+    }
     recordLoginFailure(email);
     throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
   }
@@ -156,6 +161,14 @@ export async function signup(email, password, name, contact, team, role) {
     throw new Error(error.message || '회원가입에 실패했습니다.');
   }
   if (!data.user) throw new Error('회원가입에 실패했습니다.');
+
+  // Supabase는 계정 존재 여부를 통한 이메일 추측(enumeration) 공격을 막기 위해, 이미 가입된
+  // 이메일로 signUp()을 호출해도 에러를 던지지 않고 identities가 빈 배열인 "가짜 성공" 응답을
+  // 돌려준다. 이 경우 실제로는 아무 계정도 새로 만들어지지 않고 기존 계정 비밀번호도 그대로라서,
+  // 에러 체크만으로는 이 상황을 걸러낼 수 없다 — identities가 비어있으면 이미 가입된 이메일로 간주한다.
+  if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw new Error('이미 가입된 이메일입니다. 로그인을 시도해주세요.');
+  }
 
   // 이메일 인증이 활성화된 프로젝트는 signUp 직후 세션이 발급되지 않는다.
   // 이 경우 로그인 화면으로 돌아가 인증 완료 후 다시 로그인하도록 안내한다.
