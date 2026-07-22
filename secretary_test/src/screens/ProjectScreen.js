@@ -256,7 +256,7 @@ export default function ProjectScreen({ navigation, route }) {
   }
 
   function confirmCopy(project) {
-    Alert.alert('복사', '다른 이름으로 저장하시겠습니까?', [
+    Alert.alert('', '해당 프로젝트를 복사하시겠습니까?', [
       { text: '아니오', style: 'cancel', onPress: () => handleCopy(project) },
       { text: '예', onPress: () => { setCopyTarget(project); setCopyTitleInput(''); setShowCopyTitleModal(true); } },
     ]);

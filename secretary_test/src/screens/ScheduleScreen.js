@@ -385,7 +385,7 @@ export default function ScheduleScreen({ navigation, route }) {
   }
 
   function confirmCopy(schedule) {
-    Alert.alert('복사', '다른 이름으로 저장하시겠습니까?', [
+    Alert.alert('', '해당 일정을 복사하시겠습니까?', [
       { text: '아니오', style: 'cancel', onPress: () => handleCopy(schedule) },
       { text: '예', onPress: () => { setCopyTarget(schedule); setCopyTitleInput(''); setShowCopyTitleModal(true); } },
     ]);
