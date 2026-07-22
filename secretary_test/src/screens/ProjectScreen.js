@@ -98,6 +98,10 @@ export default function ProjectScreen({ navigation, route }) {
   const [personDetailClient, setPersonDetailClient] = useState(null);
   const [filter, setFilter] = useState('전체');
 
+  const [copyTarget, setCopyTarget] = useState(null);
+  const [copyTitleInput, setCopyTitleInput] = useState('');
+  const [showCopyTitleModal, setShowCopyTitleModal] = useState(false);
+
   const [showMeetingDetail, setShowMeetingDetail] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [contentEditRecordId, setContentEditRecordId] = useState(null);
@@ -244,10 +248,18 @@ export default function ProjectScreen({ navigation, route }) {
     ]);
   }
 
-  async function handleCopy(project) {
+  async function handleCopy(project, titleOverride) {
     const { id, createdAt, updatedAt, ...rest } = project;
-    const copied = { ...rest, title: `${project.title} (복사본)` };
+    const copied = { ...rest, title: titleOverride || `${project.title} (복사본)` };
     setProjects(await addProject(copied));
+    setShowDetail(false);
+  }
+
+  function confirmCopy(project) {
+    Alert.alert('복사', '다른 이름으로 저장하시겠습니까?', [
+      { text: '아니오', style: 'cancel', onPress: () => handleCopy(project) },
+      { text: '예', onPress: () => { setCopyTarget(project); setCopyTitleInput(''); setShowCopyTitleModal(true); } },
+    ]);
   }
 
   function openClientPicker(speaker) {
@@ -735,10 +747,7 @@ export default function ProjectScreen({ navigation, route }) {
                   }}>
                     <Text style={[s.modalCancelText, s.textRed]}>삭제</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={s.modalCancel} onPress={async () => {
-                    await handleCopy(detailProject);
-                    setShowDetail(false);
-                  }}>
+                  <TouchableOpacity style={s.modalCancel} onPress={() => confirmCopy(detailProject)}>
                     <Text style={s.modalCancelText}>복사</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
@@ -748,6 +757,38 @@ export default function ProjectScreen({ navigation, route }) {
               </ScrollView>
             )}
           </Animated.View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 복사본 이름 입력 모달 ── */}
+      <Modal visible={showCopyTitleModal} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowCopyTitleModal(false)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior="padding">
+          <ScrollView contentContainerStyle={s.speakerModalScroll} keyboardShouldPersistTaps="handled">
+            <View style={s.speakerModalBox}>
+              <Text style={s.speakerModalTitle}>새 이름으로 저장</Text>
+              <TextInput
+                style={s.input}
+                value={copyTitleInput}
+                onChangeText={setCopyTitleInput}
+                placeholder={copyTarget?.title}
+                placeholderTextColor={C.textDim}
+                autoFocus
+              />
+              <View style={s.speakerModalBtns}>
+                <TouchableOpacity style={s.speakerCancelBtn} onPress={() => { setShowCopyTitleModal(false); setCopyTarget(null); }}>
+                  <Text style={s.speakerCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.speakerSaveBtn} onPress={() => {
+                  if (!copyTitleInput.trim()) { Alert.alert('알림', '이름을 입력해주세요.'); return; }
+                  handleCopy(copyTarget, copyTitleInput.trim());
+                  setShowCopyTitleModal(false);
+                  setCopyTarget(null);
+                }}>
+                  <Text style={s.speakerSaveText}>저장</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 

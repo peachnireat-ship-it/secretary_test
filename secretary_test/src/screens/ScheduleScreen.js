@@ -80,6 +80,10 @@ export default function ScheduleScreen({ navigation, route }) {
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth() + 1);
 
+  const [copyTarget, setCopyTarget] = useState(null);
+  const [copyTitleInput, setCopyTitleInput] = useState('');
+  const [showCopyTitleModal, setShowCopyTitleModal] = useState(false);
+
   const [clients, setClients] = useState([]);
   const { user: currentUser } = useUser();
   const [meetingRecords, setMeetingRecords] = useState([]);
@@ -372,11 +376,19 @@ export default function ScheduleScreen({ navigation, route }) {
     setSchedules(updated);
   }
 
-  async function handleCopy(schedule) {
+  async function handleCopy(schedule, titleOverride) {
     const { id, createdAt, ...rest } = schedule;
-    const copied = { ...rest, title: `${schedule.title} (복사본)` };
+    const copied = { ...rest, title: titleOverride || `${schedule.title} (복사본)` };
     const updated = await addSchedule(copied);
     setSchedules(updated);
+    setShowScheduleView(false);
+  }
+
+  function confirmCopy(schedule) {
+    Alert.alert('복사', '다른 이름으로 저장하시겠습니까?', [
+      { text: '아니오', style: 'cancel', onPress: () => handleCopy(schedule) },
+      { text: '예', onPress: () => { setCopyTarget(schedule); setCopyTitleInput(''); setShowCopyTitleModal(true); } },
+    ]);
   }
 
   async function saveEditedSchedule(scheduleDate, saved24h, startDateStr, endDateStr) {
@@ -1038,7 +1050,7 @@ export default function ScheduleScreen({ navigation, route }) {
                         ])}>
                           <Text style={s.deleteBtn}>삭제</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={async () => { await handleCopy(viewSchedule); setShowScheduleView(false); }}>
+                        <TouchableOpacity onPress={() => confirmCopy(viewSchedule)}>
                           <Text style={s.copyBtn}>복사</Text>
                         </TouchableOpacity>
                       </>
@@ -1192,6 +1204,36 @@ export default function ScheduleScreen({ navigation, route }) {
               </ScrollView>
             )}
           </Animated.View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 복사본 이름 입력 모달 ── */}
+      <Modal visible={showCopyTitleModal} animationType="slide" transparent onRequestClose={() => setShowCopyTitleModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <View style={[s.sheetBase, s.modalSheet]}>
+            <Text style={s.modalTitle}>새 이름으로 저장</Text>
+            <TextInput
+              style={s.input}
+              value={copyTitleInput}
+              onChangeText={setCopyTitleInput}
+              placeholder={copyTarget?.title}
+              placeholderTextColor={C.textDim}
+              autoFocus
+            />
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowCopyTitleModal(false); setCopyTarget(null); }}>
+                <Text style={s.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalConfirm} onPress={() => {
+                if (!copyTitleInput.trim()) { Alert.alert('알림', '이름을 입력해주세요.'); return; }
+                handleCopy(copyTarget, copyTitleInput.trim());
+                setShowCopyTitleModal(false);
+                setCopyTarget(null);
+              }}>
+                <Text style={s.modalConfirmText}>저장</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
