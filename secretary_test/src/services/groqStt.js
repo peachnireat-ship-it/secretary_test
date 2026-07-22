@@ -113,6 +113,8 @@ export async function rediarizeTranscript(transcriptText, speakerCount = null) {
 
 // pyannote 세그먼트(음성 기반)와 Whisper 세그먼트(텍스트 기반)를 병합해 [화자 N] 포맷으로 반환.
 // pyannote 서버 URL이 설정되지 않았거나 호출 실패 시 null을 반환 → 호출부에서 LLM fallback.
+// TODO(보안): baseUrl이 http://인 경우도 그대로 전송됨 — SettingsScreen.js의 handleSavePyannoteUrl()에서
+// https 강제 검증을 아직 추가하지 않았기 때문. 회의 음성이 평문으로 전송될 수 있으니 추후 https 강제화 필요.
 export async function convertToMonoViaServer(fileUri, mimeType) {
   const baseUrl = await getPyannoteUrl();
   if (!baseUrl) return null;
@@ -149,6 +151,7 @@ export async function convertToMonoViaServer(fileUri, mimeType) {
   }
 }
 
+// TODO(보안): convertToMonoViaServer와 동일하게 baseUrl이 http://여도 그대로 전송됨 — https 강제 검증 추후 추가 필요.
 export async function diarizeWithPyannote(fileUri, mimeType, whisperSegments) {
   if (!whisperSegments?.length) return null;
 

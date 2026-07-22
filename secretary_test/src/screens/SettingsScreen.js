@@ -118,6 +118,9 @@ export default function SettingsScreen() {
     setSavedState: setGrokSaved,
   });
 
+  // TODO(보안): 현재 http://도 허용 — 같은 Wi-Fi의 공격자가 회의 음성을 도청할 수 있는 위험이 있음(2026-07-01 보안 리포트 MEDIUM 항목).
+  // 다만 로컬 IP(예: 192.168.1.x)로 pyannote-server를 Render 배포 전 테스트하는 워크플로우가 있어
+  // 지금은 https 강제 차단 대신 허용해 둔 상태. 추후 최소한 https 강제 검증(또는 저장 시 경고 확인창)을 추가해야 한다.
   async function handleSavePyannoteUrl() {
     const trimmedUrl = pyannoteUrl.trim();
     if (trimmedUrl && !/^https?:\/\//.test(trimmedUrl)) {
