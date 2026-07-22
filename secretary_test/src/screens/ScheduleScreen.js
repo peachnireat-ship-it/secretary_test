@@ -372,6 +372,13 @@ export default function ScheduleScreen({ navigation, route }) {
     setSchedules(updated);
   }
 
+  async function handleCopy(schedule) {
+    const { id, createdAt, ...rest } = schedule;
+    const copied = { ...rest, title: `${schedule.title} (복사본)` };
+    const updated = await addSchedule(copied);
+    setSchedules(updated);
+  }
+
   async function saveEditedSchedule(scheduleDate, saved24h, startDateStr, endDateStr) {
     const updated = await updateSchedule(viewSchedule.id, {
       date: scheduleDate,
@@ -1031,6 +1038,9 @@ export default function ScheduleScreen({ navigation, route }) {
                         ])}>
                           <Text style={s.deleteBtn}>삭제</Text>
                         </TouchableOpacity>
+                        <TouchableOpacity onPress={async () => { await handleCopy(viewSchedule); setShowScheduleView(false); }}>
+                          <Text style={s.copyBtn}>복사</Text>
+                        </TouchableOpacity>
                       </>
                     )}
                     <TouchableOpacity onPress={() => { setShowScheduleView(false); setEditMode(false); }}>
@@ -1559,6 +1569,7 @@ const s = StyleSheet.create({
   closeBtn: { color: C.textSecondary, fontSize: 18, padding: 4 },
   editBtn: { color: C.accentBlue, fontSize: 14, fontWeight: '500', padding: 4 },
   deleteBtn: { color: '#C45B5B', fontSize: 14, fontWeight: '500', padding: 4 },
+  copyBtn: { color: C.textSecondary, fontSize: 14, fontWeight: '500', padding: 4 },
   selectedPeopleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   selectedPersonChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 12 },
   selectedPersonChipText: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },

@@ -11,7 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
 import { useUser } from '../context/UserContext';
-import { getProjects, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
 import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectForm';
@@ -242,6 +242,12 @@ export default function ProjectScreen({ navigation, route }) {
       { text: '취소', style: 'cancel' },
       { text: '삭제', style: 'destructive', onPress: async () => { setProjects(await deleteProject(id)); } },
     ]);
+  }
+
+  async function handleCopy(project) {
+    const { id, createdAt, updatedAt, ...rest } = project;
+    const copied = { ...rest, title: `${project.title} (복사본)` };
+    setProjects(await addProject(copied));
   }
 
   function openClientPicker(speaker) {
@@ -728,6 +734,12 @@ export default function ProjectScreen({ navigation, route }) {
                     ]);
                   }}>
                     <Text style={[s.modalCancelText, s.textRed]}>삭제</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.modalCancel} onPress={async () => {
+                    await handleCopy(detailProject);
+                    setShowDetail(false);
+                  }}>
+                    <Text style={s.modalCancelText}>복사</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
                     <Text style={s.modalConfirmText}>저장</Text>
