@@ -779,8 +779,10 @@ export default function ProjectScreen({ navigation, route }) {
                   <Text style={s.speakerCancelText}>취소</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.speakerSaveBtn} onPress={() => {
-                  if (!copyTitleInput.trim()) { Alert.alert('알림', '이름을 입력해주세요.'); return; }
-                  handleCopy(copyTarget, copyTitleInput.trim());
+                  const trimmed = copyTitleInput.trim();
+                  if (!trimmed) { Alert.alert('알림', '이름을 입력해주세요.'); return; }
+                  if (trimmed === copyTarget?.title) { Alert.alert('알림', '기존 이름과 다른 이름을 입력해주세요.'); return; }
+                  handleCopy(copyTarget, trimmed);
                   setShowCopyTitleModal(false);
                   setCopyTarget(null);
                 }}>
