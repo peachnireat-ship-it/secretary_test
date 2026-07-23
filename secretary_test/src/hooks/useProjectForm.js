@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Alert } from '../utils/alertCompat';
 import { addProject, updateProject, updateClient, getTestAccounts } from '../services/storage';
 import { dateTimeFromTimestamp, findOverlappingItems, formatOverlapMessage, isValidOptionalDateStr } from '../utils/dateUtils';
@@ -261,9 +261,14 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setEditPriority(project.priority);
     setEditNotes(project.notes || '');
     setEditClientIds(project.clientIds || []);
-    setEditNotifyEmail(project.notifyEmail !== false);
     setShowDetail(true);
   }
+
+  useEffect(() => {
+    if (!showDetail) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEditNotifyEmail(editClientIds.length > 0);
+  }, [editClientIds, showDetail]);
 
   async function saveEditedProject(startDateStr, deadlineStr) {
     const updated = await updateProject(detailProject.id, {
