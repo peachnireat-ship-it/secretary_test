@@ -67,8 +67,8 @@ function findRoster({ id, legacyId }) {
 }
 
 function rosterToUser({ id, email, name, role, team }) {
-  // ROSTER(하드코딩 6개 테스트 계정)는 회사 계정 시나리오 밖이므로 항상 false.
-  return { id, email, name, role, team, isCompanyAdmin: false };
+  // ROSTER(하드코딩 6개 테스트 계정)는 회사 계정 시나리오 밖이므로 항상 false/null.
+  return { id, email, name, role, team, isCompanyAdmin: false, companyId: null };
 }
 
 let _cachedUser = null;
@@ -79,8 +79,8 @@ async function hydrateUserFromSession(session) {
   if (entry) return rosterToUser(entry);
   // ROSTER에 없는 계정(회원가입으로 새로 생성된 계정, 회사 계정 시나리오 계정 포함)은
   // profiles 테이블에서 직접 조회한다.
-  const { data, error } = await supabase.from('profiles').select('id, email, name, role, team, contact, is_company_admin').eq('id', session.user.id).single();
-  if (data) return { id: data.id, email: data.email, name: data.name, role: data.role, team: data.team, contact: data.contact, isCompanyAdmin: !!data.is_company_admin };
+  const { data, error } = await supabase.from('profiles').select('id, email, name, role, team, contact, is_company_admin, company_id').eq('id', session.user.id).single();
+  if (data) return { id: data.id, email: data.email, name: data.name, role: data.role, team: data.team, contact: data.contact, isCompanyAdmin: !!data.is_company_admin, companyId: data.company_id || null };
   // profiles 행이 아직 없는 경우(이메일 인증이 필요한 프로젝트에서는 signUp 시점에
   // auth.uid()가 없어 RLS 때문에 즉시 생성할 수 없었다) 최초 로그인 시점에 생성한다.
   if (error?.code === 'PGRST116') {
@@ -97,7 +97,24 @@ async function hydrateUserFromSession(session) {
       contact,
     }).select('id, email, name, role, team, contact').single();
     if (insertErr || !inserted) return null;
-    return { id: inserted.id, email: inserted.email, name: inserted.name, role: inserted.role, team: inserted.team, contact: inserted.contact, isCompanyAdmin: false };
+
+    // 회원가입 시 선택한 회사관리자/회사직원에 따라 companies/departments/profiles를 실제로 채운다.
+    // 이 지점은 signUp() 직후 즉시 세션이 있는 경우와, 이메일 인증 후 나중에 로그인하는 경우 둘 다
+    // profiles 행이 처음 생성되는 유일한 지점이라 회사 가입 처리를 여기 한 곳에만 두면 된다.
+    const accountType = session.user.user_metadata?.accountType;
+    const departmentName = session.user.user_metadata?.departmentName?.trim() || '';
+    let companyId = null;
+    if (accountType === 'admin' || accountType === 'employee') {
+      const { error: rpcErr } = accountType === 'admin'
+        ? await supabase.rpc('signup_create_company_as_admin', { p_company_name: team })
+        : await supabase.rpc('signup_join_company_as_employee', { p_company_name: team, p_department_name: departmentName });
+      if (rpcErr) throw new Error('계정은 생성됐지만 회사 정보 등록에 실패했습니다. 설정에서 다시 시도하거나 문의해주세요.');
+      // RPC가 profiles.company_id를 채운 뒤이므로, insert 시점 select에는 없던 값을 다시 조회한다.
+      const { data: refreshed } = await supabase.from('profiles').select('company_id').eq('id', inserted.id).single();
+      companyId = refreshed?.company_id || null;
+    }
+
+    return { id: inserted.id, email: inserted.email, name: inserted.name, role: inserted.role, team: inserted.team, contact: inserted.contact, isCompanyAdmin: accountType === 'admin', companyId };
   }
   return null;
 }
@@ -146,15 +163,16 @@ export async function login(email, password) {
   return _cachedUser;
 }
 
-export async function signup(email, password, name, contact, team, role) {
+export async function signup(email, password, name, contact, team, role, accountType, departmentName) {
   const displayName = name?.trim() || email.split('@')[0];
-  // name/contact/team/role은 auth 사용자 메타데이터에 저장해 둔다. 이메일 인증이 필요한 프로젝트는
-  // signUp 직후 세션이 없어(auth.uid() 없음) profiles 행을 바로 만들 수 없으므로,
-  // 실제 profiles 행 생성은 세션이 생기는 시점(hydrateUserFromSession)에 지연 처리한다.
+  // name/contact/team/role/accountType/departmentName은 auth 사용자 메타데이터에 저장해 둔다.
+  // 이메일 인증이 필요한 프로젝트는 signUp 직후 세션이 없어(auth.uid() 없음) profiles 행을 바로
+  // 만들 수 없으므로, 실제 profiles 행 생성(및 회사 가입 RPC 호출)은 세션이 생기는 시점
+  // (hydrateUserFromSession)에 지연 처리한다.
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { name: displayName, contact: contact?.trim() || '', team: team?.trim() || '', role: role?.trim() || '' } },
+    options: { data: { name: displayName, contact: contact?.trim() || '', team: team?.trim() || '', role: role?.trim() || '', accountType: accountType || '', departmentName: departmentName?.trim() || '' } },
   });
   if (error) {
     if (error.message?.includes('already registered') || error.message?.includes('already been registered')) {
@@ -183,6 +201,14 @@ export async function signup(email, password, name, contact, team, role) {
 export async function logout() {
   await supabase.auth.signOut();
   _cachedUser = null;
+}
+
+// 회원가입(회사직원) 화면에서 기존 회사 목록을 칩으로 보여주기 위한 조회.
+// 목록 조회 실패가 가입 자체를 막으면 안 되므로 에러를 던지지 않고 빈 배열을 반환한다.
+export async function getCompanyList() {
+  const { data, error } = await supabase.from('companies').select('id, name').order('name');
+  if (error) return [];
+  return data || [];
 }
 
 export function getTestAccounts() {
@@ -558,6 +584,34 @@ export async function getCompanyProjects() {
     groups.get(departmentName).push(project);
   }
   return [...groups.entries()].map(([departmentName, projects]) => ({ departmentName, projects }));
+}
+
+// 회사 관리자 전용: 같은 회사 소속 전체 부서의 직원(profiles) 목록을 부서별로 그룹핑해서 반환한다.
+// 보안 재감사(_review/secretary_test-20260723/02_security.md)에서 profiles_select_same_company RLS가
+// email/contact/notes/work_topics까지 전체 컬럼을 노출한다는 MEDIUM 이슈가 지적됐다 — 이 함수는
+// 그 취약점을 UI로 증폭시키지 않도록 최소 컬럼(id, name, role, department_id, is_company_admin)만
+// select한다. email/contact 등 민감 컬럼은 절대 select하지 않는다.
+export async function getCompanyEmployees() {
+  const user = await getCurrentUser();
+  if (!user?.companyId) return [];
+
+  const [{ data: profilesData, error: profilesErr }, { data: departmentsData, error: deptErr }] = await Promise.all([
+    supabase.from('profiles').select('id, name, role, department_id, is_company_admin').eq('company_id', user.companyId),
+    supabase.from('departments').select('id, name').eq('company_id', user.companyId),
+  ]);
+  if (profilesErr) throw profilesErr;
+  if (deptErr) throw deptErr;
+
+  const deptNameById = new Map((departmentsData || []).map((d) => [d.id, d.name]));
+
+  const groups = new Map();
+  for (const row of profilesData || []) {
+    const departmentName = deptNameById.get(row.department_id) || '미배정';
+    const employee = { id: row.id, name: row.name || '', role: row.role || '', isCompanyAdmin: !!row.is_company_admin };
+    if (!groups.has(departmentName)) groups.set(departmentName, []);
+    groups.get(departmentName).push(employee);
+  }
+  return [...groups.entries()].map(([departmentName, employees]) => ({ departmentName, employees }));
 }
 
 // ── Messages (교차 계정 배달: mailbox_owner_id로 조회, sender_id로 RLS 검증) ──

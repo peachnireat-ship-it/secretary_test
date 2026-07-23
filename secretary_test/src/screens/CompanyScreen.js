@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
-import { getCompanyProjects, updateProjectAsCompanyAdmin, deleteProjectAsCompanyAdmin } from '../services/storage';
+import { getCompanyProjects, updateProjectAsCompanyAdmin, deleteProjectAsCompanyAdmin, getCompanyEmployees } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { formatDeadline } from '../hooks/useProjectForm';
 import { statusColor, priorityColor } from '../utils/colors';
@@ -20,7 +20,9 @@ const PRIORITIES = ['높음', '보통', '낮음'];
 
 export default function CompanyScreen() {
   const insets = useSafeAreaInsets();
+  const [tab, setTab] = useState('projects'); // 'projects' | 'employees'
   const [groups, setGroups] = useState([]);
+  const [employeeGroups, setEmployeeGroups] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showDetail, setShowDetail] = useState(false);
@@ -37,9 +39,11 @@ export default function CompanyScreen() {
   async function load() {
     setLoading(true);
     try {
-      setGroups(await getCompanyProjects());
+      const [projectGroups, employeeGroupsResult] = await Promise.all([getCompanyProjects(), getCompanyEmployees()]);
+      setGroups(projectGroups);
+      setEmployeeGroups(employeeGroupsResult);
     } catch {
-      Alert.alert('오류', '회사 프로젝트를 불러오지 못했습니다.');
+      Alert.alert('오류', '회사 정보를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
@@ -99,16 +103,35 @@ export default function CompanyScreen() {
   }
 
   const totalProjectCount = groups.reduce((sum, g) => sum + g.projects.length, 0);
+  const totalEmployeeCount = employeeGroups.reduce((sum, g) => sum + g.employees.length, 0);
 
   return (
     <View style={s.root}>
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <View>
           <Text style={s.headerTitle}>회사</Text>
-          <Text style={s.headerSub}>부서별 프로젝트 {totalProjectCount}건</Text>
+          <Text style={s.headerSub}>
+            {tab === 'projects' ? `부서별 프로젝트 ${totalProjectCount}건` : `부서별 직원 ${totalEmployeeCount}명`}
+          </Text>
         </View>
       </View>
 
+      <View style={s.segmentRow}>
+        <TouchableOpacity
+          style={[s.segmentBtn, tab === 'projects' && s.segmentBtnActive]}
+          onPress={() => setTab('projects')}
+        >
+          <Text style={[s.segmentText, tab === 'projects' && s.segmentTextActive]}>프로젝트</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.segmentBtn, tab === 'employees' && s.segmentBtnActive]}
+          onPress={() => setTab('employees')}
+        >
+          <Text style={[s.segmentText, tab === 'employees' && s.segmentTextActive]}>직원</Text>
+        </TouchableOpacity>
+      </View>
+
+      {tab === 'projects' ? (
       <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
         {!loading && groups.length === 0 ? (
           <View style={s.emptyWrap}>
@@ -148,7 +171,7 @@ export default function CompanyScreen() {
                         <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
                           <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
                         </View>
-                        <Text style={[s.deadlineText, days < 0 && !isCompleted && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                        <Text style={[s.deadlineText, days < 0 && !isCompleted && s.textRed, days >= 0 && days <= 3 && s.textGold]}>
                           {item.deadline}{isCompleted && days < 0 ? '' : ` · ${daysLabel(days)}`}
                         </Text>
                       </View>
@@ -160,6 +183,39 @@ export default function CompanyScreen() {
           })
         )}
       </ScrollView>
+      ) : (
+      <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
+        {!loading && employeeGroups.length === 0 ? (
+          <View style={s.emptyWrap}>
+            <Text style={s.emptyText}>회사 직원이 없습니다</Text>
+          </View>
+        ) : (
+          employeeGroups.map((group) => (
+            <View key={group.departmentName} style={s.deptSection}>
+              <View style={s.deptHeaderRow}>
+                <Text style={s.deptName}>{group.departmentName}</Text>
+                <Text style={s.deptMeta}>{group.employees.length}명</Text>
+              </View>
+              {group.employees.map((employee) => (
+                <View key={employee.id} style={s.card}>
+                  <View style={s.cardTop}>
+                    <View style={s.cardTitleRow}>
+                      <Text style={s.cardTitle} numberOfLines={1}>{employee.name}</Text>
+                    </View>
+                    {employee.isCompanyAdmin && (
+                      <View style={s.adminBadge}>
+                        <Text style={s.adminBadgeText}>관리자</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={s.employeeRole} numberOfLines={1}>{employee.role || '직책 미등록'}</Text>
+                </View>
+              ))}
+            </View>
+          ))
+        )}
+      </ScrollView>
+      )}
 
       {/* ── 프로젝트 상세 모달 ── */}
       <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => setShowDetail(false)}>
@@ -261,10 +317,20 @@ const s = StyleSheet.create({
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   headerSub: { color: C.textSecondary, fontSize: 11, marginTop: 2 },
 
+  segmentRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 4 },
+  segmentBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, alignItems: 'center' },
+  segmentBtnActive: { borderColor: C.companyIndigo + '88', backgroundColor: C.companyIndigo + '18' },
+  segmentText: { color: C.textDim, fontSize: 13, fontWeight: '500' },
+  segmentTextActive: { color: C.companyIndigo },
+
   list: { flex: 1 },
   listContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100, gap: 20 },
   emptyWrap: { paddingTop: 60, alignItems: 'center', gap: 8 },
   emptyText: { color: C.textDim, fontSize: 14 },
+
+  adminBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: C.companyIndigo + '66', backgroundColor: C.companyIndigo + '18' },
+  adminBadgeText: { color: C.companyIndigo, fontSize: 10, fontWeight: '600' },
+  employeeRole: { color: C.textSecondary, fontSize: 12 },
 
   deptSection: { gap: 10 },
   deptHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2 },
@@ -313,6 +379,7 @@ const s = StyleSheet.create({
   modalCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
   textRed: { color: C.red },
+  textGold: { color: C.gold },
   modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.companyIndigo, alignItems: 'center' },
   modalConfirmText: { color: '#09090E', fontSize: 14, fontWeight: '600' },
 });

@@ -173,6 +173,11 @@ as $$ select coalesce(is_company_admin, false) from profiles where id = auth.uid
 create policy companies_select_same_company on companies
   for select using (id = my_company_id());
 
+-- 회원가입 화면(회사직원)에서 미로그인/미소속 상태로도 회사 목록을 봐야 하므로 공개 조회도 허용한다.
+-- 위 companies_select_same_company와는 permissive 정책이라 OR로 합쳐져 충돌 없다.
+create policy companies_select_public on companies
+  for select using (true);
+
 create policy departments_select_same_company on departments
   for select using (company_id = my_company_id());
 
@@ -186,6 +191,8 @@ create policy profiles_insert_own on profiles
 -- profiles_update_own은 row 단위 정책이라 컬럼 단위 제한이 불가능하다. 일반 사용자가
 -- is_company_admin/company_id/department_id를 직접 update()로 바꿔 셀프 승격하는 것을
 -- BEFORE UPDATE 트리거로 막는다(자세한 배경은 patch_company_department.sql 참고).
+-- app.bypass_privilege_trigger 예외는 회원가입 RPC(signup_create_company_as_admin /
+-- signup_join_company_as_employee) 내부에서만 통제된 경로로 켜진다(patch_signup_company_role.sql 참고).
 create or replace function prevent_privileged_profile_self_update()
 returns trigger
 language plpgsql
@@ -193,7 +200,8 @@ security definer
 set search_path = public
 as $$
 begin
-  if auth.role() = 'service_role' then
+  if auth.role() = 'service_role'
+     or current_setting('app.bypass_privilege_trigger', true) = 'true' then
     return new;
   end if;
   if new.is_company_admin is distinct from old.is_company_admin
@@ -213,6 +221,66 @@ for each row execute function prevent_privileged_profile_self_update();
 
 create policy profiles_select_same_company on profiles
   for select using (company_id is not null and company_id = my_company_id());
+
+-- ── 회원가입 RPC: 회사관리자/회사직원 선택 가입(LoginScreen.js) ──────
+-- 안전 불변식: signup_create_company_as_admin은 항상 새로 insert한 회사 id만 사용하므로
+-- 기존 회사의 관리자로 셀프 승격 불가능. signup_join_company_as_employee는 is_company_admin을
+-- 항상 false로만 설정하므로 이 경로로 관리자 권한 취득 불가능. 자세한 배경은
+-- patch_signup_company_role.sql 참고.
+create or replace function signup_create_company_as_admin(p_company_name text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+begin
+  if p_company_name is null or btrim(p_company_name) = '' then
+    raise exception '회사명을 입력해주세요.';
+  end if;
+  insert into companies (name) values (btrim(p_company_name)) returning id into v_company_id;
+  perform set_config('app.bypass_privilege_trigger', 'true', true);
+  update profiles
+    set company_id = v_company_id, department_id = null, is_company_admin = true
+    where id = auth.uid();
+end;
+$$;
+grant execute on function signup_create_company_as_admin(text) to authenticated;
+
+create or replace function signup_join_company_as_employee(p_company_name text, p_department_name text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+  v_department_id uuid;
+  v_dept text;
+begin
+  if p_company_name is null or btrim(p_company_name) = '' then
+    raise exception '회사명을 입력해주세요.';
+  end if;
+  v_dept := coalesce(nullif(btrim(p_department_name), ''), '미지정');
+
+  select id into v_company_id from companies where name = btrim(p_company_name);
+  if v_company_id is null then
+    insert into companies (name) values (btrim(p_company_name)) returning id into v_company_id;
+  end if;
+
+  select id into v_department_id from departments where company_id = v_company_id and name = v_dept;
+  if v_department_id is null then
+    insert into departments (company_id, name) values (v_company_id, v_dept) returning id into v_department_id;
+  end if;
+
+  perform set_config('app.bypass_privilege_trigger', 'true', true);
+  update profiles
+    set company_id = v_company_id, department_id = v_department_id, is_company_admin = false
+    where id = auth.uid();
+end;
+$$;
+grant execute on function signup_join_company_as_employee(text, text) to authenticated;
 
 create policy schedules_all_own on schedules
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
