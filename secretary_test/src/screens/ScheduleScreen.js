@@ -1136,7 +1136,13 @@ export default function ScheduleScreen({ navigation, route }) {
                     <TouchableOpacity
                       style={s.notifyEmailRow}
                       activeOpacity={0.7}
-                      onPress={() => setEditNotifyEmail((prev) => !prev)}
+                      onPress={() => {
+                        if (editClientIds.length === 0) {
+                          Alert.alert('안내', '선택된 관련 인물이 없습니다.');
+                          return;
+                        }
+                        setEditNotifyEmail((prev) => !prev);
+                      }}
                     >
                       <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
                         {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
