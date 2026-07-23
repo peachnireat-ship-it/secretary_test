@@ -9,6 +9,23 @@ drop table if exists projects cascade;
 drop table if exists clients cascade;
 drop table if exists schedules cascade;
 drop table if exists profiles cascade;
+drop table if exists departments cascade;
+drop table if exists companies cascade;
+
+-- ── companies (회사 계정 시나리오) ─────────────────────────
+create table companies (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  created_at timestamptz not null default now()
+);
+
+-- ── departments (회사 소속 부서) ───────────────────────────
+create table departments (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies(id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now()
+);
 
 -- ── profiles ─────────────────────────────────────────────
 create table profiles (
@@ -21,6 +38,9 @@ create table profiles (
   notes text not null default '',
   work_topics text not null default '',
   legacy_data_migrated boolean not null default false,
+  company_id uuid references companies(id) on delete set null,
+  department_id uuid references departments(id) on delete set null,
+  is_company_admin boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -128,6 +148,8 @@ create table messages (
 create index messages_mailbox_idx on messages(mailbox_owner_id);
 
 -- ── RLS 활성화 ────────────────────────────────────────────
+alter table companies enable row level security;
+alter table departments enable row level security;
 alter table profiles enable row level security;
 alter table schedules enable row level security;
 alter table clients enable row level security;
@@ -137,12 +159,60 @@ alter table meeting_records enable row level security;
 alter table client_favorites enable row level security;
 alter table messages enable row level security;
 
+-- ── RLS 무한 재귀 방지 헬퍼 함수 (SECURITY DEFINER) ────────
+create or replace function my_company_id() returns uuid
+language sql security definer stable
+set search_path = public
+as $$ select company_id from profiles where id = auth.uid() $$;
+
+create or replace function my_is_company_admin() returns boolean
+language sql security definer stable
+set search_path = public
+as $$ select coalesce(is_company_admin, false) from profiles where id = auth.uid() $$;
+
+create policy companies_select_same_company on companies
+  for select using (id = my_company_id());
+
+create policy departments_select_same_company on departments
+  for select using (company_id = my_company_id());
+
 create policy profiles_select_own on profiles
   for select using (id = auth.uid());
 create policy profiles_update_own on profiles
   for update using (id = auth.uid()) with check (id = auth.uid());
 create policy profiles_insert_own on profiles
   for insert with check (id = auth.uid());
+
+-- profiles_update_own은 row 단위 정책이라 컬럼 단위 제한이 불가능하다. 일반 사용자가
+-- is_company_admin/company_id/department_id를 직접 update()로 바꿔 셀프 승격하는 것을
+-- BEFORE UPDATE 트리거로 막는다(자세한 배경은 patch_company_department.sql 참고).
+create or replace function prevent_privileged_profile_self_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.role() = 'service_role' then
+    return new;
+  end if;
+  if new.is_company_admin is distinct from old.is_company_admin
+     or new.company_id is distinct from old.company_id
+     or new.department_id is distinct from old.department_id then
+    new.is_company_admin := old.is_company_admin;
+    new.company_id := old.company_id;
+    new.department_id := old.department_id;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger trg_prevent_privileged_profile_self_update
+before update on profiles
+for each row execute function prevent_privileged_profile_self_update();
+
+create policy profiles_select_same_company on profiles
+  for select using (company_id is not null and company_id = my_company_id());
 
 create policy schedules_all_own on schedules
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
@@ -155,6 +225,27 @@ create policy histories_all_own on histories
 
 create policy projects_all_own on projects
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create policy projects_select_company_admin on projects
+  for select using (
+    my_is_company_admin()
+    and exists (select 1 from profiles p where p.id = projects.user_id and p.company_id = my_company_id())
+  );
+
+create policy projects_update_company_admin on projects
+  for update using (
+    my_is_company_admin()
+    and exists (select 1 from profiles p where p.id = projects.user_id and p.company_id = my_company_id())
+  ) with check (
+    my_is_company_admin()
+    and exists (select 1 from profiles p where p.id = projects.user_id and p.company_id = my_company_id())
+  );
+
+create policy projects_delete_company_admin on projects
+  for delete using (
+    my_is_company_admin()
+    and exists (select 1 from profiles p where p.id = projects.user_id and p.company_id = my_company_id())
+  );
 
 create policy meeting_records_all_own on meeting_records
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());

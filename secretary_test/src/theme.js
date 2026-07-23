@@ -13,4 +13,5 @@ export const C = {
   accentTeal: '#4AADA0',
   accentPurple: '#8B6FC4',
   red: '#C45B5B',
+  companyIndigo: '#5B6FC4', // 회사 탭 (회사 관리자 전용)
 };

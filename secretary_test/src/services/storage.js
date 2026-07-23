@@ -67,7 +67,8 @@ function findRoster({ id, legacyId }) {
 }
 
 function rosterToUser({ id, email, name, role, team }) {
-  return { id, email, name, role, team };
+  // ROSTER(하드코딩 6개 테스트 계정)는 회사 계정 시나리오 밖이므로 항상 false.
+  return { id, email, name, role, team, isCompanyAdmin: false };
 }
 
 let _cachedUser = null;
@@ -76,9 +77,10 @@ async function hydrateUserFromSession(session) {
   if (!session?.user) return null;
   const entry = findRoster({ id: session.user.id });
   if (entry) return rosterToUser(entry);
-  // ROSTER에 없는 계정(회원가입으로 새로 생성된 계정)은 profiles 테이블에서 직접 조회한다.
-  const { data, error } = await supabase.from('profiles').select('id, email, name, role, team, contact').eq('id', session.user.id).single();
-  if (data) return { id: data.id, email: data.email, name: data.name, role: data.role, team: data.team, contact: data.contact };
+  // ROSTER에 없는 계정(회원가입으로 새로 생성된 계정, 회사 계정 시나리오 계정 포함)은
+  // profiles 테이블에서 직접 조회한다.
+  const { data, error } = await supabase.from('profiles').select('id, email, name, role, team, contact, is_company_admin').eq('id', session.user.id).single();
+  if (data) return { id: data.id, email: data.email, name: data.name, role: data.role, team: data.team, contact: data.contact, isCompanyAdmin: !!data.is_company_admin };
   // profiles 행이 아직 없는 경우(이메일 인증이 필요한 프로젝트에서는 signUp 시점에
   // auth.uid()가 없어 RLS 때문에 즉시 생성할 수 없었다) 최초 로그인 시점에 생성한다.
   if (error?.code === 'PGRST116') {
@@ -95,7 +97,7 @@ async function hydrateUserFromSession(session) {
       contact,
     }).select('id, email, name, role, team, contact').single();
     if (insertErr || !inserted) return null;
-    return { id: inserted.id, email: inserted.email, name: inserted.name, role: inserted.role, team: inserted.team, contact: inserted.contact };
+    return { id: inserted.id, email: inserted.email, name: inserted.name, role: inserted.role, team: inserted.team, contact: inserted.contact, isCompanyAdmin: false };
   }
   return null;
 }
@@ -518,6 +520,44 @@ export async function deleteProject(id) {
   const { error } = await supabase.from('projects').delete().eq('id', id).eq('user_id', user.id);
   if (error) throw error;
   return getProjects();
+}
+
+// 회사 관리자 전용: updateProject/deleteProject와 달리 .eq('user_id', ...) 필터를 걸지 않는다
+// (본인 프로젝트가 아닌 다른 부서 직원의 프로젝트도 대상이어야 하므로). RLS의
+// projects_update_company_admin/projects_delete_company_admin 정책이 "같은 회사 + 관리자"만
+// 허용하므로 안전하다 — 일반 사용자가 호출해도 RLS가 차단한다.
+export async function updateProjectAsCompanyAdmin(id, changes) {
+  const row = { ...toRow(changes, PROJECT_KEYMAP), updated_at: Date.now() };
+  const { error } = await supabase.from('projects').update(row).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteProjectAsCompanyAdmin(id) {
+  const { error } = await supabase.from('projects').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// 회사 관리자 전용: 같은 회사 소속 전체 부서의 프로젝트를 부서별로 그룹핑해서 반환한다.
+// RLS(projects_select_company_admin)가 "같은 회사 소속의 프로젝트만" 이미 필터링해주므로
+// 여기서 company_id로 다시 필터링할 필요는 없다(회사 관리자가 아니면 RLS가 애초에 빈 결과를 반환).
+export async function getCompanyProjects() {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*, profiles!inner(name, team, department_id, departments(name))')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+
+  const groups = new Map();
+  for (const row of data) {
+    const { profiles: owner, ...projectRow } = row;
+    const project = fromRow(projectRow, PROJECT_KEYMAP);
+    project.ownerName = owner?.name || '';
+    project.ownerTeam = owner?.team || '';
+    const departmentName = owner?.departments?.name || '미배정';
+    if (!groups.has(departmentName)) groups.set(departmentName, []);
+    groups.get(departmentName).push(project);
+  }
+  return [...groups.entries()].map(([departmentName, projects]) => ({ departmentName, projects }));
 }
 
 // ── Messages (교차 계정 배달: mailbox_owner_id로 조회, sender_id로 RLS 검증) ──

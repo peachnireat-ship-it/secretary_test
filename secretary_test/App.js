@@ -18,9 +18,10 @@ const ICONS = {
   메세지: { active: '◫', inactive: '◫' },
   회의록: { active: '◍', inactive: '◍' },
   설정: { active: '◎', inactive: '◎' },
+  회사: { active: '◆', inactive: '◆' },
 };
 
-function TabNavigator() {
+function TabNavigator({ isCompanyAdmin }) {
   const insets = useSafeAreaInsets();
   // 웹은 insets.bottom이 0이라 네이티브 기준 여백만으로는 라벨 하단이 살짝 잘림 (브라우저 line-height 보정)
   const webExtraBottom = Platform.OS === 'web' ? 10 : 0;
@@ -61,6 +62,10 @@ function TabNavigator() {
       <Tab.Screen name="메세지" getComponent={() => require('./src/screens/MessageScreen').default} />
       <Tab.Screen name="회의록" getComponent={() => require('./src/screens/MeetingScreen').default} />
       <Tab.Screen name="설정" getComponent={() => require('./src/screens/SettingsScreen').default} />
+      {/* 회사 관리자 계정에서만 노출 (profiles.is_company_admin 기반) */}
+      {isCompanyAdmin && (
+        <Tab.Screen name="회사" getComponent={() => require('./src/screens/CompanyScreen').default} />
+      )}
     </Tab.Navigator>
   );
 }
@@ -91,7 +96,7 @@ function AppContent() {
     <SafeAreaProvider>
       <NavigationContainer>
         <StatusBar style="light" />
-        <TabNavigator key={user.id} />
+        <TabNavigator key={user.id} isCompanyAdmin={!!user.isCompanyAdmin} />
       </NavigationContainer>
     </SafeAreaProvider>
   );
@@ -138,6 +143,6 @@ const webStyles = StyleSheet.create(
 );
 
 function tabColor(name) {
-  const map = { 홈: C.gold, 일정: C.accentBlue, 거래처: C.accentTeal, 프로젝트: C.red, 메세지: C.accentPurple, 회의록: C.accentTeal, 설정: C.textSecondary };
+  const map = { 홈: C.gold, 일정: C.accentBlue, 거래처: C.accentTeal, 프로젝트: C.red, 메세지: C.accentPurple, 회의록: C.accentTeal, 설정: C.textSecondary, 회사: C.companyIndigo };
   return map[name] || C.textPrimary;
 }
