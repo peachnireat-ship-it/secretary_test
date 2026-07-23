@@ -1,8 +1,9 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Animated,
+  Animated, Share,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Alert } from '../utils/alertCompat';
 import Slider from '@react-native-community/slider';
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -260,6 +261,32 @@ export default function ProjectScreen({ navigation, route }) {
       { text: '아니오', style: 'cancel', onPress: () => handleCopy(project) },
       { text: '예', onPress: () => { setCopyTarget(project); setCopyTitleInput(''); setShowCopyTitleModal(true); } },
     ]);
+  }
+
+  async function handleShare(project) {
+    const lines = ['[Your Secretary]', `📁 ${project.title}`];
+    lines.push(`마감일: ${project.deadline}`);
+    lines.push(`상태: ${project.status}`);
+    lines.push(`진행률: ${project.progress}% 완료`);
+    lines.push(`우선순위: ${project.priority}`);
+    if (project.notes) lines.push(`메모: ${project.notes}`);
+    const people = (project.clientIds || []).map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+    if (people.length > 0) lines.push(`관련 인물: ${people.map((c) => c.name).join(', ')}`);
+    const text = lines.join('\n');
+    if (Platform.OS === 'web') {
+      try {
+        await Clipboard.setStringAsync(text);
+        Alert.alert('복사 완료', '프로젝트 내용이 클립보드에 복사되었습니다. 원하는 곳에 붙여넣으세요.');
+      } catch {
+        Alert.alert('복사 실패', '클립보드 복사 중 오류가 발생했습니다.');
+      }
+      return;
+    }
+    try {
+      await Share.share({ message: text });
+    } catch {
+      Alert.alert('공유 실패', '공유 중 오류가 발생했습니다.');
+    }
   }
 
   function openClientPicker(speaker) {
@@ -749,6 +776,9 @@ export default function ProjectScreen({ navigation, route }) {
                   </TouchableOpacity>
                   <TouchableOpacity style={s.modalCancel} onPress={() => confirmCopy(detailProject)}>
                     <Text style={s.modalCancelText}>복사</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.modalCancel} onPress={() => handleShare(detailProject)}>
+                    <Text style={[s.modalCancelText, s.textBlue]}>공유</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
                     <Text style={s.modalConfirmText}>저장</Text>
@@ -1927,6 +1957,7 @@ const s = StyleSheet.create({
   removePersonIcon: { color: C.textDim, fontSize: 13 },
   personChevron: { color: C.textDim, fontSize: 16, paddingLeft: 4 },
   textRed: { color: C.red },
+  textBlue: { color: C.accentBlue },
   speakerInputFixed: { width: 64, flex: 0 },
   modalOverlayCentered: Platform.OS === 'web'
     ? { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }

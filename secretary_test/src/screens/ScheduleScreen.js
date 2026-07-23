@@ -1,8 +1,9 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Animated, PanResponder, Linking,
+  Animated, PanResponder, Linking, Share,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Alert } from '../utils/alertCompat';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -382,6 +383,31 @@ export default function ScheduleScreen({ navigation, route }) {
     const updated = await addSchedule(copied);
     setSchedules(updated);
     setShowScheduleView(false);
+  }
+
+  async function handleShare(schedule) {
+    const lines = ['[Your Secretary]', `📅 ${schedule.title}`];
+    lines.push(`시작: ${formatStartDateTime(schedule)}`);
+    if (schedule.endDate) lines.push(`마감: ${formatDateTimeKo(schedule.endDate)}`);
+    lines.push(`분류: ${schedule.tag}`);
+    if (schedule.notes) lines.push(`메모: ${schedule.notes}`);
+    const people = (schedule.clientIds || []).map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+    if (people.length > 0) lines.push(`관련 인물: ${people.map((c) => c.name).join(', ')}`);
+    const text = lines.join('\n');
+    if (Platform.OS === 'web') {
+      try {
+        await Clipboard.setStringAsync(text);
+        Alert.alert('복사 완료', '일정 내용이 클립보드에 복사되었습니다. 원하는 곳에 붙여넣으세요.');
+      } catch {
+        Alert.alert('복사 실패', '클립보드 복사 중 오류가 발생했습니다.');
+      }
+      return;
+    }
+    try {
+      await Share.share({ message: text });
+    } catch {
+      Alert.alert('공유 실패', '공유 중 오류가 발생했습니다.');
+    }
   }
 
   function confirmCopy(schedule) {
@@ -1027,34 +1053,6 @@ export default function ScheduleScreen({ navigation, route }) {
                     {editMode ? '일정 수정' : viewSchedule.title}
                   </Text>
                   <View style={s.titleActionRow}>
-                    {!editMode && (
-                      <>
-                        <TouchableOpacity onPress={() => {
-                          const { ampm, time12 } = from24h(viewSchedule.time);
-                          setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm);
-                          setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []);
-                          setEditNotifyEmail(viewSchedule.notifyEmail !== false);
-                          const sp = (viewSchedule.startDate || '').split(' ');
-                          setEditStartDate(sp[0] || '');
-                          if (sp[1]) { const r = from24h(sp[1]); setEditStartAmPm(r.ampm); setEditStartTime(r.time12); } else { setEditStartAmPm('오전'); setEditStartTime('09:00'); }
-                          const ep = (viewSchedule.endDate || '').split(' ');
-                          setEditEndDate(ep[0] || '');
-                          if (ep[1]) { const r = from24h(ep[1]); setEditEndAmPm(r.ampm); setEditEndTime(r.time12); } else { setEditEndAmPm('오후'); setEditEndTime('06:00'); }
-                          setEditMode(true);
-                        }}>
-                          <Text style={s.editBtn}>수정</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => Alert.alert('삭제', `"${viewSchedule.title}" 일정을 삭제할까요?`, [
-                          { text: '취소', style: 'cancel' },
-                          { text: '삭제', style: 'destructive', onPress: async () => { const updated = await deleteSchedule(viewSchedule.id); setSchedules(updated); setShowScheduleView(false); } },
-                        ])}>
-                          <Text style={s.deleteBtn}>삭제</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => confirmCopy(viewSchedule)}>
-                          <Text style={s.copyBtn}>복사</Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
                     <TouchableOpacity onPress={() => { setShowScheduleView(false); setEditMode(false); }}>
                       <Text style={s.closeBtn}>✕</Text>
                     </TouchableOpacity>
@@ -1152,6 +1150,36 @@ export default function ScheduleScreen({ navigation, route }) {
                 ) : (
                   <>
                     <Text style={s.modalDateLabel}>{formatDateKo(viewSchedule.date)}</Text>
+
+                    <View style={s.scheduleActionRow}>
+                      <TouchableOpacity onPress={() => {
+                        const { ampm, time12 } = from24h(viewSchedule.time);
+                        setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm);
+                        setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []);
+                        setEditNotifyEmail(viewSchedule.notifyEmail !== false);
+                        const sp = (viewSchedule.startDate || '').split(' ');
+                        setEditStartDate(sp[0] || '');
+                        if (sp[1]) { const r = from24h(sp[1]); setEditStartAmPm(r.ampm); setEditStartTime(r.time12); } else { setEditStartAmPm('오전'); setEditStartTime('09:00'); }
+                        const ep = (viewSchedule.endDate || '').split(' ');
+                        setEditEndDate(ep[0] || '');
+                        if (ep[1]) { const r = from24h(ep[1]); setEditEndAmPm(r.ampm); setEditEndTime(r.time12); } else { setEditEndAmPm('오후'); setEditEndTime('06:00'); }
+                        setEditMode(true);
+                      }}>
+                        <Text style={s.editBtn}>수정</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => Alert.alert('삭제', `"${viewSchedule.title}" 일정을 삭제할까요?`, [
+                        { text: '취소', style: 'cancel' },
+                        { text: '삭제', style: 'destructive', onPress: async () => { const updated = await deleteSchedule(viewSchedule.id); setSchedules(updated); setShowScheduleView(false); } },
+                      ])}>
+                        <Text style={s.deleteBtn}>삭제</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => confirmCopy(viewSchedule)}>
+                        <Text style={s.copyBtn}>복사</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleShare(viewSchedule)}>
+                        <Text style={s.shareBtn}>공유</Text>
+                      </TouchableOpacity>
+                    </View>
 
                     <Text style={s.viewLabel}>시작일시</Text>
                     <Text style={s.viewText}>{formatStartDateTime(viewSchedule)}</Text>
@@ -1578,7 +1606,8 @@ const s = StyleSheet.create({
   modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2 },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
-  modalDateLabel: { color: C.textDim, fontSize: 12, marginBottom: 20 },
+  modalDateLabel: { color: C.textDim, fontSize: 12, marginBottom: 12 },
+  scheduleActionRow: { flexDirection: 'row', gap: 16, alignItems: 'center', marginBottom: 20 },
   inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 8, marginTop: 16 },
   input: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12 },
   timeRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
@@ -1614,6 +1643,7 @@ const s = StyleSheet.create({
   editBtn: { color: C.accentBlue, fontSize: 14, fontWeight: '500', padding: 4 },
   deleteBtn: { color: '#C45B5B', fontSize: 14, fontWeight: '500', padding: 4 },
   copyBtn: { color: C.textSecondary, fontSize: 14, fontWeight: '500', padding: 4 },
+  shareBtn: { color: C.accentBlue, fontSize: 14, fontWeight: '500', padding: 4 },
   selectedPeopleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   selectedPersonChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 12 },
   selectedPersonChipText: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
