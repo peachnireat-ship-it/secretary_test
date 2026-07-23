@@ -210,6 +210,12 @@ export default function ScheduleScreen({ navigation, route }) {
     navigation.setParams({ openAI: undefined });
   }, [route?.params?.openAI]);
 
+  useEffect(() => {
+    if (!editMode) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEditNotifyEmail(editClientIds.length > 0);
+  }, [editClientIds, editMode]);
+
   useFocusEffect(useCallback(() => { load(); }, []));
 
   const monthPrefix = `${calYear}-${String(calMonth).padStart(2, '0')}`;
@@ -1156,7 +1162,6 @@ export default function ScheduleScreen({ navigation, route }) {
                         const { ampm, time12 } = from24h(viewSchedule.time);
                         setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm);
                         setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []);
-                        setEditNotifyEmail(viewSchedule.notifyEmail !== false);
                         const sp = (viewSchedule.startDate || '').split(' ');
                         setEditStartDate(sp[0] || '');
                         if (sp[1]) { const r = from24h(sp[1]); setEditStartAmPm(r.ampm); setEditStartTime(r.time12); } else { setEditStartAmPm('오전'); setEditStartTime('09:00'); }
@@ -1607,7 +1612,7 @@ const s = StyleSheet.create({
   modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2 },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
   modalDateLabel: { color: C.textDim, fontSize: 12, marginBottom: 12 },
-  scheduleActionRow: { flexDirection: 'row', gap: 16, alignItems: 'center', marginBottom: 20 },
+  scheduleActionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 20 },
   inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5, marginBottom: 8, marginTop: 16 },
   input: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12 },
   timeRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
