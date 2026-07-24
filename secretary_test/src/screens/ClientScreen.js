@@ -10,7 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
-import { getClients, addClient, updateClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail } from '../services/storage';
+import { getClients, addClient, updateClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
@@ -62,6 +62,9 @@ export default function ClientScreen({ navigation, route }) {
   const [newEmail, setNewEmail] = useState('');
   const [newSns, setNewSns] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  // "기존 회원 검색"에서 선택한 profiles.id — 설정되어 있으면 addClient()가 ROSTER 이름 매칭
+  // 휴리스틱보다 이 값을 우선해 linked_profile_id로 확실하게 연결한다.
+  const [newLinkedProfileId, setNewLinkedProfileId] = useState(null);
 
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
@@ -70,6 +73,14 @@ export default function ClientScreen({ navigation, route }) {
   const [contactLoading, setContactLoading] = useState(false);
   const [showPasteContacts, setShowPasteContacts] = useState(false);
   const [pasteText, setPasteText] = useState('');
+
+  // ── 기존 회원 검색 (opt-in discoverable 회원 검색으로 거래처 추가) ──
+  const [showMemberSearch, setShowMemberSearch] = useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [memberSearchResults, setMemberSearchResults] = useState([]);
+  const [memberSearchLoading, setMemberSearchLoading] = useState(false);
+  // 검색을 한 번이라도 시도했는지 — "검색 결과 없음" 안내를 최초 진입 시(검색 전)에는 숨기기 위함
+  const [memberSearchDone, setMemberSearchDone] = useState(false);
 
   const [selectedMeetingRecord, setSelectedMeetingRecord] = useState(null);
   const [showAI, setShowAI] = useState(false);
@@ -177,9 +188,50 @@ export default function ClientScreen({ navigation, route }) {
     setNewCompany(contact.company || '');
     setNewRole(contact.jobTitle || '');
     setNewEmail(contact.emails?.[0]?.email || '');
+    setNewLinkedProfileId(null);
     setShowContactPicker(false);
     setContactSearch('');
     setShowAddClient(true);
+  }
+
+  // "기존 회원 검색" — discoverable=true(옵트인)로 설정한 가입 회원만 대상으로 검색한다.
+  // 검색어가 비어있으면 searchDiscoverableProfiles()가 API 호출 없이 빈 배열을 반환한다.
+  async function handleSearchMembers() {
+    const q = memberSearchQuery.trim();
+    if (!q) return;
+    setMemberSearchLoading(true);
+    try {
+      const results = await searchDiscoverableProfiles(q);
+      setMemberSearchResults(results);
+    } finally {
+      setMemberSearchLoading(false);
+      setMemberSearchDone(true);
+    }
+  }
+
+  function closeMemberSearch() {
+    setShowMemberSearch(false);
+    setMemberSearchQuery('');
+    setMemberSearchResults([]);
+    setMemberSearchDone(false);
+  }
+
+  // 검색 결과에서 회원을 선택하면 "직접 입력" 폼으로 이동하되, 이름/회사(=team)/직책/이메일을
+  // 미리 채우고 linked_profile_id를 확실하게 연결하기 위해 newLinkedProfileId를 세팅해둔다.
+  // contact(연락처)는 검색 결과에 없으므로(비공개 정보) 빈칸으로 두고 사용자가 직접 입력해야 한다.
+  function selectMemberResult(member) {
+    setNewName(member.name || '');
+    setNewCompany(member.team || '');
+    setNewRole(member.role || '');
+    setNewEmail(member.email || '');
+    setNewContact('');
+    setNewWorkContact('');
+    setNewSns('');
+    setNewNotes('');
+    setNewLinkedProfileId(member.id);
+    closeMemberSearch();
+    // 안드로이드 Modal 레이스 컨디션(handlePickFromContacts와 동일) 회피 — 다음 모달은 지연 오픈
+    setTimeout(() => setShowAddClient(true), 300);
   }
 
   function handleParsePastedContacts() {
@@ -225,10 +277,14 @@ export default function ClientScreen({ navigation, route }) {
       Alert.alert('입력 길이 초과', `메모는 최대 ${NOTES_MAX_LENGTH}자까지 입력 가능합니다.`);
       return;
     }
-    const updated = await addClient({ name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(), workContact: newWorkContact.trim(), email: newEmail.trim(), sns: newSns.trim(), notes: newNotes.trim() });
+    const updated = await addClient({
+      name: newName.trim(), company: newCompany.trim(), role: newRole.trim(), contact: newContact.trim(),
+      workContact: newWorkContact.trim(), email: newEmail.trim(), sns: newSns.trim(), notes: newNotes.trim(),
+      ...(newLinkedProfileId ? { linkedProfileId: newLinkedProfileId } : {}),
+    });
     setClients(updated);
     setShowAddClient(false);
-    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes('');
+    setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes(''); setNewLinkedProfileId(null);
   }
 
   function openEditClient(client) {
@@ -604,9 +660,13 @@ export default function ClientScreen({ navigation, route }) {
                 <Text style={s.closeBtn}>✕</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={s.sourceOption} onPress={() => { setShowSourcePicker(false); setTimeout(() => setShowAddClient(true), 300); }}>
+            <TouchableOpacity style={s.sourceOption} onPress={() => { setShowSourcePicker(false); setNewLinkedProfileId(null); setTimeout(() => setShowAddClient(true), 300); }}>
               <Text style={s.sourceIcon}>✏️</Text>
               <Text style={s.sourceOptionText}>직접 입력</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sourceOption} onPress={() => { setShowSourcePicker(false); setTimeout(() => setShowMemberSearch(true), 300); }}>
+              <Text style={s.sourceIcon}>🔍</Text>
+              <Text style={s.sourceOptionText}>기존 회원 검색</Text>
             </TouchableOpacity>
             {Platform.OS !== 'web' && (
               <TouchableOpacity style={[s.sourceOption, s.noBorderBottom]} onPress={handlePickFromContacts}>
@@ -697,6 +757,62 @@ export default function ClientScreen({ navigation, route }) {
                 <Text style={s.modalConfirmText}>다음</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 기존 회원 검색 모달 ── */}
+      <Modal visible={showMemberSearch} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
+          <View style={[s.modalSheet, s.h80pct]}>
+            <View style={s.modalHandle} />
+            <View style={s.chatHeader}>
+              <Text style={s.modalTitle}>기존 회원 검색</Text>
+              <TouchableOpacity onPress={closeMemberSearch}>
+                <Text style={s.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={s.pasteHint}>
+              이름·이메일·회사명으로 검색할 수 있습니다. “다른 사용자 검색에 내 정보 노출”을 허용한 회원만 검색 결과에 나타납니다.
+            </Text>
+            <View style={s.memberSearchRow}>
+              <TextInput
+                style={[s.searchInput, commonStyles.flex1]}
+                value={memberSearchQuery}
+                onChangeText={(v) => { setMemberSearchQuery(v); setMemberSearchDone(false); }}
+                placeholder="이름, 이메일, 회사명"
+                placeholderTextColor={C.textDim}
+                autoCapitalize="none"
+                returnKeyType="search"
+                onSubmitEditing={handleSearchMembers}
+              />
+              <TouchableOpacity
+                style={[s.memberSearchBtn, (!memberSearchQuery.trim() || memberSearchLoading) && commonStyles.opacity40]}
+                onPress={handleSearchMembers}
+                disabled={!memberSearchQuery.trim() || memberSearchLoading}
+              >
+                <Text style={s.memberSearchBtnText}>검색</Text>
+              </TouchableOpacity>
+            </View>
+            {memberSearchLoading ? (
+              <ActivityIndicator size="large" color={C.accentTeal} style={s.mt24} />
+            ) : memberSearchDone && memberSearchResults.length === 0 ? (
+              <Text style={[s.emptyText, s.mt24]}>검색 결과가 없습니다.{'\n'}상대방이 검색 노출을 허용하지 않았을 수 있습니다.</Text>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {memberSearchResults.map((member) => (
+                  <TouchableOpacity key={member.id} style={s.contactItem} onPress={() => selectMemberResult(member)}>
+                    <View style={s.clientAvatar}>
+                      <Text style={s.clientAvatarText}>{member.name?.[0] || '?'}</Text>
+                    </View>
+                    <View style={commonStyles.flex1}>
+                      <Text style={s.clientName}>{member.name}</Text>
+                      <Text style={s.clientRole}>{member.team}{member.role ? ` · ${member.role}` : ''}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -1353,6 +1469,9 @@ const s = StyleSheet.create({
   contactItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   pasteHint: { color: C.textDim, fontSize: 11, lineHeight: 16, marginBottom: 12 },
   pasteInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12, minHeight: 180 },
+  memberSearchRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  memberSearchBtn: { paddingHorizontal: 18, borderRadius: 12, backgroundColor: C.accentTeal, alignItems: 'center', justifyContent: 'center' },
+  memberSearchBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 
   // Detail Modal
   // 웹에서 Modal은 document.body로 포탈되어 App.js의 480px 폭 제한을 벗어나므로 여기서 다시 맞춘다

@@ -1,4 +1,4 @@
-import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Platform, Modal, KeyboardAvoidingView } from 'react-native';
+import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Platform, Modal, KeyboardAvoidingView, Switch } from 'react-native';
 import { Alert } from '../utils/alertCompat';
 import { useState, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -80,7 +80,11 @@ export default function SettingsScreen() {
     hasLegacyLocalData().then(setShowLegacyUpload);
   }, []);
 
-  useFocusEffect(useCallback(() => { getAllAccounts().then(setAccounts); }, []));
+  useFocusEffect(useCallback(() => {
+    getAllAccounts().then(setAccounts);
+    // 검색 노출 토글은 다른 화면(설정 재진입 등)에서 값이 바뀌었을 수 있으니 포커스마다 최신값을 다시 읽는다.
+    getUserProfile().then((p) => { if (p) setProfile(p); });
+  }, []));
 
   async function handleLegacyUpload() {
     setLegacyUploading(true);
@@ -123,6 +127,19 @@ export default function SettingsScreen() {
   async function handleProviderChange(p) {
     setProviderState(p);
     await setAiProvider(p);
+  }
+
+  // 다른 사용자의 "기존 회원 검색"(거래처 추가)에 내 정보 노출 허용 여부. 기본값 false(옵트인) —
+  // 사용자가 여기서 명시적으로 켜야만 search_discoverable_profiles() 결과에 노출된다.
+  async function handleToggleDiscoverable(value) {
+    setProfile((p) => (p ? { ...p, discoverable: value } : p));
+    try {
+      await saveUserProfile({ discoverable: value });
+    } catch (_e) {
+      // 저장 실패 시 화면 상태를 원래대로 되돌려 실제 DB 값과 불일치하지 않도록 한다.
+      setProfile((p) => (p ? { ...p, discoverable: !value } : p));
+      Alert.alert('오류', '설정 저장에 실패했습니다.');
+    }
   }
 
   async function handleConfirmSwitch() {
@@ -458,6 +475,26 @@ export default function SettingsScreen() {
               </View>
             </View>
           </View>
+
+          {/* 다른 사용자 검색(거래처 추가 시 "기존 회원 검색")에 내 정보 노출 허용 — 기본값 false(옵트인) */}
+          <View style={[s.card, s.mb10]}>
+            <View style={s.discoverableRow}>
+              <View style={s.flex1}>
+                <Text style={s.discoverableLabel}>다른 사용자 검색에 내 정보 노출 허용</Text>
+                <Text style={s.discoverableDesc}>
+                  켜면 다른 사용자가 거래처 추가 시 “기존 회원 검색”으로 내 이름·이메일·소속·직책을 찾아 거래처로 등록할 수 있습니다.{'\n'}
+                  연락처는 노출되지 않으며, 기본값은 꺼짐(비허용)입니다.
+                </Text>
+              </View>
+              <Switch
+                value={!!profile?.discoverable}
+                onValueChange={handleToggleDiscoverable}
+                trackColor={{ false: C.border, true: C.accentTeal + '88' }}
+                thumbColor={profile?.discoverable ? C.accentTeal : C.textDim}
+              />
+            </View>
+          </View>
+
           {showLegacyUpload && (
             <TouchableOpacity
               style={[s.card, s.legacyUploadCard]}
@@ -716,4 +753,7 @@ const s = StyleSheet.create({
   h60: { height: 60 },
   mt16: { marginTop: 16 },
   h80: { height: 80 },
+  discoverableRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  discoverableLabel: { color: C.textPrimary, fontSize: 14, fontWeight: '400', marginBottom: 4 },
+  discoverableDesc: { color: C.textSecondary, fontSize: 11, lineHeight: 16 },
 });

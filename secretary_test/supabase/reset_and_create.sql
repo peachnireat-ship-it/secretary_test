@@ -43,6 +43,10 @@ create table profiles (
   company_id uuid references companies(id) on delete set null,
   department_id uuid references departments(id) on delete set null,
   is_company_admin boolean not null default false,
+  -- 다른 사용자의 거래처 검색(search_discoverable_profiles) 결과에 내 정보(id/name/email/team/role)를
+  -- 노출할지 여부. 기본값 false(옵트인) — 사용자가 설정 화면에서 명시적으로 켜야만 노출된다.
+  -- 자세한 배경은 patch_profile_discoverable_search.sql 참고.
+  discoverable boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -244,6 +248,37 @@ as $$
   where my_company_id() is not null and p.company_id = my_company_id()
 $$;
 grant execute on function get_company_colleagues() to authenticated;
+
+-- 거래처(clients) 추가 시 기존 가입 회원을 검색해 linked_profile_id로 연결할 수 있게 하는 함수.
+-- get_company_colleagues()와 동일한 이유로 SECURITY DEFINER 함수로 감싸 필요한 컬럼(id, name,
+-- email, team, role)만 반환한다. contact는 여전히 비공개 정보이므로 절대 포함하지 않는다.
+-- discoverable=true(옵트인)로 설정한 계정만 대상이며, 검색어 없이는 결과를 반환하지 않는다
+-- (전체 덤프 방지), 호출자 자신은 제외, 최대 20건. 자세한 배경은
+-- patch_profile_discoverable_search.sql 참고.
+create or replace function search_discoverable_profiles(p_query text)
+returns table (id uuid, name text, email text, team text, role text)
+language plpgsql security definer stable
+set search_path = public
+as $$
+begin
+  if p_query is null or btrim(p_query) = '' then
+    raise exception '검색어를 입력해주세요.';
+  end if;
+
+  return query
+    select p.id, p.name, p.email, p.team, p.role
+    from profiles p
+    where p.discoverable = true
+      and p.id <> auth.uid()
+      and (
+        p.name ilike '%' || btrim(p_query) || '%'
+        or p.email ilike '%' || btrim(p_query) || '%'
+        or p.team ilike '%' || btrim(p_query) || '%'
+      )
+    limit 20;
+end;
+$$;
+grant execute on function search_discoverable_profiles(text) to authenticated;
 
 -- ── 회원가입 RPC: 회사관리자/회사직원 선택 가입(LoginScreen.js) ──────
 -- 안전 불변식: signup_create_company_as_admin은 항상 새로 insert한 회사 id만 사용하므로

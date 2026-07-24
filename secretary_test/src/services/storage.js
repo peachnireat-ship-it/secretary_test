@@ -295,6 +295,24 @@ export async function getAllAccounts() {
   }));
 }
 
+// 거래처(clients) 추가 화면의 "기존 회원 검색"용 — discoverable=true(옵트인)로 설정한 계정만
+// 대상으로 name/email/team ilike 검색한다. 검색어가 비어있으면 search_discoverable_profiles()가
+// 예외를 던지므로, 여기서 먼저 걸러 불필요한 API 호출/예외를 방지한다. 조회 실패도 getAllAccounts()와
+// 동일하게 화면을 막지 않도록 빈 배열을 반환한다.
+export async function searchDiscoverableProfiles(query) {
+  const q = (query || '').trim();
+  if (!q) return [];
+  const { data, error } = await supabase.rpc('search_discoverable_profiles', { p_query: q });
+  if (error) return [];
+  return (data || []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    team: row.team,
+    role: row.role,
+  }));
+}
+
 // 대상 계정이 ROSTER(하드코딩 테스트 계정)면 CLAUDE.md에 이미 공개된 고정 비밀번호로 비밀번호
 // 입력 없이 즉시 전환한다(기존 동작 유지). ROSTER가 아닌 실제 가입 계정은 고정 비밀번호가 없으므로
 // targetPassword를 반드시 입력받아 signInWithPassword로 검증한다 — 비밀번호 확인 없이 전환을
@@ -516,23 +534,30 @@ export async function saveClients(clients) {
 
 export async function addClient(client) {
   const user = await getCurrentUser();
-  // ROSTER(실제 로그인 계정)와 이름·회사가 정확히 일치하면 같은 인물로 간주해 linked_profile_id로 연결한다.
-  // clients.id는 PRIMARY KEY라 여러 사용자의 row를 profiles.id 하나로 통일할 수 없어, 별도 컬럼으로 연결한다.
-  const matched = ROSTER.find((r) => r.name === client.name && r.team === client.company);
+  // client.linkedProfileId: "기존 회원 검색"에서 사용자가 명시적으로 특정 profile을 고른 경우
+  // 확실하게 연결해야 하는 값이므로 최우선으로 사용한다. ROSTER(실제 로그인 계정) 이름·회사 일치
+  // 휴리스틱은 linkedProfileId가 없을 때만 폴백으로 사용한다 — 휴리스틱에만 의존하면 이름이
+  // 우연히 겹치는 다른 사람과 잘못 연결될 위험이 있다.
+  const matched = client.linkedProfileId ? null : ROSTER.find((r) => r.name === client.name && r.team === client.company);
+  const linkedProfileId = client.linkedProfileId || (matched ? matched.id : null);
   const id = matched
     ? client.id || Date.now().toString()
     : client.id || `${findRoster({ id: user.id })?.legacyId}__${Date.now()}`;
+  // linkedProfileId는 아래에서 별도로 linked_profile_id에 명시적으로 싣기 때문에, toRow() 대상에서
+  // 빼서 CLIENT_KEYMAP을 통해 중복으로(그리고 우선순위 없이) row에 실리지 않도록 한다.
+  const { linkedProfileId: _omit, ...clientForRow } = client;
   const row = {
     id,
     user_id: user.id,
     created_at: Date.now(),
-    ...toRow(client, CLIENT_KEYMAP),
-    linked_profile_id: matched ? matched.id : null,
+    ...toRow(clientForRow, CLIENT_KEYMAP),
+    linked_profile_id: linkedProfileId,
   };
   const { error } = await supabase.from('clients').insert(row);
   if (error) throw error;
-  // 신규 거래처가 ROSTER 계정과 연결됐고 email이 입력된 경우, 해당 profiles.email도 동기화한다.
-  if (matched && client.email !== undefined) await syncEmail('profiles', 'id', matched.id, client.email);
+  // 신규 거래처가 profile과 연결됐고(검색 선택 또는 ROSTER 매칭) email이 입력된 경우,
+  // 해당 profiles.email도 동기화한다.
+  if (linkedProfileId && client.email !== undefined) await syncEmail('profiles', 'id', linkedProfileId, client.email);
   return getClients();
 }
 
@@ -890,11 +915,11 @@ export async function toggleClientFavorite(clientId) {
 export async function getUserProfile() {
   const user = await getCurrentUser();
   if (!user) return null;
-  const { data, error } = await supabase.from('profiles').select('contact, notes, email, sns').eq('id', user.id).single();
+  const { data, error } = await supabase.from('profiles').select('contact, notes, email, sns, discoverable').eq('id', user.id).single();
   if (error) throw error;
   // 주의: user.email은 로그인용 Supabase Auth 이메일(계정 아이디)이므로, 알림 수신용 profiles.email로
   // 덮어쓰이지 않도록 ...user를 먼저 펼치고 profiles 필드를 뒤에 덮어쓴다.
-  return { ...user, contact: data?.contact || '', notes: data?.notes || '', email: data?.email || '', sns: data?.sns || '' };
+  return { ...user, contact: data?.contact || '', notes: data?.notes || '', email: data?.email || '', sns: data?.sns || '', discoverable: !!data?.discoverable };
 }
 
 export async function saveUserProfile(fields) {
