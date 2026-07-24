@@ -80,7 +80,18 @@ async function hydrateUserFromSession(session) {
   // ROSTER에 없는 계정(회원가입으로 새로 생성된 계정, 회사 계정 시나리오 계정 포함)은
   // profiles 테이블에서 직접 조회한다.
   const { data, error } = await supabase.from('profiles').select('id, email, name, role, team, contact, is_company_admin, company_id').eq('id', session.user.id).single();
-  if (data) return { id: data.id, email: data.email, name: data.name, role: data.role, team: data.team, contact: data.contact, isCompanyAdmin: !!data.is_company_admin, companyId: data.company_id || null };
+  if (data) {
+    // 과거에 회사 등록 RPC가 실패해(예: 회사명 중복) profiles 행은 있지만 company_id가 비어있는
+    // 계정을 재로그인 시점에도 계속 감지한다 — 이 플래그가 없으면 최초 실패 이후에는 아무 안내도
+    // 없이 회사 미소속 상태로 영구히 남는다(설정 화면에서 재시도 유도용, completeCompanySetup 참고).
+    const accountType = session.user.user_metadata?.accountType;
+    const companySetupPending = (accountType === 'admin' || accountType === 'employee') && !data.company_id;
+    return {
+      id: data.id, email: data.email, name: data.name, role: data.role, team: data.team, contact: data.contact,
+      isCompanyAdmin: !!data.is_company_admin, companyId: data.company_id || null,
+      companySetupPending, pendingAccountType: companySetupPending ? accountType : undefined,
+    };
+  }
   // profiles 행이 아직 없는 경우(이메일 인증이 필요한 프로젝트에서는 signUp 시점에
   // auth.uid()가 없어 RLS 때문에 즉시 생성할 수 없었다) 최초 로그인 시점에 생성한다.
   if (error?.code === 'PGRST116') {
@@ -104,17 +115,32 @@ async function hydrateUserFromSession(session) {
     const accountType = session.user.user_metadata?.accountType;
     const departmentName = session.user.user_metadata?.departmentName?.trim() || '';
     let companyId = null;
+    let companySetupPending = false;
     if (accountType === 'admin' || accountType === 'employee') {
       const { error: rpcErr } = accountType === 'admin'
         ? await supabase.rpc('signup_create_company_as_admin', { p_company_name: team })
         : await supabase.rpc('signup_join_company_as_employee', { p_company_name: team, p_department_name: departmentName });
-      if (rpcErr) throw new Error('계정은 생성됐지만 회사 정보 등록에 실패했습니다. 설정에서 다시 시도하거나 문의해주세요.');
-      // RPC가 profiles.company_id를 채운 뒤이므로, insert 시점 select에는 없던 값을 다시 조회한다.
-      const { data: refreshed } = await supabase.from('profiles').select('company_id').eq('id', inserted.id).single();
-      companyId = refreshed?.company_id || null;
+      if (rpcErr) {
+        // 주의: 여기서 그대로 throw하면 안 된다. auth.signUp()과 위 profiles insert는 이미 커밋된
+        // 뒤라 계정 자체는 생성이 끝난 상태인데, 예외를 던지면 signup()/login() 호출 자체가
+        // 실패로 끝나 로그인이 막힌다. 게다가 같은 이메일로 회원가입을 다시 시도해도 "이미 가입된
+        // 이메일입니다"로 막혀 사용자가 영구히 갇히는 데드엔드가 생긴다(회사명 중복처럼 사용자가
+        // 스스로 고칠 수 있는 원인일수록 이 데드엔드를 자주 밟게 됨). 대신 로그인은 그대로
+        // 진행시키고 companySetupPending 플래그만 세워 설정 화면에서 재시도(completeCompanySetup)
+        // 하도록 안내한다.
+        companySetupPending = true;
+      } else {
+        // RPC가 profiles.company_id를 채운 뒤이므로, insert 시점 select에는 없던 값을 다시 조회한다.
+        const { data: refreshed } = await supabase.from('profiles').select('company_id').eq('id', inserted.id).single();
+        companyId = refreshed?.company_id || null;
+      }
     }
 
-    return { id: inserted.id, email: inserted.email, name: inserted.name, role: inserted.role, team: inserted.team, contact: inserted.contact, isCompanyAdmin: accountType === 'admin', companyId };
+    return {
+      id: inserted.id, email: inserted.email, name: inserted.name, role: inserted.role, team: inserted.team, contact: inserted.contact,
+      isCompanyAdmin: accountType === 'admin' && !companySetupPending, companyId,
+      companySetupPending, pendingAccountType: companySetupPending ? accountType : undefined,
+    };
   }
   return null;
 }
@@ -211,20 +237,85 @@ export async function getCompanyList() {
   return data || [];
 }
 
+// 회원가입 시 회사 등록 RPC(signup_create_company_as_admin/signup_join_company_as_employee)가
+// 실패해(대표적으로 회사명 중복) profiles.company_id가 비어있는 상태(user.companySetupPending)를
+// 설정 화면에서 재시도하기 위한 함수. 원래 가입 시 선택했던 accountType(관리자/직원)은
+// auth 세션의 user_metadata에 그대로 남아있으므로 그걸 그대로 사용해 올바른 RPC를 다시 호출한다.
+// 성공할 때까지(올바른/미사용 회사명을 입력할 때까지) 여러 번 호출될 수 있다.
+export async function completeCompanySetup(companyName, departmentName) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('로그인이 필요합니다.');
+  const accountType = session.user.user_metadata?.accountType;
+  if (accountType !== 'admin' && accountType !== 'employee') {
+    throw new Error('회사 계정 정보를 확인할 수 없습니다. 문의해주세요.');
+  }
+  const trimmedName = companyName?.trim();
+  if (!trimmedName) throw new Error('회사명을 입력해주세요.');
+
+  const { error: rpcErr } = accountType === 'admin'
+    ? await supabase.rpc('signup_create_company_as_admin', { p_company_name: trimmedName })
+    : await supabase.rpc('signup_join_company_as_employee', { p_company_name: trimmedName, p_department_name: departmentName?.trim() || '' });
+  if (rpcErr) {
+    if (rpcErr.message?.includes('이미 사용 중인 회사명입니다')) throw new Error(rpcErr.message);
+    throw new Error('회사 정보 등록에 실패했습니다. 잠시 후 다시 시도해주세요.');
+  }
+
+  // _cachedUser에 의존하지 않고 profiles를 다시 전체 조회해 최신 상태로 재구성한다
+  // (_cachedUser가 비어있는 예외적인 상황에서도 name 등 필수 필드가 누락되지 않도록).
+  const { data: refreshed } = await supabase.from('profiles').select('id, email, name, role, team, contact, is_company_admin, company_id').eq('id', session.user.id).single();
+  _cachedUser = refreshed
+    ? {
+        id: refreshed.id, email: refreshed.email, name: refreshed.name, role: refreshed.role, team: refreshed.team, contact: refreshed.contact,
+        isCompanyAdmin: !!refreshed.is_company_admin, companyId: refreshed.company_id || null,
+        companySetupPending: false, pendingAccountType: undefined,
+      }
+    : { ..._cachedUser, companySetupPending: false, pendingAccountType: undefined };
+  return _cachedUser;
+}
+
 export function getTestAccounts() {
   return ROSTER.map(rosterToUser);
 }
 
-export async function switchAccount(accountId, currentPassword) {
+// 설정 화면 "계정 전환" 목록용 — ROSTER(하드코딩 테스트 계정 6개)뿐 아니라 DB에 실제 가입된
+// 모든 계정(profiles 테이블 전체)을 반환한다. 목록 조회 실패가 화면 전체를 막으면 안 되므로
+// getCompanyList()와 동일하게 에러를 던지지 않고 빈 배열을 반환한다.
+// isRosterAccount: true면 DEV_PASSWORDS로 비밀번호 입력 없이 즉시 전환 가능, false면 대상
+// 계정의 실제 비밀번호를 반드시 입력해야 한다(switchAccount 참고).
+export async function getAllAccounts() {
+  const { data, error } = await supabase.rpc('get_all_accounts_for_switch');
+  if (error) return [];
+  return (data || []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    team: row.team,
+    role: row.role,
+    isRosterAccount: !!findRoster({ id: row.id }),
+  }));
+}
+
+// 대상 계정이 ROSTER(하드코딩 테스트 계정)면 CLAUDE.md에 이미 공개된 고정 비밀번호로 비밀번호
+// 입력 없이 즉시 전환한다(기존 동작 유지). ROSTER가 아닌 실제 가입 계정은 고정 비밀번호가 없으므로
+// targetPassword를 반드시 입력받아 signInWithPassword로 검증한다 — 비밀번호 확인 없이 전환을
+// 허용하면 "비밀번호 없이 남의 계정 접근"이 되는 심각한 보안 취약점이므로 절대 생략하지 않는다.
+export async function switchAccount(targetEmail, currentPassword, targetPassword) {
   if (!__DEV__) throw new Error('계정 전환은 개발 모드에서만 사용 가능합니다.');
   const current = await getCurrentUser();
   if (!current) throw new Error('현재 로그인된 계정이 없습니다.');
   const { error: verifyErr } = await supabase.auth.signInWithPassword({ email: current.email, password: currentPassword || '' });
   if (verifyErr) throw new Error('현재 계정 비밀번호가 일치하지 않습니다.');
-  const target = findRoster({ id: accountId });
-  if (!target) throw new Error('계정을 찾을 수 없습니다.');
+
+  const rosterEntry = ROSTER.find((r) => r.email === targetEmail);
+  // 검증(대상 비밀번호 누락 등)은 signOut 이전에 끝낸다 — 여기서 먼저 로그아웃해버리면 검증
+  // 실패 시 현재 세션만 잃고 전환도 안 되는 상태로 남는다.
+  if (!rosterEntry && !targetPassword) throw new Error('대상 계정의 비밀번호를 입력해주세요.');
+
   await supabase.auth.signOut();
-  const { data, error } = await supabase.auth.signInWithPassword({ email: target.email, password: DEV_PASSWORDS[target.legacyId] });
+
+  const { data, error } = rosterEntry
+    ? await supabase.auth.signInWithPassword({ email: rosterEntry.email, password: DEV_PASSWORDS[rosterEntry.legacyId] })
+    : await supabase.auth.signInWithPassword({ email: targetEmail, password: targetPassword });
   if (error) throw error;
   _cachedUser = await hydrateUserFromSession(data.session);
   return _cachedUser;
@@ -324,6 +415,21 @@ function fromRow(row, keymap) {
   return obj;
 }
 
+// client_ids(schedules/projects) 소유권 사전 검증. RLS는 행 자체의 user_id만 검사할 뿐 배열 안의
+// client_ids 원소가 실제로 호출자 소유의 거래처인지는 검사하지 않아, DB 트리거
+// (validate_client_ids_ownership, supabase/patch_client_ids_ownership.sql)가 최종 방어선으로
+// INSERT/UPDATE 자체를 막는다. 다만 트리거 예외 메시지는 사용자 친화적이지 않으므로, 저장 시도
+// 전에 여기서 먼저 걸러 명확한 한국어 에러를 준다(보안 재감사 02_security.md 발견 #1 조치).
+async function assertClientIdsOwned(userId, clientIds) {
+  if (!Array.isArray(clientIds) || clientIds.length === 0) return;
+  const uniqueIds = [...new Set(clientIds)];
+  const { data, error } = await supabase.from('clients').select('id').eq('user_id', userId).in('id', uniqueIds);
+  if (error) throw error;
+  if ((data || []).length !== uniqueIds.length) {
+    throw new Error('존재하지 않거나 접근 권한이 없는 거래처가 포함되어 있습니다.');
+  }
+}
+
 // clients.email <-> profiles.email 동기화 헬퍼. saveUserProfile/updateClient/addClient가 각각
 // "자신이 수정한 테이블"에서 linked_profile_id로 연결된 반대편 테이블로 1홉만 전파할 때 사용한다.
 // (A→B 전파만 하고 B가 다시 A를 갱신하는 재귀 호출은 만들지 않는다.)
@@ -360,6 +466,8 @@ export async function getSchedules() {
 export async function saveSchedules(schedules) {
   const user = await getCurrentUser();
   if (!user || !schedules.length) return;
+  const allClientIds = schedules.flatMap((s) => (Array.isArray(s.clientIds) ? s.clientIds : []));
+  await assertClientIdsOwned(user.id, allClientIds);
   const rows = schedules.map((s) => ({ id: s.id, user_id: user.id, ...toRow(s, SCHEDULE_KEYMAP, SCHEDULE_DEFAULTS) }));
   const { error } = await supabase.from('schedules').upsert(rows);
   if (error) throw error;
@@ -367,6 +475,7 @@ export async function saveSchedules(schedules) {
 
 export async function addSchedule(schedule) {
   const user = await getCurrentUser();
+  await assertClientIdsOwned(user.id, schedule.clientIds);
   const row = { id: schedule.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(schedule, SCHEDULE_KEYMAP) };
   const { error } = await supabase.from('schedules').insert(row);
   if (error) throw error;
@@ -382,6 +491,7 @@ export async function deleteSchedule(id) {
 
 export async function updateSchedule(id, fields) {
   const user = await getCurrentUser();
+  if (fields.clientIds !== undefined) await assertClientIdsOwned(user.id, fields.clientIds);
   const { error } = await supabase.from('schedules').update(toRow(fields, SCHEDULE_KEYMAP)).eq('id', id).eq('user_id', user.id);
   if (error) throw error;
   return getSchedules();
@@ -520,6 +630,8 @@ export async function getProjects() {
 export async function saveProjects(projects) {
   const user = await getCurrentUser();
   if (!user || !projects.length) return;
+  const allClientIds = projects.flatMap((p) => (Array.isArray(p.clientIds) ? p.clientIds : []));
+  await assertClientIdsOwned(user.id, allClientIds);
   const rows = projects.map((p) => ({ id: p.id, user_id: user.id, ...toRow(p, PROJECT_KEYMAP, PROJECT_DEFAULTS) }));
   const { error } = await supabase.from('projects').upsert(rows);
   if (error) throw error;
@@ -527,6 +639,7 @@ export async function saveProjects(projects) {
 
 export async function addProject(project) {
   const user = await getCurrentUser();
+  await assertClientIdsOwned(user.id, project.clientIds);
   const row = { id: project.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(project, PROJECT_KEYMAP) };
   const { error } = await supabase.from('projects').insert(row);
   if (error) throw error;
@@ -535,6 +648,7 @@ export async function addProject(project) {
 
 export async function updateProject(id, changes) {
   const user = await getCurrentUser();
+  if (changes.clientIds !== undefined) await assertClientIdsOwned(user.id, changes.clientIds);
   const row = { ...toRow(changes, PROJECT_KEYMAP), updated_at: Date.now() };
   const { error } = await supabase.from('projects').update(row).eq('id', id).eq('user_id', user.id);
   if (error) throw error;
@@ -552,6 +666,11 @@ export async function deleteProject(id) {
 // (본인 프로젝트가 아닌 다른 부서 직원의 프로젝트도 대상이어야 하므로). RLS의
 // projects_update_company_admin/projects_delete_company_admin 정책이 "같은 회사 + 관리자"만
 // 허용하므로 안전하다 — 일반 사용자가 호출해도 RLS가 차단한다.
+// client_ids 검증(assertClientIdsOwned)은 의도적으로 생략한다: 이 함수는 대상 프로젝트의 실제
+// 소유자(user_id)가 호출자 자신이 아니므로 "누구 기준으로" 검증해야 하는지 알려면 대상 행을 먼저
+// 조회해야 한다. DB 트리거(validate_client_ids_ownership, patch_client_ids_ownership.sql)가
+// new.user_id(그 프로젝트의 실제 소유자) 기준으로 이미 검증해 최종 방어선 역할을 하므로, 이 함수
+// 하나만으로도 안전하다 — 앱 레벨 중복 검증을 추가할 필요는 없다.
 export async function updateProjectAsCompanyAdmin(id, changes) {
   const row = { ...toRow(changes, PROJECT_KEYMAP), updated_at: Date.now() };
   const { error } = await supabase.from('projects').update(row).eq('id', id);
@@ -587,16 +706,17 @@ export async function getCompanyProjects() {
 }
 
 // 회사 관리자 전용: 같은 회사 소속 전체 부서의 직원(profiles) 목록을 부서별로 그룹핑해서 반환한다.
-// 보안 재감사(_review/secretary_test-20260723/02_security.md)에서 profiles_select_same_company RLS가
-// email/contact/notes/work_topics까지 전체 컬럼을 노출한다는 MEDIUM 이슈가 지적됐다 — 이 함수는
-// 그 취약점을 UI로 증폭시키지 않도록 최소 컬럼(id, name, role, department_id, is_company_admin)만
-// select한다. email/contact 등 민감 컬럼은 절대 select하지 않는다.
+// 보안 재감사(_review/secretary_test-20260723/02_security.md 발견 #3)에서 profiles_select_same_company
+// RLS가 email/contact/notes/work_topics까지 전체 컬럼을 노출한다는 MEDIUM 이슈가 지적돼, 그 정책은
+// drop되고 SECURITY DEFINER 함수 get_company_colleagues()로 대체됐다(patch_profiles_colleagues_columns.sql
+// 참고). 이 함수는 id/name/role/department_id/is_company_admin만 반환하므로 email/contact 등
+// 민감 컬럼은 DB 레벨에서부터 조회 자체가 불가능하다.
 export async function getCompanyEmployees() {
   const user = await getCurrentUser();
   if (!user?.companyId) return [];
 
   const [{ data: profilesData, error: profilesErr }, { data: departmentsData, error: deptErr }] = await Promise.all([
-    supabase.from('profiles').select('id, name, role, department_id, is_company_admin').eq('company_id', user.companyId),
+    supabase.rpc('get_company_colleagues'),
     supabase.from('departments').select('id, name').eq('company_id', user.companyId),
   ]);
   if (profilesErr) throw profilesErr;

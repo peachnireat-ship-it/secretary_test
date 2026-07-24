@@ -33,6 +33,10 @@ const MAX_BODY_LEN = 5000;
 // (https://github.com/EC-Nordbund/denomailer/issues/90, 미해결). notify-project-created와
 // 동일한 우회 로직을 그대로 사용한다.
 function encodeRfc2047Subject(text: string): string {
+  // 보안 재감사(_review/secretary_test-20260723/02_security.md 발견 #4) CRLF 헤더 인젝션 방지.
+  // 비ASCII 체크보다 먼저 개행 문자를 공백으로 치환해, 순수 ASCII 문자열에 CR/LF가 섞여 있어도
+  // 인코딩 없이 그대로 mail.subject에 들어가지 않도록 한다.
+  text = text.replace(/[\r\n]+/g, ' ');
   // deno-lint-ignore no-control-regex
   if (!/[^\x00-\x7f]/.test(text)) return text; // ASCII만 있으면 인코딩 불필요
 

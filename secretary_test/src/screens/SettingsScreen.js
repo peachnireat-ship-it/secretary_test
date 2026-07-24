@@ -1,9 +1,10 @@
 import { Text, View, ScrollView, TextInput, TouchableOpacity, StyleSheet, Platform, Modal, KeyboardAvoidingView } from 'react-native';
 import { Alert } from '../utils/alertCompat';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
-import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getTestAccounts, switchAccount, getUserProfile, saveUserProfile, hasLegacyLocalData, migrateLocalDataToCloud } from '../services/storage';
+import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getAllAccounts, switchAccount, getUserProfile, saveUserProfile, hasLegacyLocalData, migrateLocalDataToCloud, completeCompanySetup } from '../services/storage';
 import { useUser } from '../context/UserContext';
 
 // API 키 마스킹 표시 (앞 6자 + ••• + 뒤 4자), 9자 이하 또는 masked=false면 원문 그대로
@@ -55,12 +56,20 @@ export default function SettingsScreen() {
   const [editEmail, setEditEmail] = useState('');
   const [editSns, setEditSns] = useState('');
 
+  const [accounts, setAccounts] = useState([]);
   const [switchTarget, setSwitchTarget] = useState(null);
   const [switchPassword, setSwitchPassword] = useState('');
+  const [switchTargetPassword, setSwitchTargetPassword] = useState('');
   const [switchError, setSwitchError] = useState('');
 
   const [showLegacyUpload, setShowLegacyUpload] = useState(false);
   const [legacyUploading, setLegacyUploading] = useState(false);
+
+  // 회원가입 시 회사 등록 RPC가 실패한 계정(user.companySetupPending)을 위한 재시도 입력.
+  const [companySetupName, setCompanySetupName] = useState('');
+  const [companySetupDept, setCompanySetupDept] = useState('');
+  const [companySetupError, setCompanySetupError] = useState('');
+  const [companySetupSaving, setCompanySetupSaving] = useState(false);
 
   useEffect(() => {
     getApiKey().then((k) => { if (k) setApiKeyState(k); });
@@ -70,6 +79,8 @@ export default function SettingsScreen() {
     getUserProfile().then((p) => { if (p) setProfile(p); });
     hasLegacyLocalData().then(setShowLegacyUpload);
   }, []);
+
+  useFocusEffect(useCallback(() => { getAllAccounts().then(setAccounts); }, []));
 
   async function handleLegacyUpload() {
     setLegacyUploading(true);
@@ -84,6 +95,31 @@ export default function SettingsScreen() {
     }
   }
 
+  // 회사명 중복 등으로 가입 시 실패했던 회사 등록을 여기서 재시도한다. 실패하면(예: 여전히
+  // 중복된 이름) completeCompanySetup이 던지는 구체적인 메시지를 그대로 보여주고, 사용자가
+  // 이름을 고쳐 다시 시도할 때까지(=유효한 회사명이 될 때까지) 반복 가능하다.
+  async function handleCompleteCompanySetup() {
+    const name = companySetupName.trim();
+    if (!name) { setCompanySetupError('회사명을 입력해주세요.'); return; }
+    if (user?.pendingAccountType === 'employee' && !companySetupDept.trim()) {
+      setCompanySetupError('부서명을 입력해주세요.');
+      return;
+    }
+    setCompanySetupSaving(true);
+    setCompanySetupError('');
+    try {
+      const updated = await completeCompanySetup(name, companySetupDept);
+      setUser(updated);
+      setCompanySetupName('');
+      setCompanySetupDept('');
+      Alert.alert('완료', '회사 정보 등록이 완료되었습니다.');
+    } catch (e) {
+      setCompanySetupError(e.message);
+    } finally {
+      setCompanySetupSaving(false);
+    }
+  }
+
   async function handleProviderChange(p) {
     setProviderState(p);
     await setAiProvider(p);
@@ -92,9 +128,10 @@ export default function SettingsScreen() {
   async function handleConfirmSwitch() {
     if (!switchTarget) return;
     try {
-      const u = await switchAccount(switchTarget.id, switchPassword);
+      const u = await switchAccount(switchTarget.email, switchPassword, switchTargetPassword);
       setSwitchTarget(null);
       setSwitchPassword('');
+      setSwitchTargetPassword('');
       setSwitchError('');
       setUser(u);
     } catch (e) {
@@ -168,6 +205,59 @@ export default function SettingsScreen() {
       <View style={s.header}>
         <Text style={s.headerTitle}>설정</Text>
       </View>
+
+      {/* ── 회사 정보 등록 재시도 (가입 시 회사명 중복 등으로 실패한 경우) ── */}
+      {user?.companySetupPending && (
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>회사 정보 등록</Text>
+          <View style={[s.card, s.companySetupCard]}>
+            <View style={s.cardHeader}>
+              <Text style={[s.aiGlyph, s.aiGlyphIndigo]}>◆</Text>
+              <Text style={s.cardTitle}>회사 정보 등록이 필요합니다</Text>
+            </View>
+            <Text style={s.cardDesc}>
+              가입 시 입력한 회사명이 이미 사용 중이었거나 다른 이유로 회사 등록이 완료되지 않았습니다.{'\n'}
+              {user.pendingAccountType === 'admin'
+                ? '새로 등록할 회사명을 입력해주세요.'
+                : '소속될 회사명과 부서명을 입력해주세요.'}
+            </Text>
+            <View style={s.inputWrap}>
+              <TextInput
+                style={s.input}
+                value={companySetupName}
+                onChangeText={(t) => { setCompanySetupName(t); setCompanySetupError(''); }}
+                placeholder="회사명"
+                placeholderTextColor={C.textDim}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+            {user.pendingAccountType === 'employee' && (
+              <View style={s.inputWrap}>
+                <TextInput
+                  style={s.input}
+                  value={companySetupDept}
+                  onChangeText={(t) => { setCompanySetupDept(t); setCompanySetupError(''); }}
+                  placeholder="부서명"
+                  placeholderTextColor={C.textDim}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            )}
+            {companySetupError ? <Text style={s.switchErrorText}>{companySetupError}</Text> : null}
+            <View style={s.btnRow}>
+              <TouchableOpacity
+                style={[s.saveBtn, s.saveBtnIndigo]}
+                onPress={handleCompleteCompanySetup}
+                disabled={companySetupSaving}
+              >
+                <Text style={s.saveBtnText}>{companySetupSaving ? '등록 중...' : '등록'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* ── AI 설정 ── */}
       <View style={s.section}>
@@ -380,14 +470,14 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           )}
           {/* 다른 계정 목록 */}
-          {getTestAccounts()
+          {accounts
             .filter((a) => a.id !== user.id)
             .map((account) => (
               <TouchableOpacity
                 key={account.id}
                 style={[s.card, s.switchCard]}
                 activeOpacity={0.75}
-                onPress={() => { setSwitchTarget(account); setSwitchPassword(''); setSwitchError(''); }}
+                onPress={() => { setSwitchTarget(account); setSwitchPassword(''); setSwitchTargetPassword(''); setSwitchError(''); }}
               >
                 <View style={s.cardHeader}>
                   <View style={[s.accountAvatar, s.accountAvatarAlt]}>
@@ -435,12 +525,27 @@ export default function SettingsScreen() {
               placeholderTextColor={C.textDim}
               secureTextEntry
               autoFocus
-              onSubmitEditing={handleConfirmSwitch}
+              onSubmitEditing={!switchTarget?.isRosterAccount ? undefined : handleConfirmSwitch}
             />
+
+            {switchTarget && !switchTarget.isRosterAccount && (
+              <>
+                <Text style={[s.inputLabel, s.mt16]}>전환할 계정({switchTarget.name})의 비밀번호</Text>
+                <TextInput
+                  style={s.profileInput}
+                  value={switchTargetPassword}
+                  onChangeText={(v) => { setSwitchTargetPassword(v); setSwitchError(''); }}
+                  placeholder="비밀번호"
+                  placeholderTextColor={C.textDim}
+                  secureTextEntry
+                  onSubmitEditing={handleConfirmSwitch}
+                />
+              </>
+            )}
             {switchError ? <Text style={s.switchErrorText}>{switchError}</Text> : null}
 
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => { setSwitchTarget(null); setSwitchPassword(''); setSwitchError(''); }}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setSwitchTarget(null); setSwitchPassword(''); setSwitchTargetPassword(''); setSwitchError(''); }}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.modalConfirm} onPress={handleConfirmSwitch}>
@@ -596,8 +701,11 @@ const s = StyleSheet.create({
 
   aiGlyphPurple: { color: C.accentPurple },
   aiGlyphTeal: { color: C.accentTeal },
+  aiGlyphIndigo: { color: C.companyIndigo },
   saveBtnGrok: { backgroundColor: C.accentPurple },
   saveBtnTeal: { backgroundColor: C.accentTeal },
+  saveBtnIndigo: { backgroundColor: C.companyIndigo },
+  companySetupCard: { borderColor: C.companyIndigo + '55' },
   testBtnMod: { borderColor: C.accentTeal + '55', flex: 1 },
   mb10: { marginBottom: 10 },
   flex1: { flex: 1 },

@@ -34,6 +34,10 @@ const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET');
 // raw MIME 소스가 그대로 보이는 문제가 발생한다. 라이브러리가 제공하는
 // client.preprocessors 훅으로 제목만 RFC 2047 규격대로 직접 인코딩해 덮어써서 우회한다.
 function encodeRfc2047Subject(text: string): string {
+  // 보안 재감사(_review/secretary_test-20260723/02_security.md 발견 #4) CRLF 헤더 인젝션 방지.
+  // 비ASCII 체크보다 먼저 개행 문자를 공백으로 치환해, 순수 ASCII 문자열에 CR/LF가 섞여 있어도
+  // 인코딩 없이 그대로 mail.subject에 들어가지 않도록 한다.
+  text = text.replace(/[\r\n]+/g, ' ');
   // deno-lint-ignore no-control-regex
   if (!/[^\x00-\x7f]/.test(text)) return text; // ASCII만 있으면 인코딩 불필요
 
@@ -156,9 +160,13 @@ Deno.serve(async (req) => {
     const clientIds = Array.isArray(project.client_ids) ? project.client_ids : [];
     let relatedClients = [];
     if (clientIds.length > 0) {
+      // 방어적 이중 필터: DB 트리거(validate_client_ids_ownership)가 client_ids의 소유권을
+      // 이미 강제하지만, 그 트리거를 어떤 경로로든 우회하더라도 여기서 다른 사용자의 clients가
+      // 절대 조회되지 않도록 project.user_id로 한 번 더 필터링한다.
       const { data: clients, error: clientsError } = await supabase
         .from('clients')
         .select('email, name, linked_profile_id')
+        .eq('user_id', project.user_id)
         .in('id', clientIds);
 
       if (clientsError) {

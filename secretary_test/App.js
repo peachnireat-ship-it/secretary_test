@@ -19,6 +19,7 @@ const ICONS = {
   회의록: { active: '◍', inactive: '◍' },
   설정: { active: '◎', inactive: '◎' },
   회사: { active: '◆', inactive: '◆' },
+  회사인원: { active: '◐', inactive: '◐' },
 };
 
 function TabNavigator({ isCompanyAdmin }) {
@@ -57,7 +58,12 @@ function TabNavigator({ isCompanyAdmin }) {
       {/* getComponent/require()로 실제 탭 방문 시점까지 화면 모듈 로딩을 미룬다 (eager import 시 앱 시작 시 8개 화면 전부 즉시 실행됨) */}
       <Tab.Screen name="홈" getComponent={() => require('./src/screens/HomeScreen').default} />
       <Tab.Screen name="일정" getComponent={() => require('./src/screens/ScheduleScreen').default} />
-      <Tab.Screen name="거래처" getComponent={() => require('./src/screens/ClientScreen').default} />
+      {/* 회사 관리자는 개인 거래처 대신 회사 전체 부서 직원 목록(읽기 전용)을 확인 */}
+      {isCompanyAdmin ? (
+        <Tab.Screen name="회사인원" getComponent={() => require('./src/screens/CompanyEmployeesScreen').default} />
+      ) : (
+        <Tab.Screen name="거래처" getComponent={() => require('./src/screens/ClientScreen').default} />
+      )}
       <Tab.Screen name="프로젝트" getComponent={() => require('./src/screens/ProjectScreen').default} />
       <Tab.Screen name="메세지" getComponent={() => require('./src/screens/MessageScreen').default} />
       <Tab.Screen name="회의록" getComponent={() => require('./src/screens/MeetingScreen').default} />
@@ -143,6 +149,6 @@ const webStyles = StyleSheet.create(
 );
 
 function tabColor(name) {
-  const map = { 홈: C.gold, 일정: C.accentBlue, 거래처: C.accentTeal, 프로젝트: C.red, 메세지: C.accentPurple, 회의록: C.accentTeal, 설정: C.textSecondary, 회사: C.companyIndigo };
+  const map = { 홈: C.gold, 일정: C.accentBlue, 거래처: C.accentTeal, 프로젝트: C.red, 메세지: C.accentPurple, 회의록: C.accentTeal, 설정: C.textSecondary, 회사: C.companyIndigo, 회사인원: C.companyIndigo };
   return map[name] || C.textPrimary;
 }

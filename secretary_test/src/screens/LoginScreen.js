@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert } from '../utils/alertCompat';
 import { C } from '../theme';
 import { login, signup, getCompanyList } from '../services/storage';
 
@@ -81,7 +82,17 @@ export default function LoginScreen({ onLogin }) {
     try {
       const user = await signup(e, p, name, ph, teamTrimmed, role, accountType, deptTrimmed);
       if (user) {
-        onLogin(user);
+        // 계정은 만들어졌지만 회사명 중복 등으로 회사 등록이 지연된 상태 — 로그인은 그대로
+        // 진행시키되(계정 자체는 정상 생성됨), 설정 화면에서 마무리해야 함을 안내한다.
+        if (user.companySetupPending) {
+          Alert.alert(
+            '회사 정보 등록 필요',
+            '계정은 생성됐지만 회사 정보 등록이 아직 완료되지 않았습니다. 설정 화면에서 회사명을 다시 입력해 완료해주세요.',
+            [{ text: '확인', onPress: () => onLogin(user) }],
+          );
+        } else {
+          onLogin(user);
+        }
       } else {
         setInfo('가입 확인 이메일을 보냈습니다. 메일함에서 인증 후 로그인해주세요.');
         switchMode('login');
