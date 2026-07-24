@@ -10,7 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
-import { getClients, addClient, updateClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles } from '../services/storage';
+import { getClients, addClient, updateClient, deleteClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
@@ -81,6 +81,8 @@ export default function ClientScreen({ navigation, route }) {
   const [memberSearchLoading, setMemberSearchLoading] = useState(false);
   // 검색을 한 번이라도 시도했는지 — "검색 결과 없음" 안내를 최초 진입 시(검색 전)에는 숨기기 위함
   const [memberSearchDone, setMemberSearchDone] = useState(false);
+  // 검색 결과 선택 시 addClient() 호출 중 중복 클릭 방지용
+  const [memberAddLoading, setMemberAddLoading] = useState(false);
 
   const [selectedMeetingRecord, setSelectedMeetingRecord] = useState(null);
   const [showAI, setShowAI] = useState(false);
@@ -216,22 +218,33 @@ export default function ClientScreen({ navigation, route }) {
     setMemberSearchDone(false);
   }
 
-  // 검색 결과에서 회원을 선택하면 "직접 입력" 폼으로 이동하되, 이름/회사(=team)/직책/이메일을
-  // 미리 채우고 linked_profile_id를 확실하게 연결하기 위해 newLinkedProfileId를 세팅해둔다.
-  // contact(연락처)는 검색 결과에 없으므로(비공개 정보) 빈칸으로 두고 사용자가 직접 입력해야 한다.
-  function selectMemberResult(member) {
-    setNewName(member.name || '');
-    setNewCompany(member.team || '');
-    setNewRole(member.role || '');
-    setNewEmail(member.email || '');
-    setNewContact('');
-    setNewWorkContact('');
-    setNewSns('');
-    setNewNotes('');
-    setNewLinkedProfileId(member.id);
-    closeMemberSearch();
-    // 안드로이드 Modal 레이스 컨디션(handlePickFromContacts와 동일) 회피 — 다음 모달은 지연 오픈
-    setTimeout(() => setShowAddClient(true), 300);
+  // 검색 결과에서 회원을 선택하면 "직접 입력" 폼을 거치지 않고, DB에 저장된 회원 데이터(연락처
+  // 포함) 그대로 거래처 목록에 즉시 추가한다. 이 회원은 이미 discoverable 옵트인으로 검색 노출과
+  // 거래처 자동 추가에 동의한 상태이므로 별도 확인 절차 없이 진행한다(사용자 명시적 결정 —
+  // patch_search_discoverable_profiles_add_contact.sql 참고). member.contact가 비어있어도
+  // (본인 프로필에 연락처를 입력하지 않은 회원) 빈 문자열로 그대로 추가하며 별도 에러 처리는 하지
+  // 않는다 — clients.contact는 not null이지만 빈 문자열은 허용된다.
+  async function selectMemberResult(member) {
+    if (memberAddLoading) return;
+    setMemberAddLoading(true);
+    try {
+      const updated = await addClient({
+        name: member.name || '',
+        company: member.team || '',
+        role: member.role || '',
+        contact: member.contact || '',
+        workContact: '',
+        email: member.email || '',
+        sns: '',
+        notes: '',
+        linkedProfileId: member.id,
+      });
+      setClients(updated);
+      closeMemberSearch();
+      Alert.alert('추가 완료', `${member.name}님을 거래처에 추가했습니다.`);
+    } finally {
+      setMemberAddLoading(false);
+    }
   }
 
   function handleParsePastedContacts() {
@@ -801,7 +814,12 @@ export default function ClientScreen({ navigation, route }) {
             ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
                 {memberSearchResults.map((member) => (
-                  <TouchableOpacity key={member.id} style={s.contactItem} onPress={() => selectMemberResult(member)}>
+                  <TouchableOpacity
+                    key={member.id}
+                    style={[s.contactItem, memberAddLoading && commonStyles.opacity40]}
+                    onPress={() => selectMemberResult(member)}
+                    disabled={memberAddLoading}
+                  >
                     <View style={s.clientAvatar}>
                       <Text style={s.clientAvatarText}>{member.name?.[0] || '?'}</Text>
                     </View>
@@ -842,6 +860,24 @@ export default function ClientScreen({ navigation, route }) {
               <View style={s.editCloseRow}>
                 <TouchableOpacity onPress={() => openEditClient(selectedClient)} style={s.editClientBtn}>
                   <Text style={s.editClientBtnText}>수정</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    Alert.alert('삭제', `"${selectedClient?.name}" 거래처를 삭제할까요?`, [
+                      { text: '취소', style: 'cancel' },
+                      {
+                        text: '삭제',
+                        style: 'destructive',
+                        onPress: async () => {
+                          setClients(await deleteClient(selectedClient.id));
+                          setSelectedClient(null);
+                        },
+                      },
+                    ]);
+                  }}
+                  style={s.deleteClientBtn}
+                >
+                  <Text style={s.deleteClientBtnText}>삭제</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setSelectedClient(null)}>
                   <Text style={s.closeBtn}>✕</Text>
@@ -1495,6 +1531,8 @@ const s = StyleSheet.create({
   closeBtn: { color: C.textSecondary, fontSize: 18, padding: 4 },
   editClientBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: C.accentBlue + '66', backgroundColor: C.accentBlue + '11' },
   editClientBtnText: { color: C.accentBlue, fontSize: 12, fontWeight: '500' },
+  deleteClientBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: C.red + '66', backgroundColor: C.red + '11' },
+  deleteClientBtnText: { color: C.red, fontSize: 12, fontWeight: '500' },
   notesBox: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, marginBottom: 14 },
   notesLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 6 },
   notesText: { color: C.textSecondary, fontSize: 13, lineHeight: 19 },

@@ -43,9 +43,10 @@ create table profiles (
   company_id uuid references companies(id) on delete set null,
   department_id uuid references departments(id) on delete set null,
   is_company_admin boolean not null default false,
-  -- 다른 사용자의 거래처 검색(search_discoverable_profiles) 결과에 내 정보(id/name/email/team/role)를
-  -- 노출할지 여부. 기본값 false(옵트인) — 사용자가 설정 화면에서 명시적으로 켜야만 노출된다.
-  -- 자세한 배경은 patch_profile_discoverable_search.sql 참고.
+  -- 다른 사용자의 거래처 검색(search_discoverable_profiles) 결과에 내 정보(id/name/email/team/role/
+  -- contact)를 노출하고, 검색한 상대방이 별도 확인 없이 거래처로 즉시 추가할 수 있도록 허용할지
+  -- 여부. 기본값 false(옵트인) — 사용자가 설정 화면에서 명시적으로 켜야만 노출된다. 자세한 배경은
+  -- patch_profile_discoverable_search.sql, patch_search_discoverable_profiles_add_contact.sql 참고.
   discoverable boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -251,12 +252,19 @@ grant execute on function get_company_colleagues() to authenticated;
 
 -- 거래처(clients) 추가 시 기존 가입 회원을 검색해 linked_profile_id로 연결할 수 있게 하는 함수.
 -- get_company_colleagues()와 동일한 이유로 SECURITY DEFINER 함수로 감싸 필요한 컬럼(id, name,
--- email, team, role)만 반환한다. contact는 여전히 비공개 정보이므로 절대 포함하지 않는다.
--- discoverable=true(옵트인)로 설정한 계정만 대상이며, 검색어 없이는 결과를 반환하지 않는다
--- (전체 덤프 방지), 호출자 자신은 제외, 최대 20건. 자세한 배경은
--- patch_profile_discoverable_search.sql 참고.
+-- email, team, role, contact)만 반환한다. discoverable=true(옵트인)로 설정한 계정만 대상이며,
+-- 검색어 없이는 결과를 반환하지 않는다(전체 덤프 방지), 호출자 자신은 제외, 최대 20건.
+-- contact(연락처)는 검색 결과 선택 시 거래처로 즉시 자동 추가되는 용도로 함께 노출된다(옵트인
+-- 동의 범위 확장 — 자세한 배경은 patch_profile_discoverable_search.sql,
+-- patch_search_discoverable_profiles_add_contact.sql 참고).
+-- RETURNS TABLE의 OUT 컬럼 개수가 바뀌므로(5→6, contact 추가) create or replace만으로는
+-- 반영되지 않는다(42P13 cannot change return type of existing function). 이 스크립트는
+-- 테이블은 전부 drop 후 재생성하지만 함수는 테이블 drop에 연쇄되어 삭제되지 않으므로
+-- (함수는 테이블에 대한 하드 의존성이 없음) 여기서도 명시적으로 drop한다.
+drop function if exists search_discoverable_profiles(text);
+
 create or replace function search_discoverable_profiles(p_query text)
-returns table (id uuid, name text, email text, team text, role text)
+returns table (id uuid, name text, email text, team text, role text, contact text)
 language plpgsql security definer stable
 set search_path = public
 as $$
@@ -266,7 +274,7 @@ begin
   end if;
 
   return query
-    select p.id, p.name, p.email, p.team, p.role
+    select p.id, p.name, p.email, p.team, p.role, p.contact
     from profiles p
     where p.discoverable = true
       and p.id <> auth.uid()

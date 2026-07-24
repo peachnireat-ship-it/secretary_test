@@ -299,6 +299,8 @@ export async function getAllAccounts() {
 // 대상으로 name/email/team ilike 검색한다. 검색어가 비어있으면 search_discoverable_profiles()가
 // 예외를 던지므로, 여기서 먼저 걸러 불필요한 API 호출/예외를 방지한다. 조회 실패도 getAllAccounts()와
 // 동일하게 화면을 막지 않도록 빈 배열을 반환한다.
+// contact: discoverable 옵트인 동의 범위가 "연락처 포함 노출 및 거래처 자동 추가"로 확장되면서
+// RPC 반환 컬럼에 추가됨(patch_search_discoverable_profiles_add_contact.sql 참고) — 그대로 통과시킨다.
 export async function searchDiscoverableProfiles(query) {
   const q = (query || '').trim();
   if (!q) return [];
@@ -310,6 +312,7 @@ export async function searchDiscoverableProfiles(query) {
     email: row.email,
     team: row.team,
     role: row.role,
+    contact: row.contact,
   }));
 }
 
@@ -317,14 +320,16 @@ export async function searchDiscoverableProfiles(query) {
 // 입력 없이 즉시 전환한다(기존 동작 유지). ROSTER가 아닌 실제 가입 계정은 고정 비밀번호가 없으므로
 // targetPassword를 반드시 입력받아 signInWithPassword로 검증한다 — 비밀번호 확인 없이 전환을
 // 허용하면 "비밀번호 없이 남의 계정 접근"이 되는 심각한 보안 취약점이므로 절대 생략하지 않는다.
-export async function switchAccount(targetEmail, currentPassword, targetPassword) {
+export async function switchAccount(targetEmail, currentPassword, targetPassword, targetId) {
   if (!__DEV__) throw new Error('계정 전환은 개발 모드에서만 사용 가능합니다.');
   const current = await getCurrentUser();
   if (!current) throw new Error('현재 로그인된 계정이 없습니다.');
   const { error: verifyErr } = await supabase.auth.signInWithPassword({ email: current.email, password: currentPassword || '' });
   if (verifyErr) throw new Error('현재 계정 비밀번호가 일치하지 않습니다.');
 
-  const rosterEntry = ROSTER.find((r) => r.email === targetEmail);
+  // targetEmail은 profiles.email(알림 수신용, 사용자가 자유롭게 변경 가능)이라 ROSTER 이메일과
+  // 달라질 수 있음 — getAllAccounts()의 isRosterAccount(id 기준)와 판정 기준을 맞추기 위해 id로 조회.
+  const rosterEntry = findRoster({ id: targetId });
   // 검증(대상 비밀번호 누락 등)은 signOut 이전에 끝낸다 — 여기서 먼저 로그아웃해버리면 검증
   // 실패 시 현재 세션만 잃고 전환도 안 되는 상태로 남는다.
   if (!rosterEntry && !targetPassword) throw new Error('대상 계정의 비밀번호를 입력해주세요.');
@@ -572,6 +577,13 @@ export async function updateClient(id, fields) {
   const { data, error } = await supabase.from('clients').update(toRow(fields, CLIENT_KEYMAP)).eq('id', id).eq('user_id', user.id).select('linked_profile_id').single();
   if (error) throw error;
   await syncEmail('profiles', 'id', data?.linked_profile_id, fields.email);
+  return getClients();
+}
+
+export async function deleteClient(id) {
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('clients').delete().eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
   return getClients();
 }
 

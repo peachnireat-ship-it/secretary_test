@@ -145,7 +145,7 @@ export default function SettingsScreen() {
   async function handleConfirmSwitch() {
     if (!switchTarget) return;
     try {
-      const u = await switchAccount(switchTarget.email, switchPassword, switchTargetPassword);
+      const u = await switchAccount(switchTarget.email, switchPassword, switchTargetPassword, switchTarget.id);
       setSwitchTarget(null);
       setSwitchPassword('');
       setSwitchTargetPassword('');
@@ -482,8 +482,8 @@ export default function SettingsScreen() {
               <View style={s.flex1}>
                 <Text style={s.discoverableLabel}>다른 사용자 검색에 내 정보 노출 허용</Text>
                 <Text style={s.discoverableDesc}>
-                  켜면 다른 사용자가 거래처 추가 시 “기존 회원 검색”으로 내 이름·이메일·소속·직책을 찾아 거래처로 등록할 수 있습니다.{'\n'}
-                  연락처는 노출되지 않으며, 기본값은 꺼짐(비허용)입니다.
+                  켜면 다른 사용자가 거래처 추가 시 “기존 회원 검색”으로 내 이름·이메일·소속·직책·연락처(전화번호)를 찾을 수 있고, 별도 확인 절차 없이 바로 내 정보를 거래처 목록에 추가할 수 있습니다.{'\n'}
+                  연락처도 함께 노출되니 신뢰할 수 있는 경우에만 켜세요. 기본값은 꺼짐(비허용)입니다.
                 </Text>
               </View>
               <Switch
