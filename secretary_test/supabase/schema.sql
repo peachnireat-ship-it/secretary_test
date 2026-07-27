@@ -93,7 +93,10 @@ create table if not exists histories (
   title text not null,
   content text not null default '',
   result text not null default '',
-  created_at bigint not null
+  created_at bigint not null,
+  -- 상호 히스토리 공유(get_mutual_client_history) 시 이 항목을 상대방에게 공개할지 여부.
+  -- 기본 비공개(옵트인) — profiles.discoverable/share_mutual_history와 동일한 원칙.
+  shared_with_mutual boolean not null default false
 );
 create index if not exists histories_client_idx on histories(client_id);
 
@@ -311,10 +314,11 @@ $$;
 grant execute on function search_discoverable_profiles(text) to authenticated;
 
 -- 상호 등록된 거래처(A가 B를 거래처로 등록 + B도 A를 거래처로 등록)이고, B가
--- share_mutual_history를 옵트인한 경우에만 B가 기록한 히스토리(전체 항목: date/type/title/
--- content/result)를 A에게 반환하는 함수. 대칭 조건이라 반대 방향(B가 A의 히스토리를 보는 것)은
--- A의 share_mutual_history 값이 별도로 결정한다. 4단계 보안 조건과 자세한 배경은
--- patch_mutual_client_history.sql 참고. 신규 함수라 42P13 문제는 없지만 관례상 drop 후 생성한다.
+-- share_mutual_history를 옵트인한 경우에만 B가 기록한 히스토리 중 항목별로 개별 공개
+-- (histories.shared_with_mutual = true) 표시한 것만 A에게 반환하는 함수. 대칭 조건이라 반대
+-- 방향(B가 A의 히스토리를 보는 것)은 A의 share_mutual_history/각 항목의 shared_with_mutual
+-- 값이 별도로 결정한다. 4단계 보안 조건과 자세한 배경은 patch_mutual_client_history.sql,
+-- patch_history_shared_with_mutual.sql 참고. 신규 함수라 42P13 문제는 없지만 관례상 drop 후 생성한다.
 drop function if exists get_mutual_client_history(uuid);
 
 create or replace function get_mutual_client_history(p_other_profile_id uuid)
@@ -362,6 +366,7 @@ begin
     from histories h
     where h.user_id = p_other_profile_id
       and h.client_id = v_other_client_id
+      and h.shared_with_mutual = true
     order by h.created_at desc;
 end;
 $$;

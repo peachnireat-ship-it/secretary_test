@@ -479,7 +479,7 @@ async function syncEmail(table, matchColumn, matchValue, email) {
 
 const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', notifyEmail: 'notify_email', createdAt: 'created_at' };
 const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', sns: 'sns', notes: 'notes', aiSummary: 'ai_summary', linkedProfileId: 'linked_profile_id', createdAt: 'created_at' };
-const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', createdAt: 'created_at' };
+const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', sharedWithMutual: 'shared_with_mutual', createdAt: 'created_at' };
 const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', notifyEmail: 'notify_email', createdAt: 'created_at', updatedAt: 'updated_at' };
 const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', diarizeSource: 'diarize_source', createdAt: 'created_at' };
 const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'company', subject: 'subject', content: 'content', priority: 'priority', status: 'status', fromId: 'sender_id', toId: 'to_id', linkedReceivedId: 'linked_received_id', editHistory: 'edit_history', createdAt: 'created_at', updatedAt: 'updated_at' };
@@ -487,7 +487,7 @@ const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'com
 // NOT NULL 컬럼 기본값 — 벌크 upsert 시 toRow()의 defaults 인자로 전달한다.
 const SCHEDULE_DEFAULTS = { notes: '', client_ids: [], notify_email: true };
 const CLIENT_DEFAULTS = { role: '', work_contact: '', email: '', sns: '', notes: '', ai_summary: '', linked_profile_id: null };
-const HISTORY_DEFAULTS = { content: '', result: '' };
+const HISTORY_DEFAULTS = { content: '', result: '', shared_with_mutual: false };
 const PROJECT_DEFAULTS = { status: '진행중', priority: '보통', notes: '', progress: 0, client_ids: [], meeting_record_ids: [], notify_email: true };
 const MEETING_DEFAULTS = { transcript: '', summary: '', client_ids: [], tasks: [] };
 const MESSAGE_DEFAULTS = { sender: '', company: '', subject: '', content: '', priority: '일반', status: '미확인', edit_history: [] };

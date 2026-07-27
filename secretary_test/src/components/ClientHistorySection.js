@@ -33,6 +33,9 @@ export default function ClientHistorySection({ client, histories, onHistoriesCha
   const [hTitle, setHTitle] = useState('');
   const [hContent, setHContent] = useState('');
   const [hResult, setHResult] = useState('');
+  const [hShared, setHShared] = useState(false);
+
+  const isLinked = !!client?.linkedProfileId;
 
   const clientHistories = client
     ? histories.filter((h) => h.clientId === client.id).sort((a, b) => b.createdAt - a.createdAt)
@@ -41,9 +44,9 @@ export default function ClientHistorySection({ client, histories, onHistoriesCha
   async function handleAddHistory() {
     if (!hTitle.trim() || !client) return;
     const today = new Date().toISOString().split('T')[0];
-    const updated = await addHistory({ clientId: client.id, date: today, type: hType, title: hTitle.trim(), content: hContent.trim(), result: hResult.trim() });
+    const updated = await addHistory({ clientId: client.id, date: today, type: hType, title: hTitle.trim(), content: hContent.trim(), result: hResult.trim(), sharedWithMutual: hShared });
     setShowAddHistory(false);
-    setHTitle(''); setHContent(''); setHResult(''); setHType('미팅');
+    setHTitle(''); setHContent(''); setHResult(''); setHType('미팅'); setHShared(false);
     onHistoriesChange(updated);
   }
 
@@ -53,13 +56,14 @@ export default function ClientHistorySection({ client, histories, onHistoriesCha
     setHTitle(h.title);
     setHContent(h.content || '');
     setHResult(h.result || '');
+    setHShared(!!h.sharedWithMutual);
   }
 
   async function handleEditHistory() {
     if (!hTitle.trim() || !editingHistory) return;
-    const updated = await updateHistory(editingHistory.id, { type: hType, title: hTitle.trim(), content: hContent.trim(), result: hResult.trim() });
+    const updated = await updateHistory(editingHistory.id, { type: hType, title: hTitle.trim(), content: hContent.trim(), result: hResult.trim(), sharedWithMutual: hShared });
     setEditingHistory(null);
-    setHTitle(''); setHContent(''); setHResult(''); setHType('미팅');
+    setHTitle(''); setHContent(''); setHResult(''); setHType('미팅'); setHShared(false);
     onHistoriesChange(updated);
   }
 
@@ -106,6 +110,7 @@ export default function ClientHistorySection({ client, histories, onHistoriesCha
                     <Text style={[s.typeText, { color: typeColor(h.type) }]}>{h.type}</Text>
                   </View>
                   <Text style={s.historyTitleText}>{h.title}</Text>
+                  {isLinked && h.sharedWithMutual ? <Text style={s.sharedBadge}>공개</Text> : null}
                   <View style={s.historyActionRow}>
                     <TouchableOpacity onPress={() => openEditHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Text style={s.editHistoryBtn}>편집</Text>
@@ -156,6 +161,8 @@ export default function ClientHistorySection({ client, histories, onHistoriesCha
             <Text style={s.inputLabel}>결과</Text>
             <TextInput style={s.input} value={hResult} onChangeText={setHResult} placeholder="결과 또는 다음 액션" placeholderTextColor={C.textDim} />
 
+            <SharedToggleRow visible={isLinked} value={hShared} onToggle={setHShared} />
+
             <View style={s.modalBtns}>
               <TouchableOpacity style={s.modalCancel} onPress={() => setShowAddHistory(false)}>
                 <Text style={s.modalCancelText}>취소</Text>
@@ -194,8 +201,10 @@ export default function ClientHistorySection({ client, histories, onHistoriesCha
             <Text style={s.inputLabel}>결과</Text>
             <TextInput style={s.input} value={hResult} onChangeText={setHResult} placeholder="결과 또는 다음 액션" placeholderTextColor={C.textDim} />
 
+            <SharedToggleRow visible={isLinked} value={hShared} onToggle={setHShared} />
+
             <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => { setEditingHistory(null); setHTitle(''); setHContent(''); setHResult(''); setHType('미팅'); }}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => { setEditingHistory(null); setHTitle(''); setHContent(''); setHResult(''); setHType('미팅'); setHShared(false); }}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.modalConfirm} onPress={handleEditHistory}>
@@ -206,6 +215,18 @@ export default function ClientHistorySection({ client, histories, onHistoriesCha
         </KeyboardAvoidingView>
       </Modal>
     </>
+  );
+}
+
+function SharedToggleRow({ visible, value, onToggle }) {
+  if (!visible) return null;
+  return (
+    <TouchableOpacity style={s.sharedRow} onPress={() => onToggle(!value)} activeOpacity={0.7}>
+      <View style={[s.sharedCheckbox, value && s.sharedCheckboxOn]}>
+        {value ? <Text style={s.sharedCheckboxMark}>✓</Text> : null}
+      </View>
+      <Text style={s.sharedLabel}>상대방에게 이 항목 공개</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -225,6 +246,7 @@ const s = StyleSheet.create({
   typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
   typeText: { fontSize: 10, fontWeight: '500' },
   historyTitleText: { color: C.textPrimary, fontSize: 13, flex: 1 },
+  sharedBadge: { color: C.accentTeal, fontSize: 9, fontWeight: '600', borderWidth: 1, borderColor: C.accentTeal + '55', backgroundColor: C.accentTeal + '11', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
   historyActionRow: { marginLeft: 'auto', flexDirection: 'row', gap: 10 },
   editHistoryBtn: { color: C.textDim, fontSize: 11 },
   deleteHistoryBtn: { color: C.red, fontSize: 11 },
@@ -244,6 +266,11 @@ const s = StyleSheet.create({
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
   modalSubTitle: { color: C.textDim, fontSize: 12, marginBottom: 16 },
   inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5 },
+  sharedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 },
+  sharedCheckbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  sharedCheckboxOn: { borderColor: C.accentTeal, backgroundColor: C.accentTeal + '22' },
+  sharedCheckboxMark: { color: C.accentTeal, fontSize: 13, fontWeight: '700' },
+  sharedLabel: { color: C.textSecondary, fontSize: 13 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tagOption: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   tagOptionActive: { borderColor: C.accentTeal + '88', backgroundColor: C.accentTeal + '22' },
