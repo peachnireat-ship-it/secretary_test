@@ -88,6 +88,21 @@ create table clients (
   created_at bigint not null
 );
 
+-- ── topics (거래처별 업무 토픽) ───────────────────────────
+-- 히스토리를 업무 토픽 단위로 묶기 위한 엔티티. 상호 등록된 거래처 관계에서는 A/B 각자 자신의
+-- client row 아래에 토픽을 만들며(사용자가 직접 입력, AI 자동 분류 아님), shared를 켜면 그
+-- 토픽에 속한 자신의 히스토리 전부가 상대방에게 공개 후보가 된다(단, 히스토리 개별
+-- shared_with_mutual도 true여야 실제 노출됨 — AND 게이트, patch_history_topic.sql 참고).
+create table topics (
+  id text primary key,
+  user_id uuid not null references profiles(id) on delete cascade,
+  client_id text not null references clients(id) on delete cascade,
+  name text not null,
+  shared boolean not null default false,
+  created_at bigint not null
+);
+create index topics_client_idx on topics(client_id);
+
 -- ── histories (거래처 히스토리) ───────────────────────────
 create table histories (
   id text primary key,
@@ -101,7 +116,9 @@ create table histories (
   created_at bigint not null,
   -- 상호 히스토리 공유(get_mutual_client_history) 시 이 항목을 상대방에게 공개할지 여부.
   -- 기본 비공개(옵트인) — profiles.discoverable/share_mutual_history와 동일한 원칙.
-  shared_with_mutual boolean not null default false
+  shared_with_mutual boolean not null default false,
+  -- 업무 토픽별 보기(트리 그룹핑)용 topics.id 참조. 토픽 삭제 시 소속 히스토리는 미분류로 남는다.
+  topic_id text references topics(id) on delete set null
 );
 create index histories_client_idx on histories(client_id);
 
@@ -171,6 +188,7 @@ alter table departments enable row level security;
 alter table profiles enable row level security;
 alter table schedules enable row level security;
 alter table clients enable row level security;
+alter table topics enable row level security;
 alter table histories enable row level security;
 alter table projects enable row level security;
 alter table meeting_records enable row level security;
@@ -300,15 +318,19 @@ $$;
 grant execute on function search_discoverable_profiles(text) to authenticated;
 
 -- 상호 등록된 거래처(A가 B를 거래처로 등록 + B도 A를 거래처로 등록)이고, B가
--- share_mutual_history를 옵트인한 경우에만 B가 기록한 히스토리 중 항목별로 개별 공개
--- (histories.shared_with_mutual = true) 표시한 것만 A에게 반환하는 함수. 대칭 조건이라 반대
--- 방향(B가 A의 히스토리를 보는 것)은 A의 share_mutual_history/각 항목의 shared_with_mutual
--- 값이 별도로 결정한다. 4단계 보안 조건과 자세한 배경은 patch_mutual_client_history.sql,
--- patch_history_shared_with_mutual.sql 참고. 신규 함수라 42P13 문제는 없지만 관례상 drop 후 생성한다.
+-- share_mutual_history를 옵트인한 경우에만 B가 기록한 히스토리 중 아래 두 조건을 모두
+-- 만족하는 것만 A에게 반환하는 함수(AND 게이트):
+--   1) 히스토리 개별 공개(histories.shared_with_mutual = true)
+--   2) 토픽이 지정된 경우, 그 토픽도 공유 옵트인(topics.shared = true) — 토픽 미지정(topic_id
+--      null)이면 이 조건은 건너뛰고 1)만으로 판정한다.
+-- 대칭 조건이라 반대 방향(B가 A의 히스토리를 보는 것)은 A측 값이 별도로 결정한다. 4단계 보안
+-- 조건과 자세한 배경은 patch_mutual_client_history.sql, patch_history_shared_with_mutual.sql,
+-- patch_history_topic.sql 참고. 반환 컬럼이 바뀔 때마다 42P13(반환 타입 변경 불가) 방지를 위해
+-- 관례상 drop 후 생성한다.
 drop function if exists get_mutual_client_history(uuid);
 
 create or replace function get_mutual_client_history(p_other_profile_id uuid)
-returns table (id text, date text, type text, title text, content text, result text, created_at bigint)
+returns table (id text, date text, type text, title text, content text, result text, topic_name text, created_at bigint)
 language plpgsql security definer stable
 set search_path = public
 as $$
@@ -348,11 +370,13 @@ begin
   end if;
 
   return query
-    select h.id, h.date, h.type, h.title, h.content, h.result, h.created_at
+    select h.id, h.date, h.type, h.title, h.content, h.result, t.name, h.created_at
     from histories h
+    left join topics t on t.id = h.topic_id
     where h.user_id = p_other_profile_id
       and h.client_id = v_other_client_id
       and h.shared_with_mutual = true
+      and (h.topic_id is null or t.shared = true)
     order by h.created_at desc;
 end;
 $$;
@@ -439,6 +463,9 @@ create policy schedules_all_own on schedules
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 create policy clients_all_own on clients
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create policy topics_all_own on topics
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 create policy histories_all_own on histories

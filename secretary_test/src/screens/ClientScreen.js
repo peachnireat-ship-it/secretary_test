@@ -10,7 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
-import { getClients, addClient, updateClient, deleteClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles, getMutualClientHistory } from '../services/storage';
+import { getClients, addClient, updateClient, deleteClient, saveClients, getHistories, getTopics, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles, getMutualClientHistory } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
@@ -43,6 +43,7 @@ export default function ClientScreen({ navigation, route }) {
   const { user: currentUser } = useUser();
   const [clients, setClients] = useState([]);
   const [histories, setHistories] = useState([]);
+  const [topics, setTopics] = useState([]);
   const [meetingRecords, setMeetingRecords] = useState([]);
   const [projects, setProjects] = useState([]);
   const [search, setSearch] = useState('');
@@ -106,10 +107,11 @@ export default function ClientScreen({ navigation, route }) {
   const [loaded, setLoaded] = useState(false);
 
   async function load() {
-    const [allClients, allHistories, allMeetingRecords, allProjects, favoriteIds] = await Promise.all([getClients(), getHistories(), getMeetingRecords(), getProjects(), getClientFavorites()]);
+    const [allClients, allHistories, allTopics, allMeetingRecords, allProjects, favoriteIds] = await Promise.all([getClients(), getHistories(), getTopics(), getMeetingRecords(), getProjects(), getClientFavorites()]);
     const filtered = currentUser ? allClients.filter((cl) => !(cl.name === currentUser.name && cl.company === currentUser.team)) : allClients;
     setClients(filtered);
     setHistories(allHistories);
+    setTopics(allTopics);
     setMeetingRecords(allMeetingRecords);
     setProjects(allProjects);
     setFavorites(favoriteIds);
@@ -374,6 +376,10 @@ export default function ClientScreen({ navigation, route }) {
   function handleHistoriesChange(updated) {
     setHistories(updated);
     fetchClientSummary(selectedClient, updated);
+  }
+
+  function handleTopicsChange(updated) {
+    setTopics(updated);
   }
 
   async function handleAIChat() {
@@ -1041,7 +1047,7 @@ export default function ClientScreen({ navigation, route }) {
               );
             })()}
 
-            <ClientHistorySection client={selectedClient} histories={histories} mutualHistories={mutualHistory} onHistoriesChange={handleHistoriesChange}>
+            <ClientHistorySection client={selectedClient} histories={histories} mutualHistories={mutualHistory} topics={topics} onHistoriesChange={handleHistoriesChange} onTopicsChange={handleTopicsChange}>
               {/* 연결된 회의록 */}
               {(() => {
                 const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));

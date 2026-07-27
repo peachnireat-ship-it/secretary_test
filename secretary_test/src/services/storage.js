@@ -327,7 +327,7 @@ export async function getMutualClientHistory(otherProfileId) {
   const { data, error } = await supabase.rpc('get_mutual_client_history', { p_other_profile_id: otherProfileId });
   if (error) return [];
   return (data || []).map((row) => ({
-    id: row.id, date: row.date, type: row.type, title: row.title, content: row.content, result: row.result, createdAt: row.created_at,
+    id: row.id, date: row.date, type: row.type, title: row.title, content: row.content, result: row.result, topicName: row.topic_name, createdAt: row.created_at,
   }));
 }
 
@@ -479,7 +479,8 @@ async function syncEmail(table, matchColumn, matchValue, email) {
 
 const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', notifyEmail: 'notify_email', createdAt: 'created_at' };
 const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', sns: 'sns', notes: 'notes', aiSummary: 'ai_summary', linkedProfileId: 'linked_profile_id', createdAt: 'created_at' };
-const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', sharedWithMutual: 'shared_with_mutual', createdAt: 'created_at' };
+const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', sharedWithMutual: 'shared_with_mutual', topicId: 'topic_id', createdAt: 'created_at' };
+const TOPIC_KEYMAP = { clientId: 'client_id', name: 'name', shared: 'shared', createdAt: 'created_at' };
 const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', notifyEmail: 'notify_email', createdAt: 'created_at', updatedAt: 'updated_at' };
 const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', diarizeSource: 'diarize_source', createdAt: 'created_at' };
 const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'company', subject: 'subject', content: 'content', priority: 'priority', status: 'status', fromId: 'sender_id', toId: 'to_id', linkedReceivedId: 'linked_received_id', editHistory: 'edit_history', createdAt: 'created_at', updatedAt: 'updated_at' };
@@ -487,7 +488,8 @@ const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'com
 // NOT NULL 컬럼 기본값 — 벌크 upsert 시 toRow()의 defaults 인자로 전달한다.
 const SCHEDULE_DEFAULTS = { notes: '', client_ids: [], notify_email: true };
 const CLIENT_DEFAULTS = { role: '', work_contact: '', email: '', sns: '', notes: '', ai_summary: '', linked_profile_id: null };
-const HISTORY_DEFAULTS = { content: '', result: '', shared_with_mutual: false };
+const HISTORY_DEFAULTS = { content: '', result: '', shared_with_mutual: false, topic_id: null };
+const TOPIC_DEFAULTS = { shared: false };
 const PROJECT_DEFAULTS = { status: '진행중', priority: '보통', notes: '', progress: 0, client_ids: [], meeting_record_ids: [], notify_email: true };
 const MEETING_DEFAULTS = { transcript: '', summary: '', client_ids: [], tasks: [] };
 const MESSAGE_DEFAULTS = { sender: '', company: '', subject: '', content: '', priority: '일반', status: '미확인', edit_history: [] };
@@ -668,6 +670,44 @@ export async function getHistoriesByClient(clientId) {
   const { data, error } = await supabase.from('histories').select('*').eq('user_id', user.id).eq('client_id', clientId).order('created_at', { ascending: false });
   if (error) throw error;
   return data.map((r) => fromRow(r, HISTORY_KEYMAP));
+}
+
+// ── Topics (히스토리 업무 토픽) ──────────────────────────
+// topic.shared를 켜면 그 토픽에 속한 히스토리가 상대방에게 공개될 "후보"가 된다. 실제 노출은
+// 히스토리 개별 shared_with_mutual과의 AND 게이트로 get_mutual_client_history()가 판정한다.
+// 자세한 배경은 supabase/patch_history_topic.sql 참고.
+// ClientScreen.load()가 clients/histories 등과 함께 Promise.all로 병렬 호출하므로, 여기서
+// throw하면 topics 테이블/컬럼이 아직 없는(마이그레이션 미실행) 환경에서 무관한 나머지 데이터
+// 로딩까지 전부 실패해 화면이 텅 비어 보이는 문제가 생긴다. 토픽은 부가 기능이므로 실패 시
+// 조용히 빈 배열을 반환해 나머지 로딩을 막지 않는다.
+export async function getTopics() {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { data, error } = await supabase.from('topics').select('*').eq('user_id', user.id);
+  if (error) return [];
+  return data.map((r) => fromRow(r, TOPIC_KEYMAP));
+}
+
+export async function addTopic(topic) {
+  const user = await getCurrentUser();
+  const row = { id: topic.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(topic, TOPIC_KEYMAP, TOPIC_DEFAULTS) };
+  const { error } = await supabase.from('topics').insert(row);
+  if (error) throw error;
+  return getTopics();
+}
+
+export async function updateTopic(id, changes) {
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('topics').update(toRow(changes, TOPIC_KEYMAP)).eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getTopics();
+}
+
+export async function deleteTopic(id) {
+  const user = await getCurrentUser();
+  const { error } = await supabase.from('topics').delete().eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+  return getTopics();
 }
 
 // ── Projects ──────────────────────────────────────────────
