@@ -78,9 +78,20 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
     if (!topicMap.has(key)) topicMap.set(key, []);
     topicMap.get(key).push(h);
   }
+  // 방금 만들어서 아직 어떤 히스토리도 태그되지 않은(0건) 내 토픽도 그룹으로 미리 노출한다.
+  // 그래야 그룹 헤더의 "+ 추가" 버튼으로 첫 히스토리를 등록할 진입점이 생긴다 — 그렇지 않으면
+  // combinedHistories 기반으로만 그룹이 만들어져 0건 토픽은 목록에서 아예 사라져 버튼도 보일
+  // 방법이 없었다.
+  for (const t of clientTopics) {
+    if (!topicMap.has(t.name)) topicMap.set(t.name, []);
+  }
   const topicGroups = [...topicMap.entries()]
     .map(([topic, items]) => ({ topic, items }))
-    .sort((a, b) => b.items[0].createdAt - a.items[0].createdAt);
+    .sort((a, b) => {
+      const aKey = a.items[0]?.createdAt ?? clientTopics.find((t) => t.name === a.topic)?.createdAt ?? 0;
+      const bKey = b.items[0]?.createdAt ?? clientTopics.find((t) => t.name === b.topic)?.createdAt ?? 0;
+      return bKey - aKey;
+    });
 
   // 토픽 관리 모달용 — 상대방이 만들어 공유한 토픽(내 topics 테이블엔 없음)을 별도로 집계.
   // "토픽별 보기"에는 이미 그룹으로 보이는데 토픽 관리 모달엔 "등록된 토픽이 없습니다"만 뜨면
@@ -246,7 +257,9 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
       </View>
 
       <ScrollView style={s.flex1} showsVerticalScrollIndicator={false}>
-        {combinedHistories.length === 0 ? (
+        {viewMode === 'timeline' && combinedHistories.length === 0 ? (
+          <Text style={s.emptyText}>기록된 히스토리가 없습니다</Text>
+        ) : viewMode === 'topic' && topicGroups.length === 0 ? (
           <Text style={s.emptyText}>기록된 히스토리가 없습니다</Text>
         ) : viewMode === 'timeline' ? (
           combinedHistories.map((h, i) => (
@@ -305,6 +318,9 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
                     </TouchableOpacity>
                   )}
                 </View>
+                {topicOpen && g.items.length === 0 && (
+                  <Text style={s.topicEmptyHint}>아직 연결된 히스토리가 없습니다. {'"+ 추가"'}로 첫 히스토리를 등록해보세요.</Text>
+                )}
                 {topicOpen && g.items.map((h) => {
                   const detailOpen = expandedItems.has(h.__key);
                   return (
@@ -600,6 +616,7 @@ const s = StyleSheet.create({
   topicChevron: { color: C.accentTeal, fontSize: 12, width: 12 },
   topicName: { color: C.textPrimary, fontSize: 13, flex: 1, fontWeight: '500' },
   topicCount: { color: C.textDim, fontSize: 11 },
+  topicEmptyHint: { color: C.textDim, fontSize: 11, paddingHorizontal: 14, paddingVertical: 10, marginLeft: 10 },
   topicItem: { backgroundColor: C.surface, borderLeftWidth: 2, borderLeftColor: C.border, borderBottomWidth: 1, borderBottomColor: C.border, paddingHorizontal: 14, paddingVertical: 10, marginLeft: 10, gap: 6 },
   topicItemRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topicItemDate: { color: C.textDim, fontSize: 10 },
