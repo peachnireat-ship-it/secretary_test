@@ -5,6 +5,7 @@ import {
 import { Alert } from '../utils/alertCompat';
 import { useState } from 'react';
 import { C } from '../theme';
+import { commonStyles } from '../styles/common';
 import { addHistory, updateHistory, deleteHistory, addTopic, updateTopic, deleteTopic } from '../services/storage';
 import { typeColor } from '../utils/colors';
 
@@ -40,9 +41,8 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
   const [hResult, setHResult] = useState('');
   const [hShared, setHShared] = useState(false);
   const [hTopicId, setHTopicId] = useState(null);
-  const [showTopicCreate, setShowTopicCreate] = useState(false);
-  const [topicCreateName, setTopicCreateName] = useState('');
   const [showTopicManager, setShowTopicManager] = useState(false);
+  const [topicHistoryPicker, setTopicHistoryPicker] = useState(null);
   const [mgrNewTopicName, setMgrNewTopicName] = useState('');
   const [viewMode, setViewMode] = useState('timeline'); // 'timeline' | 'topic'
   const [expandedTopics, setExpandedTopics] = useState(new Set());
@@ -152,7 +152,7 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
 
   function resetHistoryForm() {
     setHTitle(''); setHContent(''); setHResult(''); setHType('미팅'); setHShared(false);
-    setHTopicId(null); setShowTopicCreate(false); setTopicCreateName('');
+    setHTopicId(null);
   }
 
   // 히스토리 등록/수정 모달의 토픽 선택기에서 "+ 새 토픽"으로 즉석에서 만든 토픽은 바로 선택된다.
@@ -163,15 +163,6 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
     const updated = await addTopic({ id, clientId: client.id, name: trimmed });
     onTopicsChange?.(updated);
     return id;
-  }
-
-  async function handleInlineCreateTopic() {
-    const id = await handleCreateTopic(topicCreateName);
-    if (id) {
-      setHTopicId(id);
-      setTopicCreateName('');
-      setShowTopicCreate(false);
-    }
   }
 
   async function handleManagerCreateTopic() {
@@ -187,6 +178,13 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
 
   async function handleRemoveFromTopic(h) {
     const updated = await updateHistory(h.id, { topicId: null });
+    onHistoriesChange(updated);
+  }
+
+  // 토픽 관리 화면에서 기존 히스토리를 사용자가 직접 선택해 해당 토픽으로 옮긴다.
+  async function handleAssignExistingHistory(h) {
+    if (!topicHistoryPicker) return;
+    const updated = await updateHistory(h.id, { topicId: topicHistoryPicker.id });
     onHistoriesChange(updated);
   }
 
@@ -401,11 +399,6 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
               topics={clientTopics}
               value={hTopicId}
               onSelect={setHTopicId}
-              showCreate={showTopicCreate}
-              onToggleCreate={() => setShowTopicCreate((v) => !v)}
-              createName={topicCreateName}
-              onCreateNameChange={setTopicCreateName}
-              onCreateConfirm={handleInlineCreateTopic}
             />
 
             <Text style={s.inputLabel}>내용</Text>
@@ -452,11 +445,6 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
               topics={clientTopics}
               value={hTopicId}
               onSelect={setHTopicId}
-              showCreate={showTopicCreate}
-              onToggleCreate={() => setShowTopicCreate((v) => !v)}
-              createName={topicCreateName}
-              onCreateNameChange={setTopicCreateName}
-              onCreateConfirm={handleInlineCreateTopic}
             />
 
             <Text style={s.inputLabel}>내용</Text>
@@ -503,6 +491,9 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
                             <Text style={[s.topicMgrShareText, t.shared && s.topicMgrShareTextOn]}>{t.shared ? '공유중' : '비공개'}</Text>
                           </TouchableOpacity>
                         )}
+                        <TouchableOpacity style={s.topicMgrAssignBtn} onPress={() => setTopicHistoryPicker(t)}>
+                          <Text style={s.topicMgrAssignText}>히스토리 추가</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity onPress={() => confirmDeleteTopic(t)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Text style={s.deleteHistoryBtn}>삭제</Text>
                         </TouchableOpacity>
@@ -535,33 +526,79 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* 기존 히스토리를 선택해 현재 토픽에 수동으로 연결 */}
+      <Modal visible={!!topicHistoryPicker} animationType="slide" transparent onRequestClose={() => setTopicHistoryPicker(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>기존 히스토리 추가</Text>
+            <Text style={s.modalSubTitle}>{topicHistoryPicker?.name} 토픽에 넣을 히스토리를 선택하세요</Text>
+
+            <ScrollView style={s.topicPickerList}>
+              {clientHistories.filter((h) => h.topicId !== topicHistoryPicker?.id).length === 0 ? (
+                <Text style={s.emptyText}>추가할 기존 히스토리가 없습니다</Text>
+              ) : (
+                clientHistories.filter((h) => h.topicId !== topicHistoryPicker?.id).map((h) => {
+                  const currentTopic = clientTopics.find((t) => t.id === h.topicId);
+                  return (
+                    <View key={h.id} style={s.topicPickerRow}>
+                      <View style={[commonStyles.flex1, s.topicPickerInfo]}>
+                        <Text style={s.topicPickerTitle} numberOfLines={1}>{h.title}</Text>
+                        <Text style={s.topicPickerMeta} numberOfLines={1}>
+                          {formatHistoryDate(h.date)} · {currentTopic ? `${currentTopic.name}에서 이동` : '미분류'}
+                        </Text>
+                      </View>
+                      <TouchableOpacity style={s.topicPickerAddBtn} onPress={() => handleAssignExistingHistory(h)}>
+                        <Text style={s.topicPickerAddText}>추가</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalConfirm} onPress={() => setTopicHistoryPicker(null)}>
+                <Text style={s.modalConfirmText}>완료</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </>
   );
 }
 
-function TopicPicker({ topics, value, onSelect, showCreate, onToggleCreate, createName, onCreateNameChange, onCreateConfirm }) {
+function TopicPicker({ topics, value, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const selectedTopic = topics.find((t) => t.id === value);
+
+  function selectTopic(topicId) {
+    onSelect(topicId);
+    setOpen(false);
+  }
+
   return (
     <>
       <Text style={s.inputLabel}>업무 토픽 (선택)</Text>
-      <View style={s.tagRow}>
-        <TouchableOpacity style={[s.tagOption, !value && s.tagOptionActive]} onPress={() => onSelect(null)}>
-          <Text style={[s.tagOptionText, !value && s.tagOptionTextActive]}>없음</Text>
-        </TouchableOpacity>
-        {topics.map((t) => (
-          <TouchableOpacity key={t.id} style={[s.tagOption, value === t.id && s.tagOptionActive]} onPress={() => onSelect(t.id)}>
-            <Text style={[s.tagOptionText, value === t.id && s.tagOptionTextActive]}>{t.name}</Text>
+      <TouchableOpacity style={s.topicSelect} onPress={() => setOpen((prev) => !prev)} activeOpacity={0.7}>
+        <Text style={[s.topicSelectText, !selectedTopic && s.topicSelectPlaceholder]}>
+          {selectedTopic?.name || '토픽 없음'}
+        </Text>
+        <Text style={s.topicSelectChevron}>{open ? '⌃' : '⌄'}</Text>
+      </TouchableOpacity>
+      {open && (
+        <View style={s.topicOptions}>
+          <TouchableOpacity style={s.topicOptionRow} onPress={() => selectTopic(null)}>
+            <Text style={[s.topicOptionText, !value && s.topicOptionTextActive]}>토픽 없음</Text>
           </TouchableOpacity>
-        ))}
-        <TouchableOpacity style={s.tagOptionNew} onPress={onToggleCreate}>
-          <Text style={s.tagOptionNewText}>+ 새 토픽</Text>
-        </TouchableOpacity>
-      </View>
-      {showCreate && (
-        <View style={s.topicCreateRow}>
-          <TextInput style={[s.input, s.flex1]} value={createName} onChangeText={onCreateNameChange} placeholder="토픽 이름" placeholderTextColor={C.textDim} />
-          <TouchableOpacity style={s.topicCreateBtn} onPress={onCreateConfirm}>
-            <Text style={s.topicCreateBtnText}>추가</Text>
-          </TouchableOpacity>
+          {topics.map((t) => (
+            <TouchableOpacity key={t.id} style={s.topicOptionRow} onPress={() => selectTopic(t.id)}>
+              <Text style={[s.topicOptionText, value === t.id && s.topicOptionTextActive]}>{t.name}</Text>
+            </TouchableOpacity>
+          ))}
+          {topics.length === 0 && <Text style={s.topicOptionsEmpty}>생성된 토픽이 없습니다. 토픽 관리에서 먼저 만들어 주세요.</Text>}
         </View>
       )}
     </>
@@ -595,8 +632,15 @@ const s = StyleSheet.create({
   addHistoryText: { color: C.accentTeal, fontSize: 11 },
   manageTopicsBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: C.border },
   manageTopicsText: { color: C.textSecondary, fontSize: 11 },
-  tagOptionNew: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: C.accentTeal + '55', backgroundColor: C.accentTeal + '11' },
-  tagOptionNewText: { color: C.accentTeal, fontSize: 12 },
+  topicSelect: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  topicSelectText: { color: C.textPrimary, fontSize: 14 },
+  topicSelectPlaceholder: { color: C.textDim },
+  topicSelectChevron: { color: C.textDim, fontSize: 16 },
+  topicOptions: { borderWidth: 1, borderColor: C.border, borderRadius: 10, backgroundColor: C.surfaceHigh, marginTop: 4, overflow: 'hidden' },
+  topicOptionRow: { paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: C.border },
+  topicOptionText: { color: C.textSecondary, fontSize: 13 },
+  topicOptionTextActive: { color: C.accentTeal, fontWeight: '600' },
+  topicOptionsEmpty: { color: C.textDim, fontSize: 12, paddingHorizontal: 14, paddingVertical: 11 },
   topicCreateRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   topicCreateBtn: { paddingHorizontal: 16, borderRadius: 10, backgroundColor: C.accentTeal, alignItems: 'center', justifyContent: 'center' },
   topicCreateBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
@@ -608,6 +652,15 @@ const s = StyleSheet.create({
   topicMgrShareBtnOn: { borderColor: C.accentTeal + '88', backgroundColor: C.accentTeal + '22' },
   topicMgrShareText: { color: C.textDim, fontSize: 11 },
   topicMgrShareTextOn: { color: C.accentTeal, fontWeight: '600' },
+  topicMgrAssignBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, borderWidth: 1, borderColor: C.accentTeal + '55', backgroundColor: C.accentTeal + '11' },
+  topicMgrAssignText: { color: C.accentTeal, fontSize: 11, fontWeight: '600' },
+  topicPickerList: { maxHeight: 360, marginTop: 4 },
+  topicPickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: C.border },
+  topicPickerInfo: { gap: 3 },
+  topicPickerTitle: { color: C.textPrimary, fontSize: 14 },
+  topicPickerMeta: { color: C.textDim, fontSize: 11 },
+  topicPickerAddBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: C.accentTeal + '22', borderWidth: 1, borderColor: C.accentTeal + '55' },
+  topicPickerAddText: { color: C.accentTeal, fontSize: 12, fontWeight: '600' },
   topicGroup: { marginBottom: 10 },
   topicHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   topicHeaderMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
