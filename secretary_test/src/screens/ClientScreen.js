@@ -14,7 +14,7 @@ import { getClients, addClient, updateClient, deleteClient, saveClients, getHist
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
-import { priorityColor as priorityColorClient, projectStatusColor, typeColor } from '../utils/colors';
+import { priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
 import { formatDate, ONE_DAY_MS } from '../utils/dateUtils';
 import { parseTranscriptSegments } from '../utils/transcript';
 import ClientHistorySection from '../components/ClientHistorySection';
@@ -1041,7 +1041,7 @@ export default function ClientScreen({ navigation, route }) {
               );
             })()}
 
-            <ClientHistorySection client={selectedClient} histories={histories} onHistoriesChange={handleHistoriesChange}>
+            <ClientHistorySection client={selectedClient} histories={histories} mutualHistories={mutualHistory} onHistoriesChange={handleHistoriesChange}>
               {/* 연결된 회의록 */}
               {(() => {
                 const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));
@@ -1061,34 +1061,6 @@ export default function ClientScreen({ navigation, route }) {
                   </View>
                 );
               })()}
-
-              {/* 상호 등록된 거래처의 히스토리 — 상호 등록 + 상대방 옵트인 둘 다 충족할 때만 렌더링.
-                  조건 미충족 사유(상호 등록 아님/상대방 비공개)는 구분해서 노출하지 않는다(프라이버시). */}
-              {selectedClient?.linkedProfileId && mutualHistory.length > 0 && (
-                <View style={[s.linkedSection, commonStyles.mt16]}>
-                  <Text style={s.linkedSectionLabel}>상대방이 기록한 히스토리 {mutualHistory.length}건</Text>
-                  <View style={s.mutualHistorySection}>
-                    {mutualHistory.map((h) => (
-                      <View key={h.id} style={s.mutualHistoryItem}>
-                        <View style={s.mutualHistoryMeta}>
-                          <View style={[s.typeBadge, { backgroundColor: typeColor(h.type) + '22', borderColor: typeColor(h.type) + '55' }]}>
-                            <Text style={[s.typeBadgeText, { color: typeColor(h.type) }]}>{h.type}</Text>
-                          </View>
-                          <Text style={s.mutualHistoryDate}>{h.date}</Text>
-                        </View>
-                        <Text style={s.mutualHistoryTitle}>{h.title}</Text>
-                        {h.content ? <Text style={s.mutualHistoryContent}>{h.content}</Text> : null}
-                        {h.result ? (
-                          <View style={s.mutualHistoryResultRow}>
-                            <Text style={s.mutualHistoryResultLabel}>결과</Text>
-                            <Text style={s.mutualHistoryResultText}>{h.result}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
             </ClientHistorySection>
           </Animated.View>
         </View>
@@ -1639,19 +1611,6 @@ const s = StyleSheet.create({
   projectChipDot: { width: 5, height: 5, borderRadius: 3 },
   projectChipText: { fontSize: 11, fontWeight: '500', maxWidth: 160 },
   emptyText: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingTop: 20 },
-
-  // 상호 등록된 거래처 히스토리 (읽기 전용 — 편집/삭제 버튼 없음)
-  mutualHistorySection: { gap: 8 },
-  mutualHistoryItem: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, gap: 6 },
-  mutualHistoryMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
-  typeBadgeText: { fontSize: 10, fontWeight: '500' },
-  mutualHistoryDate: { color: C.textDim, fontSize: 10 },
-  mutualHistoryTitle: { color: C.textPrimary, fontSize: 13 },
-  mutualHistoryContent: { color: C.textSecondary, fontSize: 12, lineHeight: 18 },
-  mutualHistoryResultRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
-  mutualHistoryResultLabel: { color: C.gold, fontSize: 10, fontWeight: '600', marginTop: 1 },
-  mutualHistoryResultText: { color: C.textDim, fontSize: 12, flex: 1 },
 
   // Project detail modal
   projDetailHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },

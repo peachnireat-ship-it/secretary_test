@@ -23,10 +23,12 @@ function formatHistoryDate(dateStr) {
  * @param {object} params
  * @param {object|null} params.client 현재 선택된 거래처 (selectedClient)
  * @param {Array} params.histories 전체 히스토리 배열 (client.id로 필터링해서 사용)
+ * @param {Array} [params.mutualHistories] 상호 등록된 거래처(client.linkedProfileId)가 공개한 상대방 히스토리.
+ *   본인 히스토리와 합쳐 등록 시간순으로 정렬 표시하되, 읽기 전용(편집/삭제 불가)이며 배지로 구분한다.
  * @param {(updated: Array) => void} params.onHistoriesChange 추가/수정/삭제 후 갱신된 히스토리 배열을 부모에 전달하는 콜백
  * @param {React.ReactNode} [params.children] 히스토리 목록 아래, 같은 ScrollView 안에 렌더링할 콘텐츠
  */
-export default function ClientHistorySection({ client, histories, onHistoriesChange, children }) {
+export default function ClientHistorySection({ client, histories, mutualHistories, onHistoriesChange, children }) {
   const [showAddHistory, setShowAddHistory] = useState(false);
   const [editingHistory, setEditingHistory] = useState(null);
   const [hType, setHType] = useState('미팅');
@@ -39,6 +41,16 @@ export default function ClientHistorySection({ client, histories, onHistoriesCha
 
   const clientHistories = client
     ? histories.filter((h) => h.clientId === client.id).sort((a, b) => b.createdAt - a.createdAt)
+    : [];
+
+  // 본인 히스토리 + 상대방이 공개한 히스토리를 등록 시간순(createdAt desc)으로 합쳐서 보여준다.
+  // 두 목록을 각각 별도 섹션으로 나눠 보여주면 실제 시간 순서와 무관하게 쪼개져 보이므로,
+  // 하나의 타임라인으로 병합하고 출처만 배지(공개/상대방 공유)로 구분한다.
+  const combinedHistories = client
+    ? [
+        ...clientHistories.map((h) => ({ ...h, __mutual: false })),
+        ...(mutualHistories || []).map((h) => ({ ...h, __mutual: true })),
+      ].sort((a, b) => b.createdAt - a.createdAt)
     : [];
 
   async function handleAddHistory() {
@@ -88,37 +100,43 @@ export default function ClientHistorySection({ client, histories, onHistoriesCha
     <>
       {/* 히스토리 */}
       <View style={s.historyHeader}>
-        <Text style={s.historyTitle}>히스토리 {clientHistories.length}건</Text>
+        <Text style={s.historyTitle}>히스토리 {combinedHistories.length}건</Text>
         <TouchableOpacity style={s.addHistoryBtn} onPress={() => setShowAddHistory(true)}>
           <Text style={s.addHistoryText}>+ 추가</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={s.flex1} showsVerticalScrollIndicator={false}>
-        {clientHistories.length === 0 ? (
+        {combinedHistories.length === 0 ? (
           <Text style={s.emptyText}>기록된 히스토리가 없습니다</Text>
         ) : (
-          clientHistories.map((h, i) => (
-            <View key={h.id} style={s.historyItem}>
+          combinedHistories.map((h, i) => (
+            <View key={h.__mutual ? `mutual-${h.id}` : h.id} style={s.historyItem}>
               <View style={s.historyLeft}>
                 <Text style={s.historyDate}>{formatHistoryDate(h.date)}</Text>
-                {i < clientHistories.length - 1 && <View style={s.historyLine} />}
+                {i < combinedHistories.length - 1 && <View style={s.historyLine} />}
               </View>
-              <View style={s.historyRight}>
+              <View style={[s.historyRight, h.__mutual && s.historyRightMutual]}>
                 <View style={s.historyMeta}>
                   <View style={[s.typeBadge, { backgroundColor: typeColor(h.type) + '22', borderColor: typeColor(h.type) + '55' }]}>
                     <Text style={[s.typeText, { color: typeColor(h.type) }]}>{h.type}</Text>
                   </View>
                   <Text style={s.historyTitleText}>{h.title}</Text>
-                  {isLinked && h.sharedWithMutual ? <Text style={s.sharedBadge}>공개</Text> : null}
-                  <View style={s.historyActionRow}>
-                    <TouchableOpacity onPress={() => openEditHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={s.editHistoryBtn}>편집</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => confirmDeleteHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={s.deleteHistoryBtn}>삭제</Text>
-                    </TouchableOpacity>
-                  </View>
+                  {h.__mutual ? (
+                    <Text style={s.mutualBadge}>상대방 공유</Text>
+                  ) : (
+                    isLinked && h.sharedWithMutual ? <Text style={s.sharedBadge}>공개</Text> : null
+                  )}
+                  {!h.__mutual && (
+                    <View style={s.historyActionRow}>
+                      <TouchableOpacity onPress={() => openEditHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={s.editHistoryBtn}>편집</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => confirmDeleteHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={s.deleteHistoryBtn}>삭제</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
                 {h.content ? <Text style={s.historyContent}>{h.content}</Text> : null}
                 {h.result ? (
@@ -242,6 +260,8 @@ const s = StyleSheet.create({
   historyDate: { color: C.textDim, fontSize: 10, textAlign: 'center', lineHeight: 16 },
   historyLine: { width: 1, flex: 1, backgroundColor: C.border, marginTop: 6 },
   historyRight: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, marginBottom: 10, gap: 6 },
+  historyRightMutual: { borderColor: C.accentPurple + '55', backgroundColor: C.accentPurple + '0d' },
+  mutualBadge: { color: C.accentPurple, fontSize: 9, fontWeight: '600', borderWidth: 1, borderColor: C.accentPurple + '55', backgroundColor: C.accentPurple + '11', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
   historyMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
   typeText: { fontSize: 10, fontWeight: '500' },
