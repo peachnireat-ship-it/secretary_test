@@ -48,6 +48,11 @@ create table profiles (
   -- 여부. 기본값 false(옵트인) — 사용자가 설정 화면에서 명시적으로 켜야만 노출된다. 자세한 배경은
   -- patch_profile_discoverable_search.sql, patch_search_discoverable_profiles_add_contact.sql 참고.
   discoverable boolean not null default false,
+  -- 상호 등록된 거래처(clients.linked_profile_id 상호 연결)와 내 히스토리(histories)를 공유할지
+  -- 여부. 기본값 false(옵트인) — 대칭 조건이라 내가 켜도 "내 히스토리를 상대방에게 보여줄지"만
+  -- 결정할 뿐, 상대방의 히스토리를 내가 볼 수 있는지는 상대방의 이 컬럼 값이 따로 결정한다.
+  -- 자세한 배경은 patch_mutual_client_history.sql 참고.
+  share_mutual_history boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -77,6 +82,9 @@ create table clients (
   contact text not null,
   work_contact text not null default '',
   notes text not null default '',
+  -- 이 clients row가 실제로 어떤 profiles.id(가입 회원)를 가리키는지. get_mutual_client_history()가
+  -- 상호 등록 여부 판정에 사용한다. 자세한 배경은 patch_clients_linked_profile.sql 참고.
+  linked_profile_id uuid references profiles(id),
   created_at bigint not null
 );
 
@@ -287,6 +295,63 @@ begin
 end;
 $$;
 grant execute on function search_discoverable_profiles(text) to authenticated;
+
+-- 상호 등록된 거래처(A가 B를 거래처로 등록 + B도 A를 거래처로 등록)이고, B가
+-- share_mutual_history를 옵트인한 경우에만 B가 기록한 히스토리(전체 항목: date/type/title/
+-- content/result)를 A에게 반환하는 함수. 대칭 조건이라 반대 방향(B가 A의 히스토리를 보는 것)은
+-- A의 share_mutual_history 값이 별도로 결정한다. 4단계 보안 조건과 자세한 배경은
+-- patch_mutual_client_history.sql 참고. 신규 함수라 42P13 문제는 없지만 관례상 drop 후 생성한다.
+drop function if exists get_mutual_client_history(uuid);
+
+create or replace function get_mutual_client_history(p_other_profile_id uuid)
+returns table (id text, date text, type text, title text, content text, result text, created_at bigint)
+language plpgsql security definer stable
+set search_path = public
+as $$
+declare
+  v_other_client_id text;
+begin
+  if p_other_profile_id is null or p_other_profile_id = auth.uid() then
+    return;
+  end if;
+
+  -- 주의: returns table(id text, ...)이 plpgsql 스코프에 "id" OUT 파라미터를 암묵 선언하므로,
+  -- 별칭 없이 "id"라고만 쓰면 profiles.id와 모호해져 42702 에러가 난다. 반드시 별칭으로 한정한다.
+  if not exists (
+    select 1 from profiles p
+    where p.id = p_other_profile_id
+      and p.share_mutual_history = true
+  ) then
+    return;
+  end if;
+
+  if not exists (
+    select 1 from clients
+    where user_id = auth.uid()
+      and linked_profile_id = p_other_profile_id
+  ) then
+    return;
+  end if;
+
+  select c.id into v_other_client_id
+  from clients c
+  where c.user_id = p_other_profile_id
+    and c.linked_profile_id = auth.uid()
+  limit 1;
+
+  if v_other_client_id is null then
+    return;
+  end if;
+
+  return query
+    select h.id, h.date, h.type, h.title, h.content, h.result, h.created_at
+    from histories h
+    where h.user_id = p_other_profile_id
+      and h.client_id = v_other_client_id
+    order by h.created_at desc;
+end;
+$$;
+grant execute on function get_mutual_client_history(uuid) to authenticated;
 
 -- ── 회원가입 RPC: 회사관리자/회사직원 선택 가입(LoginScreen.js) ──────
 -- 안전 불변식: signup_create_company_as_admin은 항상 새로 insert한 회사 id만 사용하므로

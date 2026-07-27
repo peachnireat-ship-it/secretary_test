@@ -142,6 +142,20 @@ export default function SettingsScreen() {
     }
   }
 
+  // 상호 등록된 거래처(내가 상대방을, 상대방도 나를 거래처로 등록한 경우)와 내 히스토리를
+  // 공유할지 여부. 기본값 false(옵트인) — 대칭 조건이라 이 토글은 "내 히스토리를 상대방에게
+  // 보여줄지"만 결정하며, 상대방의 히스토리를 내가 볼 수 있는지는 상대방의 별도 설정이 결정한다.
+  async function handleToggleShareMutualHistory(value) {
+    setProfile((p) => (p ? { ...p, shareMutualHistory: value } : p));
+    try {
+      await saveUserProfile({ share_mutual_history: value });
+    } catch (_e) {
+      // 저장 실패 시 화면 상태를 원래대로 되돌려 실제 DB 값과 불일치하지 않도록 한다.
+      setProfile((p) => (p ? { ...p, shareMutualHistory: !value } : p));
+      Alert.alert('오류', '설정 저장에 실패했습니다.');
+    }
+  }
+
   async function handleConfirmSwitch() {
     if (!switchTarget) return;
     try {
@@ -491,6 +505,25 @@ export default function SettingsScreen() {
                 onValueChange={handleToggleDiscoverable}
                 trackColor={{ false: C.border, true: C.accentTeal + '88' }}
                 thumbColor={profile?.discoverable ? C.accentTeal : C.textDim}
+              />
+            </View>
+          </View>
+
+          {/* 상호 등록된 거래처와 히스토리 공유 — 기본값 false(옵트인), 대칭 조건(상대방 조회 가능
+              여부는 상대방의 별도 설정이 결정) */}
+          <View style={[s.card, s.mb10]}>
+            <View style={s.discoverableRow}>
+              <View style={s.flex1}>
+                <Text style={s.discoverableLabel}>상호 등록된 거래처와 히스토리 공유</Text>
+                <Text style={s.discoverableDesc}>
+                  나와 상대방이 서로를 거래처로 등록한 경우에만, 내가 이 상대방에 대해 기록한 히스토리(날짜·유형·제목·내용·결과 전체)가 상대방에게 공개됩니다. 상대방이 나를 볼 수 있는지 여부는 상대방의 별도 설정에 따릅니다.
+                </Text>
+              </View>
+              <Switch
+                value={!!profile?.shareMutualHistory}
+                onValueChange={handleToggleShareMutualHistory}
+                trackColor={{ false: C.border, true: C.accentTeal + '88' }}
+                thumbColor={profile?.shareMutualHistory ? C.accentTeal : C.textDim}
               />
             </View>
           </View>

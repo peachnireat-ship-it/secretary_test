@@ -10,11 +10,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
-import { getClients, addClient, updateClient, deleteClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles } from '../services/storage';
+import { getClients, addClient, updateClient, deleteClient, saveClients, getHistories, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles, getMutualClientHistory } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
-import { priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
+import { priorityColor as priorityColorClient, projectStatusColor, typeColor } from '../utils/colors';
 import { formatDate, ONE_DAY_MS } from '../utils/dateUtils';
 import { parseTranscriptSegments } from '../utils/transcript';
 import ClientHistorySection from '../components/ClientHistorySection';
@@ -51,6 +51,10 @@ export default function ClientScreen({ navigation, route }) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [sortOrder, setSortOrder] = useState('asc');
   const [selectedProject, setSelectedProject] = useState(null);
+  // 상호 등록된 거래처(selectedClient.linkedProfileId 존재 시)의 히스토리 — 상대방이 상호 히스토리
+  // 공유를 옵트인하지 않았거나 상호 등록이 아니면 항상 빈 배열([]) — 프라이버시상 이유를 구분해
+  // 노출하지 않는다.
+  const [mutualHistory, setMutualHistory] = useState([]);
 
   const [showAddClient, setShowAddClient] = useState(false);
   const [showEditClient, setShowEditClient] = useState(false);
@@ -113,6 +117,32 @@ export default function ClientScreen({ navigation, route }) {
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
+
+  // 상세 모달이 열릴 때(selectedClient가 상호 등록된 거래처일 때)만 상대방 히스토리를 조회한다.
+  // 모달이 닫히거나(selectedClient === null) linkedProfileId가 없으면 즉시 빈 배열로 리셋해,
+  // 다음에 다른 거래처를 열 때 이전 상대방의 데이터가 잠깐이라도 보이지 않게 한다.
+  useEffect(() => {
+    if (!selectedClient?.linkedProfileId) {
+      // 모달이 닫히거나 linkedProfileId가 없는 거래처로 바뀔 때 이전 상대방의 mutualHistory가
+      // 잠깐이라도 남아있지 않도록 즉시 리셋
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMutualHistory([]);
+      return;
+    }
+    let cancelled = false;
+    const client = selectedClient;
+    getMutualClientHistory(client.linkedProfileId).then((result) => {
+      if (cancelled) return;
+      setMutualHistory(result);
+      // 상호 등록 거래처는 상대방 히스토리까지 반영된 요약을 만들어야 하므로, 아직 캐시된 요약이
+      // 없는 경우(신규 생성) 여기서 생성한다. openClient()는 이 경우 즉시 생성을 건너뛰고 이
+      // effect가 상대방 히스토리를 확보한 뒤 생성하도록 위임한다.
+      if (!client.aiSummary && !clientSummaryCache.current[client.id]) {
+        fetchClientSummary(client, histories, result);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [selectedClient?.linkedProfileId]);
 
   // clientId -> history[] (createdAt desc) 사전 인덱싱 — O(n×m) 목록 렌더링 방지
   const historiesByClient = useMemo(() => {
@@ -491,12 +521,19 @@ export default function ClientScreen({ navigation, route }) {
   const [historySummary, setHistorySummary] = useState('');
   const [historySummaryLoading, setHistorySummaryLoading] = useState(false);
 
-  async function fetchClientSummary(client, histList) {
+  async function fetchClientSummary(client, histList, mutualList) {
     setClientSummary('');
     setSummaryLoading(true);
     try {
       const clientHistList = (histList || histories).filter((h) => h.clientId === client.id);
-      const systemPrompt = buildClientSystem([client], clientHistList);
+      // 상호 등록 거래처의 경우, 상대방이 기록한 히스토리(mutualHistory)도 함께 반영해 관계 요약이
+      // 내 기록에만 치우치지 않도록 한다. buildClientSystem이 h.clientId로 필터링하므로 client.id를
+      // 맞춰주고, AI가 출처를 구분하도록 제목 앞에 표시한다.
+      const mutualHistList = (mutualList ?? mutualHistory).map((h) => ({
+        ...h, clientId: client.id, title: `[상대방 기록] ${h.title}`,
+      }));
+      const combinedHistList = [...clientHistList, ...mutualHistList];
+      const systemPrompt = buildClientSystem([client], combinedHistList);
       const lastWord = client.role?.trim() || client.name;
       const particle = josa과와(lastWord);
       const nameWithRole = client.role?.trim() ? `${client.name} ${client.role}` : client.name;
@@ -540,9 +577,15 @@ export default function ClientScreen({ navigation, route }) {
     if (cached) {
       setClientSummary(cached);
       setSummaryLoading(false);
-    } else {
+    } else if (!client.linkedProfileId) {
       setClientSummary('');
       fetchClientSummary(client);
+    } else {
+      // client.linkedProfileId가 있으면 상대방 히스토리 로딩 useEffect가 완료된 뒤 생성하도록
+      // 위임한다(상호 등록 거래처는 상대방 히스토리까지 반영해야 하므로 여기서 미리 생성하지 않음).
+      // 이전에 선택했던 거래처의 요약 텍스트가 잠깐 남아 보이지 않도록 먼저 비워둔다.
+      setClientSummary('');
+      setSummaryLoading(true);
     }
   }
 
@@ -964,6 +1007,14 @@ export default function ClientScreen({ navigation, route }) {
               <View style={s.summaryLabelRow}>
                 <Text style={s.aiGlyph}>✦</Text>
                 <Text style={s.summaryLabel}>AI 관계 요약</Text>
+                <TouchableOpacity
+                  style={s.summaryRefreshBtn}
+                  disabled={summaryLoading}
+                  onPress={() => fetchClientSummary(selectedClient, histories, mutualHistory)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[s.summaryRefreshText, summaryLoading && commonStyles.opacity40]}>⟳ 새로고침</Text>
+                </TouchableOpacity>
               </View>
               {summaryLoading
                 ? <ActivityIndicator size="small" color={C.accentTeal} style={commonStyles.mt8} />
@@ -1010,6 +1061,34 @@ export default function ClientScreen({ navigation, route }) {
                   </View>
                 );
               })()}
+
+              {/* 상호 등록된 거래처의 히스토리 — 상호 등록 + 상대방 옵트인 둘 다 충족할 때만 렌더링.
+                  조건 미충족 사유(상호 등록 아님/상대방 비공개)는 구분해서 노출하지 않는다(프라이버시). */}
+              {selectedClient?.linkedProfileId && mutualHistory.length > 0 && (
+                <View style={[s.linkedSection, commonStyles.mt16]}>
+                  <Text style={s.linkedSectionLabel}>상대방이 기록한 히스토리 {mutualHistory.length}건</Text>
+                  <View style={s.mutualHistorySection}>
+                    {mutualHistory.map((h) => (
+                      <View key={h.id} style={s.mutualHistoryItem}>
+                        <View style={s.mutualHistoryMeta}>
+                          <View style={[s.typeBadge, { backgroundColor: typeColor(h.type) + '22', borderColor: typeColor(h.type) + '55' }]}>
+                            <Text style={[s.typeBadgeText, { color: typeColor(h.type) }]}>{h.type}</Text>
+                          </View>
+                          <Text style={s.mutualHistoryDate}>{h.date}</Text>
+                        </View>
+                        <Text style={s.mutualHistoryTitle}>{h.title}</Text>
+                        {h.content ? <Text style={s.mutualHistoryContent}>{h.content}</Text> : null}
+                        {h.result ? (
+                          <View style={s.mutualHistoryResultRow}>
+                            <Text style={s.mutualHistoryResultLabel}>결과</Text>
+                            <Text style={s.mutualHistoryResultText}>{h.result}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
             </ClientHistorySection>
           </Animated.View>
         </View>
@@ -1540,6 +1619,8 @@ const s = StyleSheet.create({
   summaryLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   aiGlyph: { color: C.accentTeal, fontSize: 14 },
   summaryLabel: { color: C.accentTeal, fontSize: 10, fontWeight: '600', letterSpacing: 1.5 },
+  summaryRefreshBtn: { marginLeft: 'auto' },
+  summaryRefreshText: { color: C.textDim, fontSize: 10 },
   summaryText: { color: C.textSecondary, fontSize: 12, lineHeight: 19 },
   linkedSection: { marginBottom: 12 },
   linkedSectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2, fontWeight: '600', marginBottom: 8 },
@@ -1558,6 +1639,19 @@ const s = StyleSheet.create({
   projectChipDot: { width: 5, height: 5, borderRadius: 3 },
   projectChipText: { fontSize: 11, fontWeight: '500', maxWidth: 160 },
   emptyText: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingTop: 20 },
+
+  // 상호 등록된 거래처 히스토리 (읽기 전용 — 편집/삭제 버튼 없음)
+  mutualHistorySection: { gap: 8 },
+  mutualHistoryItem: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, gap: 6 },
+  mutualHistoryMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
+  typeBadgeText: { fontSize: 10, fontWeight: '500' },
+  mutualHistoryDate: { color: C.textDim, fontSize: 10 },
+  mutualHistoryTitle: { color: C.textPrimary, fontSize: 13 },
+  mutualHistoryContent: { color: C.textSecondary, fontSize: 12, lineHeight: 18 },
+  mutualHistoryResultRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
+  mutualHistoryResultLabel: { color: C.gold, fontSize: 10, fontWeight: '600', marginTop: 1 },
+  mutualHistoryResultText: { color: C.textDim, fontSize: 12, flex: 1 },
 
   // Project detail modal
   projDetailHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },

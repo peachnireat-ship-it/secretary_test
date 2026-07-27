@@ -316,6 +316,21 @@ export async function searchDiscoverableProfiles(query) {
   }));
 }
 
+// 상호 등록된 거래처(A가 B를 거래처로 등록 + B도 A를 거래처로 등록)이고, B가 설정 화면에서
+// "상호 등록된 거래처와 히스토리 공유"를 옵트인한 경우에만 B가 기록한 히스토리(전체 항목)를
+// 반환한다. get_mutual_client_history() RPC가 4단계 보안 조건을 전부 검사하므로 여기서는 결과를
+// 그대로 통과시킨다. 조건 불충족 시(상호 등록 아님/상대방 비공개 등) 이유 구분 없이 빈 배열을
+// 반환한다 — 프라이버시상 "왜 안 보이는지"를 알려주는 것 자체가 정보 유출이 될 수 있기 때문.
+// 자세한 배경은 supabase/patch_mutual_client_history.sql 참고.
+export async function getMutualClientHistory(otherProfileId) {
+  if (!otherProfileId) return [];
+  const { data, error } = await supabase.rpc('get_mutual_client_history', { p_other_profile_id: otherProfileId });
+  if (error) return [];
+  return (data || []).map((row) => ({
+    id: row.id, date: row.date, type: row.type, title: row.title, content: row.content, result: row.result, createdAt: row.created_at,
+  }));
+}
+
 // 대상 계정이 ROSTER(하드코딩 테스트 계정)면 CLAUDE.md에 이미 공개된 고정 비밀번호로 비밀번호
 // 입력 없이 즉시 전환한다(기존 동작 유지). ROSTER가 아닌 실제 가입 계정은 고정 비밀번호가 없으므로
 // targetPassword를 반드시 입력받아 signInWithPassword로 검증한다 — 비밀번호 확인 없이 전환을
@@ -927,11 +942,11 @@ export async function toggleClientFavorite(clientId) {
 export async function getUserProfile() {
   const user = await getCurrentUser();
   if (!user) return null;
-  const { data, error } = await supabase.from('profiles').select('contact, notes, email, sns, discoverable').eq('id', user.id).single();
+  const { data, error } = await supabase.from('profiles').select('contact, notes, email, sns, discoverable, share_mutual_history').eq('id', user.id).single();
   if (error) throw error;
   // 주의: user.email은 로그인용 Supabase Auth 이메일(계정 아이디)이므로, 알림 수신용 profiles.email로
   // 덮어쓰이지 않도록 ...user를 먼저 펼치고 profiles 필드를 뒤에 덮어쓴다.
-  return { ...user, contact: data?.contact || '', notes: data?.notes || '', email: data?.email || '', sns: data?.sns || '', discoverable: !!data?.discoverable };
+  return { ...user, contact: data?.contact || '', notes: data?.notes || '', email: data?.email || '', sns: data?.sns || '', discoverable: !!data?.discoverable, shareMutualHistory: !!data?.share_mutual_history };
 }
 
 export async function saveUserProfile(fields) {
