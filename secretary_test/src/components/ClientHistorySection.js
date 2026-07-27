@@ -82,6 +82,20 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
     .map(([topic, items]) => ({ topic, items }))
     .sort((a, b) => b.items[0].createdAt - a.items[0].createdAt);
 
+  // 토픽 관리 모달용 — 상대방이 만들어 공유한 토픽(내 topics 테이블엔 없음)을 별도로 집계.
+  // "토픽별 보기"에는 이미 그룹으로 보이는데 토픽 관리 모달엔 "등록된 토픽이 없습니다"만 뜨면
+  // 혼동을 주므로, 읽기 전용으로라도 목록에 동기화해 보여준다.
+  const mutualTopicGroups = [];
+  {
+    const mutualMap = new Map();
+    for (const h of mutualHistories || []) {
+      if (!h.topicName) continue;
+      if (!mutualMap.has(h.topicName)) mutualMap.set(h.topicName, 0);
+      mutualMap.set(h.topicName, mutualMap.get(h.topicName) + 1);
+    }
+    for (const [name, count] of mutualMap.entries()) mutualTopicGroups.push({ name, count });
+  }
+
   function toggleTopic(topic) {
     setExpandedTopics((prev) => {
       const next = new Set(prev);
@@ -152,6 +166,17 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
   async function handleManagerCreateTopic() {
     const id = await handleCreateTopic(mgrNewTopicName);
     if (id) setMgrNewTopicName('');
+  }
+
+  function openAddHistoryForTopic(topicId) {
+    resetHistoryForm();
+    setHTopicId(topicId);
+    setShowAddHistory(true);
+  }
+
+  async function handleRemoveFromTopic(h) {
+    const updated = await updateHistory(h.id, { topicId: null });
+    onHistoriesChange(updated);
   }
 
   async function handleToggleTopicShared(t, count) {
@@ -265,13 +290,21 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
         ) : (
           topicGroups.map((g) => {
             const topicOpen = expandedTopics.has(g.topic);
+            const ownTopicId = clientTopics.find((t) => t.name === g.topic)?.id;
             return (
               <View key={g.topic} style={s.topicGroup}>
-                <TouchableOpacity style={s.topicHeader} onPress={() => toggleTopic(g.topic)} activeOpacity={0.7}>
-                  <Text style={s.topicChevron}>{topicOpen ? '▾' : '▸'}</Text>
-                  <Text style={s.topicName} numberOfLines={1}>{g.topic}</Text>
-                  <Text style={s.topicCount}>{g.items.length}건</Text>
-                </TouchableOpacity>
+                <View style={s.topicHeader}>
+                  <TouchableOpacity style={s.topicHeaderMain} onPress={() => toggleTopic(g.topic)} activeOpacity={0.7}>
+                    <Text style={s.topicChevron}>{topicOpen ? '▾' : '▸'}</Text>
+                    <Text style={s.topicName} numberOfLines={1}>{g.topic}</Text>
+                    <Text style={s.topicCount}>{g.items.length}건</Text>
+                  </TouchableOpacity>
+                  {ownTopicId && (
+                    <TouchableOpacity style={s.topicAddBtn} onPress={() => openAddHistoryForTopic(ownTopicId)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={s.topicAddBtnText}>+ 추가</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
                 {topicOpen && g.items.map((h) => {
                   const detailOpen = expandedItems.has(h.__key);
                   return (
@@ -302,6 +335,11 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
                           ) : null}
                           {!h.__mutual && (
                             <View style={s.historyActionRow}>
+                              {h.topicId && (
+                                <TouchableOpacity onPress={() => handleRemoveFromTopic(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                  <Text style={s.editHistoryBtn}>토픽에서 제외</Text>
+                                </TouchableOpacity>
+                              )}
                               <TouchableOpacity onPress={() => openEditHistory(h)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                 <Text style={s.editHistoryBtn}>편집</Text>
                               </TouchableOpacity>
@@ -434,26 +472,35 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
             <Text style={s.modalSubTitle}>{client?.company} — {client?.name}</Text>
 
             <ScrollView style={s.topicMgrList}>
-              {clientTopics.length === 0 ? (
+              {clientTopics.length === 0 && mutualTopicGroups.length === 0 ? (
                 <Text style={s.emptyText}>등록된 토픽이 없습니다</Text>
               ) : (
-                clientTopics.map((t) => {
-                  const count = clientHistories.filter((h) => h.topicId === t.id).length;
-                  return (
-                    <View key={t.id} style={s.topicMgrRow}>
-                      <Text style={s.topicMgrName} numberOfLines={1}>{t.name}</Text>
-                      <Text style={s.topicMgrCount}>{count}건</Text>
-                      {isLinked && (
-                        <TouchableOpacity style={[s.topicMgrShareBtn, t.shared && s.topicMgrShareBtnOn]} onPress={() => handleToggleTopicShared(t, count)}>
-                          <Text style={[s.topicMgrShareText, t.shared && s.topicMgrShareTextOn]}>{t.shared ? '공유중' : '비공개'}</Text>
+                <>
+                  {clientTopics.map((t) => {
+                    const count = clientHistories.filter((h) => h.topicId === t.id).length;
+                    return (
+                      <View key={t.id} style={s.topicMgrRow}>
+                        <Text style={s.topicMgrName} numberOfLines={1}>{t.name}</Text>
+                        <Text style={s.topicMgrCount}>{count}건</Text>
+                        {isLinked && (
+                          <TouchableOpacity style={[s.topicMgrShareBtn, t.shared && s.topicMgrShareBtnOn]} onPress={() => handleToggleTopicShared(t, count)}>
+                            <Text style={[s.topicMgrShareText, t.shared && s.topicMgrShareTextOn]}>{t.shared ? '공유중' : '비공개'}</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity onPress={() => confirmDeleteTopic(t)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Text style={s.deleteHistoryBtn}>삭제</Text>
                         </TouchableOpacity>
-                      )}
-                      <TouchableOpacity onPress={() => confirmDeleteTopic(t)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Text style={s.deleteHistoryBtn}>삭제</Text>
-                      </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                  {mutualTopicGroups.map((g) => (
+                    <View key={`mutual-${g.name}`} style={s.topicMgrRow}>
+                      <Text style={s.topicMgrName} numberOfLines={1}>{g.name}</Text>
+                      <Text style={s.topicMgrCount}>{g.count}건</Text>
+                      <Text style={s.mutualBadge}>상대방 토픽</Text>
                     </View>
-                  );
-                })
+                  ))}
+                </>
               )}
             </ScrollView>
 
@@ -547,6 +594,9 @@ const s = StyleSheet.create({
   topicMgrShareTextOn: { color: C.accentTeal, fontWeight: '600' },
   topicGroup: { marginBottom: 10 },
   topicHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  topicHeaderMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topicAddBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7, borderWidth: 1, borderColor: C.accentTeal + '55', backgroundColor: C.accentTeal + '11' },
+  topicAddBtnText: { color: C.accentTeal, fontSize: 11 },
   topicChevron: { color: C.accentTeal, fontSize: 12, width: 12 },
   topicName: { color: C.textPrimary, fontSize: 13, flex: 1, fontWeight: '500' },
   topicCount: { color: C.textDim, fontSize: 11 },
