@@ -327,7 +327,18 @@ export async function getMutualClientHistory(otherProfileId) {
   const { data, error } = await supabase.rpc('get_mutual_client_history', { p_other_profile_id: otherProfileId });
   if (error) return [];
   return (data || []).map((row) => ({
-    id: row.id, date: row.date, type: row.type, title: row.title, content: row.content, result: row.result, topicName: row.topic_name, createdAt: row.created_at,
+    id: row.id, date: row.date, type: row.type, title: row.title, content: row.content, result: row.result, topicId: row.topic_id, topicName: row.topic_name, createdAt: row.created_at,
+  }));
+}
+
+// 상호 등록 및 히스토리 공유를 허용한 상대방의 "공유중" 토픽만 반환한다.
+// 반환된 토픽은 내 히스토리를 공동으로 연결할 수 있지만, 토픽 자체의 수정/삭제 권한은 주지 않는다.
+export async function getMutualClientTopics(otherProfileId) {
+  if (!otherProfileId) return [];
+  const { data, error } = await supabase.rpc('get_mutual_client_topics', { p_other_profile_id: otherProfileId });
+  if (error) return [];
+  return (data || []).map((row) => ({
+    id: row.id, clientId: row.client_id, name: row.name, shared: true, createdAt: row.created_at, isMutual: true,
   }));
 }
 

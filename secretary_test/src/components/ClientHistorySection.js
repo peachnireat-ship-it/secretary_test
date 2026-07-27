@@ -32,7 +32,7 @@ function formatHistoryDate(dateStr) {
  * @param {(updated: Array) => void} [params.onTopicsChange] 토픽 추가/공유전환/삭제 후 갱신된 토픽 배열을 부모에 전달하는 콜백
  * @param {React.ReactNode} [params.children] 히스토리 목록 아래, 같은 ScrollView 안에 렌더링할 콘텐츠
  */
-export default function ClientHistorySection({ client, histories, mutualHistories, topics, onHistoriesChange, onTopicsChange, children }) {
+export default function ClientHistorySection({ client, histories, mutualHistories, mutualTopics, topics, onHistoriesChange, onTopicsChange, children }) {
   const [showAddHistory, setShowAddHistory] = useState(false);
   const [editingHistory, setEditingHistory] = useState(null);
   const [hType, setHType] = useState('미팅');
@@ -55,6 +55,9 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
     : [];
 
   const clientTopics = client ? (topics || []).filter((t) => t.clientId === client.id) : [];
+  const sharedMutualTopics = mutualTopics || [];
+  // 내 토픽과 상대방이 공유한 토픽을 함께 선택할 수 있다. 상대 토픽은 연결만 가능하고 관리 권한은 없다.
+  const selectableTopics = [...clientTopics, ...sharedMutualTopics];
 
   // 본인 히스토리 + 상대방이 공개한 히스토리를 등록 시간순(createdAt desc)으로 합쳐서 보여준다.
   // 두 목록을 각각 별도 섹션으로 나눠 보여주면 실제 시간 순서와 무관하게 쪼개져 보이므로,
@@ -73,39 +76,34 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
   // 최신 항목이다.
   const topicMap = new Map();
   for (const h of combinedHistories) {
-    const name = h.__mutual ? h.topicName : clientTopics.find((t) => t.id === h.topicId)?.name;
-    const key = name || UNCLASSIFIED_TOPIC;
-    if (!topicMap.has(key)) topicMap.set(key, []);
-    topicMap.get(key).push(h);
+    const topic = selectableTopics.find((t) => t.id === h.topicId);
+    const key = h.topicId || UNCLASSIFIED_TOPIC;
+    const name = topic?.name || h.topicName || UNCLASSIFIED_TOPIC;
+    if (!topicMap.has(key)) topicMap.set(key, { topicId: h.topicId || null, name, items: [] });
+    topicMap.get(key).items.push(h);
   }
   // 방금 만들어서 아직 어떤 히스토리도 태그되지 않은(0건) 내 토픽도 그룹으로 미리 노출한다.
   // 그래야 그룹 헤더의 "+ 추가" 버튼으로 첫 히스토리를 등록할 진입점이 생긴다 — 그렇지 않으면
   // combinedHistories 기반으로만 그룹이 만들어져 0건 토픽은 목록에서 아예 사라져 버튼도 보일
   // 방법이 없었다.
-  for (const t of clientTopics) {
-    if (!topicMap.has(t.name)) topicMap.set(t.name, []);
+  for (const t of selectableTopics) {
+    if (!topicMap.has(t.id)) topicMap.set(t.id, { topicId: t.id, name: t.name, items: [] });
   }
   const topicGroups = [...topicMap.entries()]
-    .map(([topic, items]) => ({ topic, items }))
+    .map(([, group]) => group)
     .sort((a, b) => {
-      const aKey = a.items[0]?.createdAt ?? clientTopics.find((t) => t.name === a.topic)?.createdAt ?? 0;
-      const bKey = b.items[0]?.createdAt ?? clientTopics.find((t) => t.name === b.topic)?.createdAt ?? 0;
+      const aKey = a.items[0]?.createdAt ?? selectableTopics.find((t) => t.id === a.topicId)?.createdAt ?? 0;
+      const bKey = b.items[0]?.createdAt ?? selectableTopics.find((t) => t.id === b.topicId)?.createdAt ?? 0;
       return bKey - aKey;
     });
 
   // 토픽 관리 모달용 — 상대방이 만들어 공유한 토픽(내 topics 테이블엔 없음)을 별도로 집계.
   // "토픽별 보기"에는 이미 그룹으로 보이는데 토픽 관리 모달엔 "등록된 토픽이 없습니다"만 뜨면
   // 혼동을 주므로, 읽기 전용으로라도 목록에 동기화해 보여준다.
-  const mutualTopicGroups = [];
-  {
-    const mutualMap = new Map();
-    for (const h of mutualHistories || []) {
-      if (!h.topicName) continue;
-      if (!mutualMap.has(h.topicName)) mutualMap.set(h.topicName, 0);
-      mutualMap.set(h.topicName, mutualMap.get(h.topicName) + 1);
-    }
-    for (const [name, count] of mutualMap.entries()) mutualTopicGroups.push({ name, count });
-  }
+  const mutualTopicGroups = sharedMutualTopics.map((t) => ({
+    ...t,
+    count: combinedHistories.filter((h) => h.topicId === t.id).length,
+  }));
 
   function toggleTopic(topic) {
     setExpandedTopics((prev) => {
@@ -300,18 +298,19 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
           ))
         ) : (
           topicGroups.map((g) => {
-            const topicOpen = expandedTopics.has(g.topic);
-            const ownTopicId = clientTopics.find((t) => t.name === g.topic)?.id;
+            const groupKey = g.topicId || UNCLASSIFIED_TOPIC;
+            const topicOpen = expandedTopics.has(groupKey);
+            const topicId = g.topicId;
             return (
-              <View key={g.topic} style={s.topicGroup}>
+              <View key={groupKey} style={s.topicGroup}>
                 <View style={s.topicHeader}>
-                  <TouchableOpacity style={s.topicHeaderMain} onPress={() => toggleTopic(g.topic)} activeOpacity={0.7}>
+                  <TouchableOpacity style={s.topicHeaderMain} onPress={() => toggleTopic(groupKey)} activeOpacity={0.7}>
                     <Text style={s.topicChevron}>{topicOpen ? '▾' : '▸'}</Text>
-                    <Text style={s.topicName} numberOfLines={1}>{g.topic}</Text>
+                    <Text style={s.topicName} numberOfLines={1}>{g.name}</Text>
                     <Text style={s.topicCount}>{g.items.length}건</Text>
                   </TouchableOpacity>
-                  {ownTopicId && (
-                    <TouchableOpacity style={s.topicAddBtn} onPress={() => openAddHistoryForTopic(ownTopicId)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  {topicId && (
+                    <TouchableOpacity style={s.topicAddBtn} onPress={() => openAddHistoryForTopic(topicId)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Text style={s.topicAddBtnText}>+ 추가</Text>
                     </TouchableOpacity>
                   )}
@@ -396,7 +395,7 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
             <TextInput style={s.input} value={hTitle} onChangeText={setHTitle} placeholder="미팅/연락 제목" placeholderTextColor={C.textDim} />
 
             <TopicPicker
-              topics={clientTopics}
+              topics={selectableTopics}
               value={hTopicId}
               onSelect={setHTopicId}
             />
@@ -442,7 +441,7 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
             <TextInput style={s.input} value={hTitle} onChangeText={setHTitle} placeholder="미팅/연락 제목" placeholderTextColor={C.textDim} />
 
             <TopicPicker
-              topics={clientTopics}
+              topics={selectableTopics}
               value={hTopicId}
               onSelect={setHTopicId}
             />
@@ -501,10 +500,13 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
                     );
                   })}
                   {mutualTopicGroups.map((g) => (
-                    <View key={`mutual-${g.name}`} style={s.topicMgrRow}>
+                    <View key={`mutual-${g.id}`} style={s.topicMgrRow}>
                       <Text style={s.topicMgrName} numberOfLines={1}>{g.name}</Text>
                       <Text style={s.topicMgrCount}>{g.count}건</Text>
                       <Text style={s.mutualBadge}>상대방 토픽</Text>
+                      <TouchableOpacity style={s.topicMgrAssignBtn} onPress={() => setTopicHistoryPicker(g)}>
+                        <Text style={s.topicMgrAssignText}>히스토리 추가</Text>
+                      </TouchableOpacity>
                     </View>
                   ))}
                 </>
@@ -540,7 +542,7 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
                 <Text style={s.emptyText}>추가할 기존 히스토리가 없습니다</Text>
               ) : (
                 clientHistories.filter((h) => h.topicId !== topicHistoryPicker?.id).map((h) => {
-                  const currentTopic = clientTopics.find((t) => t.id === h.topicId);
+                  const currentTopic = selectableTopics.find((t) => t.id === h.topicId);
                   return (
                     <View key={h.id} style={s.topicPickerRow}>
                       <View style={[commonStyles.flex1, s.topicPickerInfo]}>

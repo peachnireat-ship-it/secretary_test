@@ -10,7 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
-import { getClients, addClient, updateClient, deleteClient, saveClients, getHistories, getTopics, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles, getMutualClientHistory } from '../services/storage';
+import { getClients, addClient, updateClient, deleteClient, saveClients, getHistories, getTopics, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles, getMutualClientHistory, getMutualClientTopics } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
@@ -56,6 +56,7 @@ export default function ClientScreen({ navigation, route }) {
   // 공유를 옵트인하지 않았거나 상호 등록이 아니면 항상 빈 배열([]) — 프라이버시상 이유를 구분해
   // 노출하지 않는다.
   const [mutualHistory, setMutualHistory] = useState([]);
+  const [mutualTopics, setMutualTopics] = useState([]);
 
   const [showAddClient, setShowAddClient] = useState(false);
   const [showEditClient, setShowEditClient] = useState(false);
@@ -129,13 +130,15 @@ export default function ClientScreen({ navigation, route }) {
       // 잠깐이라도 남아있지 않도록 즉시 리셋
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMutualHistory([]);
+      setMutualTopics([]);
       return;
     }
     let cancelled = false;
     const client = selectedClient;
-    getMutualClientHistory(client.linkedProfileId).then((result) => {
+    Promise.all([getMutualClientHistory(client.linkedProfileId), getMutualClientTopics(client.linkedProfileId)]).then(([result, sharedTopics]) => {
       if (cancelled) return;
       setMutualHistory(result);
+      setMutualTopics(sharedTopics);
       // 상호 등록 거래처는 상대방 히스토리까지 반영된 요약을 만들어야 하므로, 아직 캐시된 요약이
       // 없는 경우(신규 생성) 여기서 생성한다. openClient()는 이 경우 즉시 생성을 건너뛰고 이
       // effect가 상대방 히스토리를 확보한 뒤 생성하도록 위임한다.
@@ -1047,7 +1050,7 @@ export default function ClientScreen({ navigation, route }) {
               );
             })()}
 
-            <ClientHistorySection client={selectedClient} histories={histories} mutualHistories={mutualHistory} topics={topics} onHistoriesChange={handleHistoriesChange} onTopicsChange={handleTopicsChange}>
+            <ClientHistorySection client={selectedClient} histories={histories} mutualHistories={mutualHistory} mutualTopics={mutualTopics} topics={topics} onHistoriesChange={handleHistoriesChange} onTopicsChange={handleTopicsChange}>
               {/* 연결된 회의록 */}
               {(() => {
                 const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));
