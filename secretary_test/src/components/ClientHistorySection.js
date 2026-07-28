@@ -154,9 +154,16 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
   }
 
   // 히스토리 등록/수정 모달의 토픽 선택기에서 "+ 새 토픽"으로 즉석에서 만든 토픽은 바로 선택된다.
+  // 같은 거래처에 이름이 같은 토픽이 이미 있으면 새로 만들지 않고 기존 토픽 id를 그대로 재사용한다
+  // (id 기준으로 하나의 토픽만 존재하도록 보장 — 이름이 같은 토픽이 중복 생성되는 것을 방지).
   async function handleCreateTopic(name) {
     const trimmed = name.trim();
     if (!trimmed || !client) return null;
+    const existing = clientTopics.find((t) => t.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (existing) {
+      Alert.alert('이미 있는 토픽입니다', `"${existing.name}" 토픽을 그대로 사용합니다.`);
+      return existing.id;
+    }
     const id = Date.now().toString();
     const updated = await addTopic({ id, clientId: client.id, name: trimmed });
     onTopicsChange?.(updated);

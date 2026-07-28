@@ -97,6 +97,9 @@ create table if not exists topics (
   created_at bigint not null
 );
 create index if not exists topics_client_idx on topics(client_id);
+-- 같은 사용자·같은 거래처 안에서 이름이 같은 토픽이 중복 생성되는 것을 막는다(id 기준 단일 관리).
+create unique index if not exists topics_unique_name_per_client
+  on topics (user_id, client_id, lower(trim(name)));
 
 -- ── histories (거래처 히스토리) ───────────────────────────
 create table if not exists histories (
