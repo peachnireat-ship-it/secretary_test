@@ -384,6 +384,15 @@ export default function ScheduleScreen({ navigation, route }) {
     setShowProjectPicker(false);
   }
 
+  // 관련 프로젝트를 선택하면 그 프로젝트의 관련 인물을 일정의 관련 인물에도 자동으로 추가한다
+  // (이미 선택돼 있던 인물은 유지, 중복은 제거).
+  function applyProjectClientIds(projectId, setClientIds) {
+    if (!projectId) return;
+    const project = projects.find((p) => p.id === projectId);
+    if (!project?.clientIds?.length) return;
+    setClientIds((prev) => [...new Set([...prev, ...project.clientIds])]);
+  }
+
   async function handlePickerAddClient() {
     if (!pickerNewName.trim() || !pickerNewCompany.trim() || !pickerNewContact.trim()) {
       Alert.alert('필수 항목 누락', '이름, 회사명, 연락처는 필수입니다.');
@@ -902,7 +911,7 @@ export default function ScheduleScreen({ navigation, route }) {
               </TouchableOpacity>
 
               <Text style={s.inputLabel}>관련 프로젝트 (선택)</Text>
-              <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(newProjectId, setNewProjectId)}>
+              <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(newProjectId, (id) => { setNewProjectId(id); applyProjectClientIds(id, setNewClientIds); })}>
                 <Text style={[s.pickerTriggerText, newProjectId && s.pickerTriggerTextActive]}>
                   {newProjectId ? (projects.find((p) => p.id === newProjectId)?.title || '선택된 프로젝트') : '프로젝트 선택'}
                 </Text>
@@ -1082,7 +1091,7 @@ export default function ScheduleScreen({ navigation, route }) {
                     </TouchableOpacity>
 
                     <Text style={s.inputLabel}>관련 프로젝트 (선택)</Text>
-                    <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(editProjectId, setEditProjectId)}>
+                    <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(editProjectId, (id) => { setEditProjectId(id); applyProjectClientIds(id, setEditClientIds); })}>
                       <Text style={[s.pickerTriggerText, editProjectId && s.pickerTriggerTextActive]}>
                         {editProjectId ? (projects.find((p) => p.id === editProjectId)?.title || '선택된 프로젝트') : '프로젝트 선택'}
                       </Text>
