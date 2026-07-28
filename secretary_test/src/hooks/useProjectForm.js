@@ -101,7 +101,7 @@ function findMissingEmailPeople(clientIds, clients) {
  * @param {Array} params.meetingRecords 회의록 목록 (신규 프로젝트 추가 시 연결된 회의록 조회용, 읽기 전용)
  * @param {Array} params.projects 기존 프로젝트 목록 (기간 겹침 검사용, 읽기 전용)
  * @param {Array} params.schedules 기존 일정 목록 (기간 겹침 검사용, 읽기 전용)
- * @param {Array} params.clients 거래처 목록 (이메일 미등록 인물 확인용, 읽기 전용)
+ * @param {Array} params.clients 담당자 목록 (이메일 미등록 인물 확인용, 읽기 전용)
  * @param {(projects: Array) => void} params.setProjects 프로젝트 목록 갱신 콜백
  */
 export function useProjectForm({ meetingRecords, projects = [], schedules = [], clients = [], setProjects }) {
@@ -263,6 +263,12 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setEditClientIds(project.clientIds || []);
     setShowDetail(true);
   }
+
+  useEffect(() => {
+    if (!showAdd) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNewNotifyEmail(newClientIds.length > 0);
+  }, [newClientIds, showAdd]);
 
   useEffect(() => {
     if (!showDetail) return;

@@ -295,11 +295,11 @@ export async function getAllAccounts() {
   }));
 }
 
-// 거래처(clients) 추가 화면의 "기존 회원 검색"용 — discoverable=true(옵트인)로 설정한 계정만
+// 담당자(clients) 추가 화면의 "기존 회원 검색"용 — discoverable=true(옵트인)로 설정한 계정만
 // 대상으로 name/email/team ilike 검색한다. 검색어가 비어있으면 search_discoverable_profiles()가
 // 예외를 던지므로, 여기서 먼저 걸러 불필요한 API 호출/예외를 방지한다. 조회 실패도 getAllAccounts()와
 // 동일하게 화면을 막지 않도록 빈 배열을 반환한다.
-// contact: discoverable 옵트인 동의 범위가 "연락처 포함 노출 및 거래처 자동 추가"로 확장되면서
+// contact: discoverable 옵트인 동의 범위가 "연락처 포함 노출 및 담당자 자동 추가"로 확장되면서
 // RPC 반환 컬럼에 추가됨(patch_search_discoverable_profiles_add_contact.sql 참고) — 그대로 통과시킨다.
 export async function searchDiscoverableProfiles(query) {
   const q = (query || '').trim();
@@ -316,8 +316,8 @@ export async function searchDiscoverableProfiles(query) {
   }));
 }
 
-// 상호 등록된 거래처(A가 B를 거래처로 등록 + B도 A를 거래처로 등록)이고, B가 설정 화면에서
-// "상호 등록된 거래처와 히스토리 공유"를 옵트인한 경우에만 B가 기록한 히스토리(전체 항목)를
+// 상호 등록된 담당자(A가 B를 담당자로 등록 + B도 A를 담당자로 등록)이고, B가 설정 화면에서
+// "상호 등록된 담당자와 히스토리 공유"를 옵트인한 경우에만 B가 기록한 히스토리(전체 항목)를
 // 반환한다. get_mutual_client_history() RPC가 4단계 보안 조건을 전부 검사하므로 여기서는 결과를
 // 그대로 통과시킨다. 조건 불충족 시(상호 등록 아님/상대방 비공개 등) 이유 구분 없이 빈 배열을
 // 반환한다 — 프라이버시상 "왜 안 보이는지"를 알려주는 것 자체가 정보 유출이 될 수 있기 때문.
@@ -465,7 +465,7 @@ function fromRow(row, keymap) {
 }
 
 // client_ids(schedules/projects) 소유권 사전 검증. RLS는 행 자체의 user_id만 검사할 뿐 배열 안의
-// client_ids 원소가 실제로 호출자 소유의 거래처인지는 검사하지 않아, DB 트리거
+// client_ids 원소가 실제로 호출자 소유의 담당자인지는 검사하지 않아, DB 트리거
 // (validate_client_ids_ownership, supabase/patch_client_ids_ownership.sql)가 최종 방어선으로
 // INSERT/UPDATE 자체를 막는다. 다만 트리거 예외 메시지는 사용자 친화적이지 않으므로, 저장 시도
 // 전에 여기서 먼저 걸러 명확한 한국어 에러를 준다(보안 재감사 02_security.md 발견 #1 조치).
@@ -475,7 +475,7 @@ async function assertClientIdsOwned(userId, clientIds) {
   const { data, error } = await supabase.from('clients').select('id').eq('user_id', userId).in('id', uniqueIds);
   if (error) throw error;
   if ((data || []).length !== uniqueIds.length) {
-    throw new Error('존재하지 않거나 접근 권한이 없는 거래처가 포함되어 있습니다.');
+    throw new Error('존재하지 않거나 접근 권한이 없는 담당자가 포함되어 있습니다.');
   }
 }
 
@@ -488,11 +488,11 @@ async function syncEmail(table, matchColumn, matchValue, email) {
   if (error) throw error;
 }
 
-const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', startDate: 'start_date', endDate: 'end_date', notifyEmail: 'notify_email', createdAt: 'created_at' };
+const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag', notes: 'notes', clientIds: 'client_ids', projectId: 'project_id', startDate: 'start_date', endDate: 'end_date', notifyEmail: 'notify_email', createdAt: 'created_at' };
 const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', sns: 'sns', notes: 'notes', aiSummary: 'ai_summary', linkedProfileId: 'linked_profile_id', createdAt: 'created_at' };
 const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', sharedWithMutual: 'shared_with_mutual', topicId: 'topic_id', createdAt: 'created_at' };
-const TOPIC_KEYMAP = { clientId: 'client_id', name: 'name', shared: 'shared', createdAt: 'created_at' };
-const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', meetingRecordIds: 'meeting_record_ids', notifyEmail: 'notify_email', createdAt: 'created_at', updatedAt: 'updated_at' };
+const TOPIC_KEYMAP = { clientId: 'client_id', projectId: 'project_id', name: 'name', shared: 'shared', createdAt: 'created_at' };
+const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', ownerClientId: 'owner_client_id', meetingRecordIds: 'meeting_record_ids', notifyEmail: 'notify_email', createdAt: 'created_at', updatedAt: 'updated_at' };
 const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', diarizeSource: 'diarize_source', createdAt: 'created_at' };
 const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'company', subject: 'subject', content: 'content', priority: 'priority', status: 'status', fromId: 'sender_id', toId: 'to_id', linkedReceivedId: 'linked_received_id', editHistory: 'edit_history', createdAt: 'created_at', updatedAt: 'updated_at' };
 
@@ -588,7 +588,7 @@ export async function addClient(client) {
   };
   const { error } = await supabase.from('clients').insert(row);
   if (error) throw error;
-  // 신규 거래처가 profile과 연결됐고(검색 선택 또는 ROSTER 매칭) email이 입력된 경우,
+  // 신규 담당자가 profile과 연결됐고(검색 선택 또는 ROSTER 매칭) email이 입력된 경우,
   // 해당 profiles.email도 동기화한다.
   if (linkedProfileId && client.email !== undefined) await syncEmail('profiles', 'id', linkedProfileId, client.email);
   return getClients();
@@ -615,7 +615,7 @@ export async function deleteClient(id) {
   return getClients();
 }
 
-// AI 거래처 비서가 작성한 메일 초안을 사용자가 확인 후 실제로 발송할 때 호출.
+// AI 담당자 비서가 작성한 메일 초안을 사용자가 확인 후 실제로 발송할 때 호출.
 // Edge Function이 clients.user_id와 로그인 세션의 user.id 일치 여부로 소유권을 검증하므로,
 // 여기서는 별도 검사 없이 그대로 호출한다. 자세한 내용은 supabase/README_send_client_email.md 참고.
 export async function sendClientEmail(clientId, subject, body) {

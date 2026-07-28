@@ -12,7 +12,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
 import { useUser } from '../context/UserContext';
-import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules, getTopics, addTopic } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
 import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectForm';
@@ -95,6 +95,8 @@ export default function ProjectScreen({ navigation, route }) {
   const [clients, setClients] = useState([]);
   const [histories, setHistories] = useState([]);
   const [schedules, setSchedules] = useState([]);
+  const [topics, setTopics] = useState([]);
+  const [newProjectTopicName, setNewProjectTopicName] = useState('');
   const [showPersonDetail, setShowPersonDetail] = useState(false);
   const [personDetailClient, setPersonDetailClient] = useState(null);
   const [filter, setFilter] = useState('전체');
@@ -216,8 +218,15 @@ export default function ProjectScreen({ navigation, route }) {
     navigation.setParams({ openAI: undefined });
   }, [route?.params?.openAI]);
 
+  useEffect(() => {
+    if (showDetail) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNewProjectTopicName('');
+    }
+  }, [showDetail, detailProject?.id]);
+
   async function load() {
-    const [all, records, clientList, histList, scheduleList] = await Promise.all([getProjects(), getMeetingRecords(), getClients(), getHistories(), getSchedules()]);
+    const [all, records, clientList, histList, scheduleList, topicList] = await Promise.all([getProjects(), getMeetingRecords(), getClients(), getHistories(), getSchedules(), getTopics()]);
     // 시작일자가 비어있는 기존 프로젝트는 등록일(createdAt)로 채워서 저장 (최초 1회만 실제 쓰기 발생)
     // 백필 실패(네트워크 오류 등)가 이미 정상 조회된 all 데이터 표시까지 막지 않도록 개별 실패는 무시한다.
     const missingStartDate = all.filter((p) => !p.startDate);
@@ -234,6 +243,7 @@ export default function ProjectScreen({ navigation, route }) {
     setClients(clientList);
     setHistories(histList);
     setSchedules(scheduleList);
+    setTopics(topicList);
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -241,6 +251,78 @@ export default function ProjectScreen({ navigation, route }) {
   const filtered = projects.filter((p) => filter === '전체' || p.status === filter);
 
   const delayedCount = projects.filter((p) => p.status === '지연' || p.status === '위험').length;
+
+  // DB의 토픽 이름 유니크 제약은 담당자(client_id) 단위이므로, name이 관련 인물 중 누구와도
+  // 충돌하지 않을 때까지 " (2)", " (3)" ... 접미사를 붙여 대체 이름을 만들어준다.
+  function findAvailableTopicName(name, relatedClientIds) {
+    const conflicts = (candidate) => relatedClientIds.some((cid) =>
+      topics.some((t) => t.clientId === cid && t.name.trim().toLowerCase() === candidate.trim().toLowerCase())
+    );
+    if (!conflicts(name)) return name;
+    let suffix = 2;
+    let candidate = `${name} (${suffix})`;
+    while (conflicts(candidate)) {
+      suffix += 1;
+      candidate = `${name} (${suffix})`;
+    }
+    return candidate;
+  }
+
+  async function createProjectTopic(name, clientId) {
+    const id = Date.now().toString();
+    try {
+      const updated = await addTopic({ id, clientId, projectId: detailProject.id, name });
+      setTopics(updated);
+      return id;
+    } catch {
+      Alert.alert('토픽 생성 실패', '토픽을 생성하지 못했습니다. 다른 이름을 입력해주세요.');
+      return null;
+    }
+  }
+
+  // 프로젝트 상세의 "관련 토픽"에서 새 토픽을 만든다. 프로젝트의 관련 인물(직접 추가 + 연결된
+  // 회의록을 통한 인물) 중 아무나의 client_id로 생성되며, 같은 프로젝트에 이미 같은 이름의
+  // 토픽이 있으면 그 토픽을 재사용한다. 관련 인물 중 누군가 이미 같은 이름의 토픽을 가지고 있으면
+  // (DB 유니크 제약과 충돌) 조용히 다른 사람에게 떠넘기지 않고, 대체 이름을 제안해 사용자가
+  // 확인 후 저장하도록 한다.
+  async function handleCreateProjectTopic(name) {
+    const trimmed = name.trim();
+    if (!trimmed || !detailProject) return null;
+    const linkedMeetings = detailProject.meetingRecordIds?.length
+      ? meetingRecords.filter((r) => detailProject.meetingRecordIds.includes(r.id))
+      : [];
+    const meetingClientIds = linkedMeetings.flatMap((r) => r.clientIds || []);
+    const relatedClientIds = [...new Set([...editClientIds, ...meetingClientIds])];
+    if (relatedClientIds.length === 0) return null;
+
+    const projectTopics = topics.filter((t) => t.projectId === detailProject.id);
+    const existing = projectTopics.find((t) => t.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (existing) {
+      Alert.alert('이미 있는 토픽입니다', `"${existing.name}" 토픽을 그대로 사용합니다.`);
+      return existing.id;
+    }
+
+    const altName = findAvailableTopicName(trimmed, relatedClientIds);
+    if (altName === trimmed) {
+      return createProjectTopic(trimmed, relatedClientIds[0]);
+    }
+
+    return new Promise((resolve) => {
+      Alert.alert(
+        '이미 있는 토픽 이름입니다',
+        `관련 인물 중 이미 "${trimmed}" 토픽을 가진 담당자가 있습니다.\n"${altName}"(으)로 저장할까요?`,
+        [
+          { text: '취소', style: 'cancel', onPress: () => resolve(null) },
+          { text: '저장', onPress: async () => resolve(await createProjectTopic(altName, relatedClientIds[0])) },
+        ]
+      );
+    });
+  }
+
+  async function handleAddProjectTopic() {
+    const id = await handleCreateProjectTopic(newProjectTopicName);
+    if (id) setNewProjectTopicName('');
+  }
 
   async function handleDelete(id, title) {
     Alert.alert('삭제', `"${title}" 프로젝트를 삭제할까요?`, [
@@ -695,7 +777,7 @@ export default function ProjectScreen({ navigation, route }) {
                   placeholderTextColor={C.textDim}
                 />
 
-                {/* 관련 인물 */}
+                {/* 관련 인물 / 관련 토픽 */}
                 {(() => {
                   const linkedMeetings = detailProject?.meetingRecordIds?.length
                     ? meetingRecords.filter((r) => detailProject.meetingRecordIds.includes(r.id))
@@ -747,6 +829,36 @@ export default function ProjectScreen({ navigation, route }) {
                             );
                           })}
                         </View>
+                      )}
+
+                      {/* 관련 토픽: 관련 인물이 한 명이라도 있으면 생성 가능. 이름 중복은 담당자
+                          단위로 검사되므로(handleCreateProjectTopic), 특정 "소속 회사" 지정 없이도
+                          관련 인물 중 이름이 겹치지 않는 사람 아래에 자동으로 생성된다. */}
+                      {people.length > 0 && (
+                        <>
+                          <Text style={s.inputLabel}>관련 토픽</Text>
+                          {topics.filter((t) => t.projectId === detailProject?.id).length === 0 ? (
+                            <Text style={s.projectTopicEmptyText}>등록된 토픽이 없습니다</Text>
+                          ) : (
+                            topics.filter((t) => t.projectId === detailProject?.id).map((t) => (
+                              <View key={t.id} style={s.projectTopicRow}>
+                                <Text style={s.projectTopicName} numberOfLines={1}>{t.name}</Text>
+                              </View>
+                            ))
+                          )}
+                          <View style={s.topicCreateRow}>
+                            <TextInput
+                              style={[s.input, commonStyles.flex1]}
+                              value={newProjectTopicName}
+                              onChangeText={setNewProjectTopicName}
+                              placeholder="새 토픽 이름"
+                              placeholderTextColor={C.textDim}
+                            />
+                            <TouchableOpacity style={s.topicCreateBtn} onPress={handleAddProjectTopic}>
+                              <Text style={s.topicCreateBtnText}>추가</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </>
                       )}
                     </>
                   );
@@ -905,7 +1017,7 @@ export default function ProjectScreen({ navigation, route }) {
             <TextInput style={[s.input, s.h64]} value={newNotes} onChangeText={setNewNotes} placeholder="지연 원인, 진행 상황 등" placeholderTextColor={C.textDim} multiline />
 
             {/* 관련 인물 */}
-            <Text style={s.inputLabel}>관련 인물 · 거래처 (선택)</Text>
+            <Text style={s.inputLabel}>관련 인물 · 담당자 (선택)</Text>
             {newClientIds.length > 0 && (
               <View style={s.selectedPeopleRow}>
                 {newClientIds.map((id) => {
@@ -922,7 +1034,7 @@ export default function ProjectScreen({ navigation, route }) {
             )}
             <TouchableOpacity style={s.pickerTrigger} onPress={() => openRelatedClientPicker(newClientIds, setNewClientIds)}>
               <Text style={[s.pickerTriggerText, newClientIds.length > 0 && s.pickerTriggerTextActive]}>
-                {newClientIds.length > 0 ? `${newClientIds.length}명 선택됨 · 변경` : '거래처 인원 선택'}
+                {newClientIds.length > 0 ? `${newClientIds.length}명 선택됨 · 변경` : '담당자 인원 선택'}
               </Text>
               <Text style={s.pickerTriggerIcon}>›</Text>
             </TouchableOpacity>
@@ -931,7 +1043,13 @@ export default function ProjectScreen({ navigation, route }) {
             <TouchableOpacity
               style={s.notifyEmailRow}
               activeOpacity={0.7}
-              onPress={() => setNewNotifyEmail((prev) => !prev)}
+              onPress={() => {
+                if (newClientIds.length === 0) {
+                  Alert.alert('안내', '선택된 관련 인물이 없습니다.');
+                  return;
+                }
+                setNewNotifyEmail((prev) => !prev);
+              }}
             >
               <View style={[s.notifyEmailCheckbox, newNotifyEmail && s.notifyEmailCheckboxChecked]}>
                 {newNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
@@ -1143,7 +1261,7 @@ export default function ProjectScreen({ navigation, route }) {
                         activeOpacity={0.7}
                       >
                         <Text style={[s.clientRegBtnText, !!linked && s.clientRegBtnTextActive]}>
-                          {linked ? linked.name : '거래처'}
+                          {linked ? linked.name : '담당자'}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -1270,11 +1388,11 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* ── 거래처 선택 모달 ── */}
+      {/* ── 담당자 선택 모달 ── */}
       <Modal visible={!!clientPickerSpeaker} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setClientPickerSpeaker(null)}>
         <View style={[s.modalOverlay, s.modalOverlayCentered]}>
           <View style={[s.speakerModalBox, s.clientPickerBox]}>
-            <Text style={s.speakerModalTitle}>거래처 선택</Text>
+            <Text style={s.speakerModalTitle}>담당자 선택</Text>
             <TextInput
               style={s.clientPickerInput}
               value={clientPickerSearch}
@@ -1448,7 +1566,7 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* ── 거래처 인원 피커 팝업 (프로젝트 추가) ── */}
+      {/* ── 담당자 인원 피커 팝업 (프로젝트 추가) ── */}
       <Modal visible={showClientPicker} animationType="slide" transparent onRequestClose={() => setShowClientPicker(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.pickerSheetBase, s.pickerSheet]}>
@@ -1456,7 +1574,7 @@ export default function ProjectScreen({ navigation, route }) {
               <TouchableOpacity onPress={() => setShowClientPicker(false)} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerCancelText}>취소</Text>
               </TouchableOpacity>
-              <Text style={s.pickerTitle}>거래처 인원 선택</Text>
+              <Text style={s.pickerTitle}>담당자 인원 선택</Text>
               <TouchableOpacity onPress={confirmRelatedClientPicker} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerConfirmText}>
                   확인{pickerTempIds.length > 0 ? ` (${pickerTempIds.length})` : ''}
@@ -1476,7 +1594,7 @@ export default function ProjectScreen({ navigation, route }) {
 
             <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
               <TouchableOpacity style={s.pickerAddNewBtn} onPress={() => setShowPickerAddClient(true)}>
-                <Text style={s.pickerAddNewText}>+ 신규 거래처 인원 등록</Text>
+                <Text style={s.pickerAddNewText}>+ 신규 담당자 인원 등록</Text>
               </TouchableOpacity>
               {(() => {
                 const isSelf = (c) =>
@@ -1524,7 +1642,7 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* ── 신규 거래처 인원 등록 (피커에서 진입) ── */}
+      {/* ── 신규 담당자 인원 등록 (피커에서 진입) ── */}
       <Modal visible={showPickerAddClient} animationType="slide" transparent onRequestClose={() => setShowPickerAddClient(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
           <View style={[s.pickerSheetBase, s.pickerSheet]}>
@@ -1532,7 +1650,7 @@ export default function ProjectScreen({ navigation, route }) {
               <TouchableOpacity onPress={() => setShowPickerAddClient(false)} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerCancelText}>취소</Text>
               </TouchableOpacity>
-              <Text style={s.pickerTitle}>신규 거래처 인원 등록</Text>
+              <Text style={s.pickerTitle}>신규 담당자 인원 등록</Text>
               <TouchableOpacity onPress={handlePickerAddClient} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerConfirmText}>추가</Text>
               </TouchableOpacity>
@@ -1858,6 +1976,13 @@ const s = StyleSheet.create({
   notifyEmailCheckboxChecked: { backgroundColor: C.red, borderColor: C.red },
   notifyEmailCheckmark: { color: '#fff', fontSize: 12, fontWeight: '700', lineHeight: 14 },
   notifyEmailLabel: { color: C.textSecondary, fontSize: 13 },
+
+  projectTopicRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8 },
+  projectTopicName: { color: C.textPrimary, fontSize: 13, flex: 1 },
+  projectTopicEmptyText: { color: C.textDim, fontSize: 12, marginBottom: 8 },
+  topicCreateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topicCreateBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, backgroundColor: C.gold },
+  topicCreateBtnText: { color: '#09090E', fontSize: 13, fontWeight: '600' },
 
   relatedPeopleHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, marginBottom: 8 },
   addPersonBtn: { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: C.accentTeal + '18', borderWidth: 1, borderColor: C.accentTeal + '44', borderRadius: 6 },

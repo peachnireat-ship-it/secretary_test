@@ -37,12 +37,12 @@ create table if not exists profiles (
   company_id uuid references companies(id) on delete set null,
   department_id uuid references departments(id) on delete set null,
   is_company_admin boolean not null default false,
-  -- 다른 사용자의 거래처 검색(search_discoverable_profiles) 결과에 내 정보(id/name/email/team/role/
-  -- contact)를 노출하고, 검색한 상대방이 별도 확인 없이 거래처로 즉시 추가할 수 있도록 허용할지
+  -- 다른 사용자의 담당자 검색(search_discoverable_profiles) 결과에 내 정보(id/name/email/team/role/
+  -- contact)를 노출하고, 검색한 상대방이 별도 확인 없이 담당자로 즉시 추가할 수 있도록 허용할지
   -- 여부. 기본값 false(옵트인) — 사용자가 설정 화면에서 명시적으로 켜야만 노출된다. 자세한 배경은
   -- patch_profile_discoverable_search.sql, patch_search_discoverable_profiles_add_contact.sql 참고.
   discoverable boolean not null default false,
-  -- 상호 등록된 거래처(clients.linked_profile_id 상호 연결)와 내 히스토리(histories)를 공유할지
+  -- 상호 등록된 담당자(clients.linked_profile_id 상호 연결)와 내 히스토리(histories)를 공유할지
   -- 여부. 기본값 false(옵트인) — 대칭 조건이라 내가 켜도 "내 히스토리를 상대방에게 보여줄지"만
   -- 결정할 뿐, 상대방의 히스토리를 내가 볼 수 있는지는 상대방의 이 컬럼 값이 따로 결정한다.
   -- 자세한 배경은 patch_mutual_client_history.sql 참고.
@@ -62,6 +62,7 @@ create table if not exists schedules (
   client_ids jsonb not null default '[]',
   start_date text,
   end_date text,
+  notify_email boolean not null default true,
   created_at bigint not null
 );
 create index if not exists schedules_user_date_idx on schedules(user_id, date);
@@ -83,8 +84,8 @@ create table if not exists clients (
   created_at bigint not null
 );
 
--- ── topics (거래처별 업무 토픽) ───────────────────────────
--- 히스토리를 업무 토픽 단위로 묶기 위한 엔티티. 상호 등록된 거래처 관계에서는 A/B 각자 자신의
+-- ── topics (담당자별 업무 토픽) ───────────────────────────
+-- 히스토리를 업무 토픽 단위로 묶기 위한 엔티티. 상호 등록된 담당자 관계에서는 A/B 각자 자신의
 -- client row 아래에 토픽을 만들며(사용자가 직접 입력, AI 자동 분류 아님), shared를 켜면 그
 -- 토픽에 속한 자신의 히스토리 전부가 상대방에게 공개 후보가 된다(단, 히스토리 개별
 -- shared_with_mutual도 true여야 실제 노출됨 — AND 게이트, patch_history_topic.sql 참고).
@@ -97,11 +98,11 @@ create table if not exists topics (
   created_at bigint not null
 );
 create index if not exists topics_client_idx on topics(client_id);
--- 같은 사용자·같은 거래처 안에서 이름이 같은 토픽이 중복 생성되는 것을 막는다(id 기준 단일 관리).
+-- 같은 사용자·같은 담당자 안에서 이름이 같은 토픽이 중복 생성되는 것을 막는다(id 기준 단일 관리).
 create unique index if not exists topics_unique_name_per_client
   on topics (user_id, client_id, lower(trim(name)));
 
--- ── histories (거래처 히스토리) ───────────────────────────
+-- ── histories (담당자 히스토리) ───────────────────────────
 create table if not exists histories (
   id text primary key,
   user_id uuid not null references profiles(id) on delete cascade,
@@ -132,10 +133,75 @@ create table if not exists projects (
   notes text not null default '',
   progress int not null default 0,
   client_ids jsonb not null default '[]',
+  -- 이 프로젝트가 소속된 담당자(개인 1명, client_ids 중 하나를 지정). 담당자 - 프로젝트 - 토픽 -
+  -- 히스토리 계층에서 "이 프로젝트는 어느 담당자 소속인가"를 나타낸다. 자세한 배경은
+  -- patch_project_topics.sql 참고.
+  owner_client_id text references clients(id) on delete set null,
   meeting_record_ids jsonb not null default '[]',
   created_at bigint not null,
   updated_at bigint
 );
+create index if not exists projects_owner_client_idx on projects(owner_client_id);
+
+-- 프로젝트의 owner_client_id가 실제로 그 프로젝트 소유자(user_id)의 담당자인지 강제한다.
+create or replace function validate_project_owner_client_ownership()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.owner_client_id is null then return new; end if;
+  if not exists (select 1 from clients where id = new.owner_client_id and user_id = new.user_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 담당자(owner_client_id=%)입니다.', new.owner_client_id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists trg_validate_project_owner_client on projects;
+create trigger trg_validate_project_owner_client
+  before insert or update of owner_client_id, user_id on projects
+  for each row execute function validate_project_owner_client_ownership();
+
+-- 토픽이 소속될 수 있는 프로젝트(선택). topics 테이블이 projects보다 먼저 정의되므로 여기서
+-- ALTER로 추가한다. 토픽은 여전히 client_id 소속을 유지하며, project_id는 그 담당자가 진행하는
+-- 여러 프로젝트 중 어디에 속한 토픽인지 나타내는 추가 분류다.
+alter table topics add column if not exists project_id text references projects(id) on delete set null;
+create index if not exists topics_project_idx on topics(project_id);
+
+-- 일정이 연결될 수 있는 프로젝트(선택). schedules 테이블도 projects보다 먼저 정의되므로 여기서
+-- ALTER로 추가한다. meeting_records.project_id와 동일하게 단순 FK만 두고 소유권 교차검증
+-- 트리거는 두지 않는다(표시용 참조, patch_schedule_project_id.sql).
+alter table schedules add column if not exists project_id text references projects(id) on delete set null;
+create index if not exists schedules_project_idx on schedules(project_id);
+
+-- 토픽이 프로젝트에 묶일 때, 그 프로젝트의 소속 담당자(owner_client_id)와 토픽의 client_id가
+-- 반드시 일치하도록 강제한다(계층 무결성: 담당자 → 프로젝트 → 토픽).
+-- 토픽의 project_id가 가리키는 프로젝트가 같은 사용자 소유인지만 확인한다(단순 소유권 체크).
+-- 과거에는 topic.client_id가 프로젝트의 owner_client_id(소속 회사 대표 담당자)와 반드시
+-- 일치해야 한다고 강제했지만, "소속 회사" 선택 UI를 없애면서(patch_relax_topic_project_client_check.sql)
+-- 관련 인물 누구에게든 토픽을 생성할 수 있도록 완화했다.
+create or replace function validate_topic_project_client()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_project_user_id uuid;
+begin
+  if new.project_id is null then return new; end if;
+  select user_id into v_project_user_id from projects where id = new.project_id;
+  if v_project_user_id is null or v_project_user_id <> new.user_id then
+    raise exception '존재하지 않거나 접근 권한이 없는 프로젝트(project_id=%)입니다.', new.project_id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists trg_validate_topic_project_client on topics;
+create trigger trg_validate_topic_project_client
+  before insert or update of project_id, client_id, user_id on topics
+  for each row execute function validate_topic_project_client();
 
 -- ── meeting_records ──────────────────────────────────────
 create table if not exists meeting_records (
@@ -297,11 +363,11 @@ as $$
 $$;
 grant execute on function get_all_accounts_for_switch() to authenticated;
 
--- 거래처(clients) 추가 시 기존 가입 회원을 검색해 linked_profile_id로 연결할 수 있게 하는 함수.
+-- 담당자(clients) 추가 시 기존 가입 회원을 검색해 linked_profile_id로 연결할 수 있게 하는 함수.
 -- get_company_colleagues()/get_all_accounts_for_switch()와 동일한 이유로 SECURITY DEFINER 함수로
 -- 감싸 필요한 컬럼(id, name, email, team, role, contact)만 반환한다. discoverable=true(옵트인)로
 -- 설정한 계정만 대상이며, 검색어 없이는 결과를 반환하지 않는다(전체 덤프 방지), 호출자 자신은 제외,
--- 최대 20건. contact(연락처)는 검색 결과 선택 시 거래처로 즉시 자동 추가되는 용도로 함께
+-- 최대 20건. contact(연락처)는 검색 결과 선택 시 담당자로 즉시 자동 추가되는 용도로 함께
 -- 노출된다(옵트인 동의 범위 확장 — 자세한 배경은 patch_profile_discoverable_search.sql,
 -- patch_search_discoverable_profiles_add_contact.sql 참고).
 -- RETURNS TABLE의 OUT 컬럼 개수가 바뀌므로(5→6, contact 추가) create or replace만으로는
@@ -334,7 +400,7 @@ end;
 $$;
 grant execute on function search_discoverable_profiles(text) to authenticated;
 
--- 상호 등록된 거래처(A가 B를 거래처로 등록 + B도 A를 거래처로 등록)이고, B가
+-- 상호 등록된 담당자(A가 B를 담당자로 등록 + B도 A를 담당자로 등록)이고, B가
 -- share_mutual_history를 옵트인한 경우에만 B가 기록한 히스토리 중 아래 두 조건을 모두
 -- 만족하는 것만 A에게 반환하는 함수(AND 게이트):
 --   1) 히스토리 개별 공개(histories.shared_with_mutual = true)
@@ -427,7 +493,7 @@ begin
   select t.user_id, t.client_id, t.shared into v_topic_user_id, v_topic_client_id, v_topic_shared from topics t where t.id = new.topic_id;
   if not found then raise exception '존재하지 않는 토픽입니다.'; end if;
   if v_topic_user_id = new.user_id then
-    if v_topic_client_id <> new.client_id then raise exception '다른 거래처의 토픽에는 히스토리를 연결할 수 없습니다.'; end if;
+    if v_topic_client_id <> new.client_id then raise exception '다른 담당자의 토픽에는 히스토리를 연결할 수 없습니다.'; end if;
     return new;
   end if;
   if not v_topic_shared
@@ -586,7 +652,7 @@ create policy messages_delete_own_mailbox on messages
 -- ── client_ids 소유권 검증 (보안 재감사 _review/secretary_test-20260723/02_security.md #1) ──
 -- schedules.client_ids / projects.client_ids(jsonb 배열, 각 원소는 clients.id 텍스트)는 RLS만으로는
 -- 배열 내부 원소의 소유권을 검증할 수 없다(RLS는 행 자체의 user_id만 검사). 이 트리거로 INSERT/UPDATE
--- 시점에 client_ids 배열의 각 원소가 실제로 new.user_id 소유의 거래처인지 강제한다.
+-- 시점에 client_ids 배열의 각 원소가 실제로 new.user_id 소유의 담당자인지 강제한다.
 -- 자세한 배경은 supabase/patch_client_ids_ownership.sql 참고(이 함수는 그 파일과 동일한 정의다).
 create or replace function validate_client_ids_ownership()
 returns trigger
@@ -608,7 +674,7 @@ begin
   for v_client_id in select jsonb_array_elements_text(new.client_ids)
   loop
     if not exists (select 1 from clients where id = v_client_id and user_id = new.user_id) then
-      raise exception '존재하지 않거나 접근 권한이 없는 거래처(client_id=%)가 포함되어 있습니다.', v_client_id;
+      raise exception '존재하지 않거나 접근 권한이 없는 담당자(client_id=%)가 포함되어 있습니다.', v_client_id;
     end if;
   end loop;
 
