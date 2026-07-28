@@ -524,12 +524,21 @@ export async function saveSchedules(schedules) {
   if (error) throw error;
 }
 
+// 일정의 관련 인물 중 이 앱에 가입된 계정(clients.linked_profile_id)에게 동일한 일정 사본을
+// 만들어준다(sync_schedule_mirrors RPC, patch_schedule_mirror.sql). 관련 인물에서 빠지면 그
+// 사람의 사본도 함께 삭제된다. 실패해도(패치 미실행 등) 핵심 저장 자체는 막지 않는다.
+async function syncScheduleMirrors(scheduleId) {
+  const { error } = await supabase.rpc('sync_schedule_mirrors', { p_schedule_id: scheduleId });
+  if (error) console.warn('syncScheduleMirrors 실패:', error.message);
+}
+
 export async function addSchedule(schedule) {
   const user = await getCurrentUser();
   await assertClientIdsOwned(user.id, schedule.clientIds);
   const row = { id: schedule.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(schedule, SCHEDULE_KEYMAP) };
   const { error } = await supabase.from('schedules').insert(row);
   if (error) throw error;
+  await syncScheduleMirrors(row.id);
   return getSchedules();
 }
 
@@ -545,6 +554,7 @@ export async function updateSchedule(id, fields) {
   if (fields.clientIds !== undefined) await assertClientIdsOwned(user.id, fields.clientIds);
   const { error } = await supabase.from('schedules').update(toRow(fields, SCHEDULE_KEYMAP)).eq('id', id).eq('user_id', user.id);
   if (error) throw error;
+  await syncScheduleMirrors(id);
   return getSchedules();
 }
 

@@ -63,9 +63,16 @@ create table if not exists schedules (
   start_date text,
   end_date text,
   notify_email boolean not null default true,
+  -- 관련 인물 중 앱에 가입된 계정(clients.linked_profile_id)에게 자동으로 만들어준 사본이면
+  -- 원본 일정을 가리킨다. 원본 삭제 시 사본도 함께 삭제된다(on delete cascade). 사본 관리는
+  -- sync_schedule_mirrors() RPC가 담당한다 — 함수 정의는 patch_schedule_mirror.sql 참고
+  -- (notify_schedule_created/updated와 마찬가지로 schema.sql에는 컬럼만 반영하고 함수 본문은
+  -- patch 파일에만 둔다).
+  origin_schedule_id text references schedules(id) on delete cascade,
   created_at bigint not null
 );
 create index if not exists schedules_user_date_idx on schedules(user_id, date);
+create index if not exists schedules_origin_idx on schedules(origin_schedule_id);
 
 -- ── clients ──────────────────────────────────────────────
 create table if not exists clients (
