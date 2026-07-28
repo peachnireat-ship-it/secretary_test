@@ -425,7 +425,7 @@ export default function MeetingScreen({ navigation }) {
                           activeOpacity={0.7}
                         >
                           <Text style={[s.clientRegBtnText, !!linked && s.clientRegBtnTextActive]}>
-                            {linked ? linked.name : '거래처'}
+                            {linked ? linked.name : '담당자'}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -486,7 +486,7 @@ export default function MeetingScreen({ navigation }) {
                         activeOpacity={0.7}
                       >
                         <Text style={[s.clientRegBtnText, !!linked && s.clientRegBtnTextActive]}>
-                          {linked ? linked.name : '거래처'}
+                          {linked ? linked.name : '담당자'}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -688,7 +688,7 @@ export default function MeetingScreen({ navigation }) {
       <Modal visible={!!clientPickerSpeaker} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { setClientPickerSpeaker(null); setAddPersonRecordId(null); }}>
         <View style={[s.modalOverlay, s.modalOverlayCentered]}>
           <View style={[s.modalBox, s.clientPickerBox]}>
-            <Text style={s.modalTitle}>거래처 선택</Text>
+            <Text style={s.modalTitle}>담당자 선택</Text>
             <TextInput
               style={[s.modalInput, s.mb4]}
               value={clientPickerSearch}
@@ -738,7 +738,7 @@ export default function MeetingScreen({ navigation }) {
               onPress={() => setShowNewClientModal(true)}
               activeOpacity={0.8}
             >
-              <Text style={s.newClientRegBtnText}>+ 거래처 신규 등록</Text>
+              <Text style={s.newClientRegBtnText}>+ 담당자 신규 등록</Text>
             </TouchableOpacity>
             {clientPickerContext === 'addPerson' ? (
               <View style={s.addPersonBtnRow}>
@@ -768,7 +768,7 @@ export default function MeetingScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* ── 거래처 신규 등록 모달 ── */}
+      {/* ── 담당자 신규 등록 모달 ── */}
       <Modal visible={showNewClientModal} animationType="slide" transparent onRequestClose={() => setShowNewClientModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.newClientModalOverlay}>
           <Animated.View style={[s.newClientModalSheet, swipeNewClient.animStyle]}>
@@ -776,7 +776,7 @@ export default function MeetingScreen({ navigation }) {
               <View style={s.newClientModalHandle} />
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={s.newClientModalTitle}>거래처 추가</Text>
+              <Text style={s.newClientModalTitle}>담당자 추가</Text>
               <View style={s.newClientInputLabelRow}>
                 <Text style={s.newClientInputLabel}>담당자 이름</Text>
                 <Text style={s.newClientRequiredMark}>*</Text>

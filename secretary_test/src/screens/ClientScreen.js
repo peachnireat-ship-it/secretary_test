@@ -52,7 +52,7 @@ export default function ClientScreen({ navigation, route }) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [sortOrder, setSortOrder] = useState('asc');
   const [selectedProject, setSelectedProject] = useState(null);
-  // 상호 등록된 거래처(selectedClient.linkedProfileId 존재 시)의 히스토리 — 상대방이 상호 히스토리
+  // 상호 등록된 담당자(selectedClient.linkedProfileId 존재 시)의 히스토리 — 상대방이 상호 히스토리
   // 공유를 옵트인하지 않았거나 상호 등록이 아니면 항상 빈 배열([]) — 프라이버시상 이유를 구분해
   // 노출하지 않는다.
   const [mutualHistory, setMutualHistory] = useState([]);
@@ -80,7 +80,7 @@ export default function ClientScreen({ navigation, route }) {
   const [showPasteContacts, setShowPasteContacts] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
-  // ── 기존 회원 검색 (opt-in discoverable 회원 검색으로 거래처 추가) ──
+  // ── 기존 회원 검색 (opt-in discoverable 회원 검색으로 담당자 추가) ──
   const [showMemberSearch, setShowMemberSearch] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [memberSearchResults, setMemberSearchResults] = useState([]);
@@ -93,7 +93,7 @@ export default function ClientScreen({ navigation, route }) {
   const [selectedMeetingRecord, setSelectedMeetingRecord] = useState(null);
   const [showAI, setShowAI] = useState(false);
   const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', text: '거래처 관련 무엇이든 물어보세요.\n\n예) "삼성물산이랑 마지막 만난 게 언제야?", "LG전자 다음 미팅 전에 뭘 준비해야 해?", "현재 가장 관리가 필요한 거래처는?"' },
+    { role: 'assistant', text: '담당자 관련 무엇이든 물어보세요.\n\n예) "삼성물산이랑 마지막 만난 게 언제야?", "LG전자 다음 미팅 전에 뭘 준비해야 해?", "현재 가장 관리가 필요한 담당자는?"' },
   ]);
   const [chatInput, setChatInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -121,12 +121,12 @@ export default function ClientScreen({ navigation, route }) {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  // 상세 모달이 열릴 때(selectedClient가 상호 등록된 거래처일 때)만 상대방 히스토리를 조회한다.
+  // 상세 모달이 열릴 때(selectedClient가 상호 등록된 담당자일 때)만 상대방 히스토리를 조회한다.
   // 모달이 닫히거나(selectedClient === null) linkedProfileId가 없으면 즉시 빈 배열로 리셋해,
-  // 다음에 다른 거래처를 열 때 이전 상대방의 데이터가 잠깐이라도 보이지 않게 한다.
+  // 다음에 다른 담당자를 열 때 이전 상대방의 데이터가 잠깐이라도 보이지 않게 한다.
   useEffect(() => {
     if (!selectedClient?.linkedProfileId) {
-      // 모달이 닫히거나 linkedProfileId가 없는 거래처로 바뀔 때 이전 상대방의 mutualHistory가
+      // 모달이 닫히거나 linkedProfileId가 없는 담당자로 바뀔 때 이전 상대방의 mutualHistory가
       // 잠깐이라도 남아있지 않도록 즉시 리셋
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMutualHistory([]);
@@ -139,7 +139,7 @@ export default function ClientScreen({ navigation, route }) {
       if (cancelled) return;
       setMutualHistory(result);
       setMutualTopics(sharedTopics);
-      // 상호 등록 거래처는 상대방 히스토리까지 반영된 요약을 만들어야 하므로, 아직 캐시된 요약이
+      // 상호 등록 담당자는 상대방 히스토리까지 반영된 요약을 만들어야 하므로, 아직 캐시된 요약이
       // 없는 경우(신규 생성) 여기서 생성한다. openClient()는 이 경우 즉시 생성을 건너뛰고 이
       // effect가 상대방 히스토리를 확보한 뒤 생성하도록 위임한다.
       if (!client.aiSummary && !clientSummaryCache.current[client.id]) {
@@ -254,8 +254,8 @@ export default function ClientScreen({ navigation, route }) {
   }
 
   // 검색 결과에서 회원을 선택하면 "직접 입력" 폼을 거치지 않고, DB에 저장된 회원 데이터(연락처
-  // 포함) 그대로 거래처 목록에 즉시 추가한다. 이 회원은 이미 discoverable 옵트인으로 검색 노출과
-  // 거래처 자동 추가에 동의한 상태이므로 별도 확인 절차 없이 진행한다(사용자 명시적 결정 —
+  // 포함) 그대로 담당자 목록에 즉시 추가한다. 이 회원은 이미 discoverable 옵트인으로 검색 노출과
+  // 담당자 자동 추가에 동의한 상태이므로 별도 확인 절차 없이 진행한다(사용자 명시적 결정 —
   // patch_search_discoverable_profiles_add_contact.sql 참고). member.contact가 비어있어도
   // (본인 프로필에 연락처를 입력하지 않은 회원) 빈 문자열로 그대로 추가하며 별도 에러 처리는 하지
   // 않는다 — clients.contact는 not null이지만 빈 문자열은 허용된다.
@@ -276,7 +276,7 @@ export default function ClientScreen({ navigation, route }) {
       });
       setClients(updated);
       closeMemberSearch();
-      Alert.alert('추가 완료', `${member.name}님을 거래처에 추가했습니다.`);
+      Alert.alert('추가 완료', `${member.name}님을 담당자에 추가했습니다.`);
     } finally {
       setMemberAddLoading(false);
     }
@@ -294,7 +294,7 @@ export default function ClientScreen({ navigation, route }) {
       Alert.alert('일부 제외됨', `${failedCount}건은 전화번호를 인식하지 못해 제외되었습니다.`);
     }
     if (contacts.length === 1) {
-      // 1건이면 연락처 선택 화면(showContactPicker)을 거치지 않고 바로 거래처 추가 폼으로 진입한다.
+      // 1건이면 연락처 선택 화면(showContactPicker)을 거치지 않고 바로 담당자 추가 폼으로 진입한다.
       // 안드로이드 Modal 레이스 컨디션(handlePickFromContacts와 동일) 회피 — 다음 모달은 지연 오픈
       setTimeout(() => selectContact(contacts[0]), 300);
       return;
@@ -410,7 +410,7 @@ export default function ClientScreen({ navigation, route }) {
         if (parsed) {
           if (parsed.action === 'draft_email' && parsed.clientId && parsed.subject && parsed.body) {
             const draftClient = clients.find((c) => c.id === parsed.clientId);
-            const clientName = draftClient?.name || '거래처';
+            const clientName = draftClient?.name || '담당자';
             let subject = parsed.subject;
             let body = parsed.body;
             try {
@@ -535,7 +535,7 @@ export default function ClientScreen({ navigation, route }) {
     setSummaryLoading(true);
     try {
       const clientHistList = (histList || histories).filter((h) => h.clientId === client.id);
-      // 상호 등록 거래처의 경우, 상대방이 기록한 히스토리(mutualHistory)도 함께 반영해 관계 요약이
+      // 상호 등록 담당자의 경우, 상대방이 기록한 히스토리(mutualHistory)도 함께 반영해 관계 요약이
       // 내 기록에만 치우치지 않도록 한다. buildClientSystem이 h.clientId로 필터링하므로 client.id를
       // 맞춰주고, AI가 출처를 구분하도록 제목 앞에 표시한다.
       const mutualHistList = (mutualList ?? mutualHistory).map((h) => ({
@@ -591,8 +591,8 @@ export default function ClientScreen({ navigation, route }) {
       fetchClientSummary(client);
     } else {
       // client.linkedProfileId가 있으면 상대방 히스토리 로딩 useEffect가 완료된 뒤 생성하도록
-      // 위임한다(상호 등록 거래처는 상대방 히스토리까지 반영해야 하므로 여기서 미리 생성하지 않음).
-      // 이전에 선택했던 거래처의 요약 텍스트가 잠깐 남아 보이지 않도록 먼저 비워둔다.
+      // 위임한다(상호 등록 담당자는 상대방 히스토리까지 반영해야 하므로 여기서 미리 생성하지 않음).
+      // 이전에 선택했던 담당자의 요약 텍스트가 잠깐 남아 보이지 않도록 먼저 비워둔다.
       setClientSummary('');
       setSummaryLoading(true);
     }
@@ -605,7 +605,7 @@ export default function ClientScreen({ navigation, route }) {
       // clients/histories는 이미 컴포넌트 state에 로드되어 있으므로 재조회하지 않고 그대로 사용
       const systemPrompt = buildClientSystem(clients, histories);
       const reply = await askClaude(
-        [{ role: 'user', content: `등록된 모든 거래처 인원의 관계 히스토리를 종합해서 보고서 형식으로 작성해줘. 각 거래처별로 현재 관계 상태, 마지막 연락 시점, 주요 히스토리 요약, 다음에 필요한 액션을 포함해줘. 메모에 기록된 내용도 반드시 참고해줘. 히스토리가 없는 거래처는 간략히 언급만 해줘. 반드시 한국어로만 작성해줘.` }],
+        [{ role: 'user', content: `등록된 모든 담당자 인원의 관계 히스토리를 종합해서 보고서 형식으로 작성해줘. 각 담당자별로 현재 관계 상태, 마지막 연락 시점, 주요 히스토리 요약, 다음에 필요한 액션을 포함해줘. 메모에 기록된 내용도 반드시 참고해줘. 히스토리가 없는 담당자는 간략히 언급만 해줘. 반드시 한국어로만 작성해줘.` }],
         systemPrompt,
         { raw: true }
       );
@@ -643,7 +643,7 @@ export default function ClientScreen({ navigation, route }) {
     <View style={s.root}>
       {/* ── 헤더 ── */}
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
-        <Text style={s.headerTitle}>거래처 관리</Text>
+        <Text style={s.headerTitle}>담당자 관리</Text>
         <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
           <Text style={s.aiBtnText}>✦ AI</Text>
         </TouchableOpacity>
@@ -651,7 +651,7 @@ export default function ClientScreen({ navigation, route }) {
 
       {/* ── 검색 ── */}
       <View style={s.searchWrap}>
-        <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="거래처 또는 담당자 검색" placeholderTextColor={C.textDim} />
+        <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="담당자 또는 회사명 검색" placeholderTextColor={C.textDim} />
       </View>
 
       {/* ── 탭 ── */}
@@ -676,7 +676,7 @@ export default function ClientScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      {/* ── 거래처 목록 ── */}
+      {/* ── 담당자 목록 ── */}
       <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
         {filteredClients.map((client) => {
           const clientHist = historiesByClient.get(client.id) || [];
@@ -720,7 +720,7 @@ export default function ClientScreen({ navigation, route }) {
           <View style={s.sourceSheet}>
             <View style={s.modalHandle} />
             <View style={s.chatHeader}>
-              <Text style={s.modalTitle}>거래처 추가</Text>
+              <Text style={s.modalTitle}>담당자 추가</Text>
               <TouchableOpacity onPress={() => setShowSourcePicker(false)}>
                 <Text style={s.closeBtn}>✕</Text>
               </TouchableOpacity>
@@ -915,7 +915,7 @@ export default function ClientScreen({ navigation, route }) {
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
-                    Alert.alert('삭제', `"${selectedClient?.name}" 거래처를 삭제할까요?`, [
+                    Alert.alert('삭제', `"${selectedClient?.name}" 담당자를 삭제할까요?`, [
                       { text: '취소', style: 'cancel' },
                       {
                         text: '삭제',
@@ -1075,12 +1075,12 @@ export default function ClientScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* ── 거래처 수정 모달 ── */}
+      {/* ── 담당자 수정 모달 ── */}
       <Modal visible={showEditClient} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
           <View style={[s.modalSheet, commonStyles.maxH90pct]}>
             <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>거래처 수정</Text>
+            <Text style={s.modalTitle}>담당자 수정</Text>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.scrollPB8}>
               <View style={s.inputLabelRow}>
                 <Text style={s.inputLabel}>담당자 이름</Text>
@@ -1120,12 +1120,12 @@ export default function ClientScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── 거래처 추가 모달 ── */}
+      {/* ── 담당자 추가 모달 ── */}
       <Modal visible={showAddClient} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
           <View style={[s.modalSheet, commonStyles.maxH90pct]}>
             <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>거래처 추가</Text>
+            <Text style={s.modalTitle}>담당자 추가</Text>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.scrollPB8}>
               <View style={s.inputLabelRow}>
                 <Text style={s.inputLabel}>담당자 이름</Text>
@@ -1165,7 +1165,7 @@ export default function ClientScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── AI 거래처 히스토리 종합 모달 ── */}
+      {/* ── AI 담당자 히스토리 종합 모달 ── */}
       <Modal visible={showHistoryAI} animationType="slide" transparent onRequestClose={() => setShowHistoryAI(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalSheet, commonStyles.h85pct]}>
@@ -1173,7 +1173,7 @@ export default function ClientScreen({ navigation, route }) {
             <View style={s.chatHeader}>
               <View style={s.chatHeaderLeft}>
                 <Text style={s.aiGlyph}>✦</Text>
-                <Text style={s.modalTitle}>AI 거래처 히스토리</Text>
+                <Text style={s.modalTitle}>AI 담당자 히스토리</Text>
               </View>
               <TouchableOpacity onPress={() => setShowHistoryAI(false)}>
                 <Text style={s.closeBtn}>✕</Text>
@@ -1183,7 +1183,7 @@ export default function ClientScreen({ navigation, route }) {
               {historySummaryLoading ? (
                 <View style={s.historyAILoading}>
                   <ActivityIndicator size="small" color={C.accentTeal} />
-                  <Text style={s.historyAILoadingText}>거래처 히스토리를 분석하는 중...</Text>
+                  <Text style={s.historyAILoadingText}>담당자 히스토리를 분석하는 중...</Text>
                 </View>
               ) : (
                 <View style={s.summaryBox}>
@@ -1207,7 +1207,7 @@ export default function ClientScreen({ navigation, route }) {
             <View style={s.chatHeader}>
               <View style={s.chatHeaderLeft}>
                 <Text style={s.aiGlyph}>✦</Text>
-                <Text style={s.modalTitle}>AI 거래처 비서</Text>
+                <Text style={s.modalTitle}>AI 담당자 비서</Text>
               </View>
               <TouchableOpacity onPress={() => setShowAI(false)}>
                 <Text style={s.closeBtn}>✕</Text>
@@ -1288,7 +1288,7 @@ export default function ClientScreen({ navigation, route }) {
             </ScrollView>
 
             <View style={s.chatInputRow}>
-              <TextInput style={s.chatInput} value={chatInput} onChangeText={setChatInput} placeholder="거래처에 대해 물어보세요..." placeholderTextColor={C.textDim} onSubmitEditing={handleAIChat} returnKeyType="send" />
+              <TextInput style={s.chatInput} value={chatInput} onChangeText={setChatInput} placeholder="담당자에 대해 물어보세요..." placeholderTextColor={C.textDim} onSubmitEditing={handleAIChat} returnKeyType="send" />
               <TouchableOpacity style={[s.sendBtn, !chatInput.trim() && commonStyles.opacity40]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
                 <Text style={s.sendBtnText}>↑</Text>
               </TouchableOpacity>

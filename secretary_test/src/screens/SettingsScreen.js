@@ -129,7 +129,7 @@ export default function SettingsScreen() {
     await setAiProvider(p);
   }
 
-  // 다른 사용자의 "기존 회원 검색"(거래처 추가)에 내 정보 노출 허용 여부. 기본값 false(옵트인) —
+  // 다른 사용자의 "기존 회원 검색"(담당자 추가)에 내 정보 노출 허용 여부. 기본값 false(옵트인) —
   // 사용자가 여기서 명시적으로 켜야만 search_discoverable_profiles() 결과에 노출된다.
   async function handleToggleDiscoverable(value) {
     setProfile((p) => (p ? { ...p, discoverable: value } : p));
@@ -142,7 +142,7 @@ export default function SettingsScreen() {
     }
   }
 
-  // 상호 등록된 거래처(내가 상대방을, 상대방도 나를 거래처로 등록한 경우)와 내 히스토리를
+  // 상호 등록된 담당자(내가 상대방을, 상대방도 나를 담당자로 등록한 경우)와 내 히스토리를
   // 공유할지 여부. 기본값 false(옵트인) — 대칭 조건이라 이 토글은 "내 히스토리를 상대방에게
   // 보여줄지"만 결정하며, 상대방의 히스토리를 내가 볼 수 있는지는 상대방의 별도 설정이 결정한다.
   async function handleToggleShareMutualHistory(value) {
@@ -318,7 +318,7 @@ export default function SettingsScreen() {
               <Text style={s.cardTitle}>Groq API 키</Text>
             </View>
             <Text style={s.cardDesc}>
-              일정 관리 및 거래처 히스토리의 AI 기능을 사용하려면 Groq API 키가 필요합니다. 모델: llama-3.3-70b-versatile
+              일정 관리 및 담당자 히스토리의 AI 기능을 사용하려면 Groq API 키가 필요합니다. 모델: llama-3.3-70b-versatile
             </Text>
             <View style={s.inputWrap}>
               <TextInput
@@ -490,13 +490,13 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* 다른 사용자 검색(거래처 추가 시 "기존 회원 검색")에 내 정보 노출 허용 — 기본값 false(옵트인) */}
+          {/* 다른 사용자 검색(담당자 추가 시 "기존 회원 검색")에 내 정보 노출 허용 — 기본값 false(옵트인) */}
           <View style={[s.card, s.mb10]}>
             <View style={s.discoverableRow}>
               <View style={s.flex1}>
                 <Text style={s.discoverableLabel}>다른 사용자 검색에 내 정보 노출 허용</Text>
                 <Text style={s.discoverableDesc}>
-                  켜면 다른 사용자가 거래처 추가 시 “기존 회원 검색”으로 내 이름·이메일·소속·직책·연락처(전화번호)를 찾을 수 있고, 별도 확인 절차 없이 바로 내 정보를 거래처 목록에 추가할 수 있습니다.{'\n'}
+                  켜면 다른 사용자가 담당자 추가 시 “기존 회원 검색”으로 내 이름·이메일·소속·직책·연락처(전화번호)를 찾을 수 있고, 별도 확인 절차 없이 바로 내 정보를 담당자 목록에 추가할 수 있습니다.{'\n'}
                   연락처도 함께 노출되니 신뢰할 수 있는 경우에만 켜세요. 기본값은 꺼짐(비허용)입니다.
                 </Text>
               </View>
@@ -509,14 +509,14 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* 상호 등록된 거래처와 히스토리 공유 — 기본값 false(옵트인), 대칭 조건(상대방 조회 가능
+          {/* 상호 등록된 담당자와 히스토리 공유 — 기본값 false(옵트인), 대칭 조건(상대방 조회 가능
               여부는 상대방의 별도 설정이 결정) */}
           <View style={[s.card, s.mb10]}>
             <View style={s.discoverableRow}>
               <View style={s.flex1}>
-                <Text style={s.discoverableLabel}>상호 등록된 거래처와 히스토리 공유</Text>
+                <Text style={s.discoverableLabel}>상호 등록된 담당자와 히스토리 공유</Text>
                 <Text style={s.discoverableDesc}>
-                  나와 상대방이 서로를 거래처로 등록한 경우에만, 내가 이 상대방에 대해 기록한 히스토리(날짜·유형·제목·내용·결과 전체)가 상대방에게 공개됩니다. 상대방이 나를 볼 수 있는지 여부는 상대방의 별도 설정에 따릅니다.
+                  나와 상대방이 서로를 담당자로 등록한 경우에만, 내가 이 상대방에 대해 기록한 히스토리(날짜·유형·제목·내용·결과 전체)가 상대방에게 공개됩니다. 상대방이 나를 볼 수 있는지 여부는 상대방의 별도 설정에 따릅니다.
                 </Text>
               </View>
               <Switch
@@ -536,7 +536,7 @@ export default function SettingsScreen() {
               disabled={legacyUploading}
             >
               <Text style={s.legacyUploadTitle}>{legacyUploading ? '업로드 중...' : '로컬 데이터를 클라우드로 가져오기'}</Text>
-              <Text style={s.legacyUploadDesc}>이 기기에만 저장되어 있던 일정·거래처·프로젝트·메세지·회의록을 클라우드로 올려서 다른 기기(PC 등)에서도 볼 수 있게 합니다.</Text>
+              <Text style={s.legacyUploadDesc}>이 기기에만 저장되어 있던 일정·담당자·프로젝트·메세지·회의록을 클라우드로 올려서 다른 기기(PC 등)에서도 볼 수 있게 합니다.</Text>
             </TouchableOpacity>
           )}
           {/* 다른 계정 목록 */}

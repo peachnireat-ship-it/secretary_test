@@ -115,7 +115,7 @@ export default function HomeScreen({ navigation }) {
   const STATS = [
     { label: '오늘 일정', value: String(todaySchedules.length), unit: '건', color: C.accentBlue, tab: '일정' },
     { label: '프로젝트', value: String(activeProjectCount), unit: '건', color: C.accentPurple, tab: '프로젝트' },
-    { label: '거래처', value: String(clientCount), unit: '곳', color: C.accentTeal, tab: '거래처' },
+    { label: '담당자', value: String(clientCount), unit: '곳', color: C.accentTeal, tab: '거래처' },
     { label: '지연·위험', value: String(delayedProjectCount), unit: '건', color: delayedProjectCount > 0 ? C.red : C.textSecondary, tab: '프로젝트' },
   ];
 
@@ -244,7 +244,7 @@ export default function HomeScreen({ navigation }) {
         <View style={s.actionsRow}>
           {[
             { label: '일정 관리', color: C.accentBlue, tab: '일정' },
-            { label: '거래처 관리', color: C.accentTeal, tab: '거래처' },
+            { label: '담당자 관리', color: C.accentTeal, tab: '거래처' },
             { label: '프로젝트', color: C.red, tab: '프로젝트' },
           ].map((a) => (
             <TouchableOpacity
@@ -288,7 +288,7 @@ export default function HomeScreen({ navigation }) {
           >
             <View style={[s.aiDot, { backgroundColor: C.accentTeal }]} />
             <View style={commonStyles.flex1}>
-              <Text style={s.aiTitle}>AI 거래처 히스토리</Text>
+              <Text style={s.aiTitle}>AI 담당자 히스토리</Text>
               <Text style={s.aiDesc}>관계 요약 · 히스토리 분석 · 후속 조치 제안</Text>
             </View>
           </TouchableOpacity>

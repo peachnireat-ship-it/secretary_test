@@ -10,7 +10,7 @@
 |------|----|----------|
 | `HomeScreen.js` | 홈 | `C.gold` |
 | `ScheduleScreen.js` | 일정 | `C.accentBlue` |
-| `ClientScreen.js` | 거래처 | `C.accentTeal` |
+| `ClientScreen.js` | 담당자(탭 라벨, 라우트명은 `거래처` 유지) | `C.accentTeal` |
 | `ProjectScreen.js` | 프로젝트 | `C.red` |
 | `MessageScreen.js` | 메세지 | `C.accentPurple` |
 | `MeetingScreen.js` | 회의록 | `C.accentTeal` |

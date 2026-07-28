@@ -19,13 +19,13 @@ function formatHistoryDate(dateStr) {
 }
 
 /**
- * 거래처 상세 모달 내 히스토리(방문/상담 기록) CRUD 섹션.
+ * 담당자 상세 모달 내 히스토리(방문/상담 기록) CRUD 섹션.
  * 히스토리 목록 + 추가/수정 모달을 포함하며, 목록 하단에 부모가 넘긴 children(예: 연결된 회의록)을
  * 같은 ScrollView 안에 렌더링해 기존 스크롤 영역 구조를 그대로 유지한다.
  * @param {object} params
- * @param {object|null} params.client 현재 선택된 거래처 (selectedClient)
+ * @param {object|null} params.client 현재 선택된 담당자 (selectedClient)
  * @param {Array} params.histories 전체 히스토리 배열 (client.id로 필터링해서 사용)
- * @param {Array} [params.mutualHistories] 상호 등록된 거래처(client.linkedProfileId)가 공개한 상대방 히스토리.
+ * @param {Array} [params.mutualHistories] 상호 등록된 담당자(client.linkedProfileId)가 공개한 상대방 히스토리.
  *   본인 히스토리와 합쳐 등록 시간순으로 정렬 표시하되, 읽기 전용(편집/삭제 불가)이며 배지로 구분한다.
  * @param {Array} [params.topics] 전체 토픽 배열(본인 소유, client.id로 필터링해서 사용)
  * @param {(updated: Array) => void} params.onHistoriesChange 추가/수정/삭제 후 갱신된 히스토리 배열을 부모에 전달하는 콜백
@@ -154,7 +154,7 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
   }
 
   // 히스토리 등록/수정 모달의 토픽 선택기에서 "+ 새 토픽"으로 즉석에서 만든 토픽은 바로 선택된다.
-  // 같은 거래처에 이름이 같은 토픽이 이미 있으면 새로 만들지 않고 기존 토픽 id를 그대로 재사용한다
+  // 같은 담당자에 이름이 같은 토픽이 이미 있으면 새로 만들지 않고 기존 토픽 id를 그대로 재사용한다
   // (id 기준으로 하나의 토픽만 존재하도록 보장 — 이름이 같은 토픽이 중복 생성되는 것을 방지).
   async function handleCreateTopic(name) {
     const trimmed = name.trim();

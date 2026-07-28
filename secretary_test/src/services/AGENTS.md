@@ -26,8 +26,8 @@
 | 키 | 타입 | 설명 |
 |----|------|------|
 | `schedules_v1_${userId}` | Schedule[] | 일정 |
-| `clients_v1_${userId}` | Client[] | 거래처 |
-| `histories_v1_${userId}` | History[] | 거래처 히스토리 |
+| `clients_v1_${userId}` | Client[] | 담당자 |
+| `histories_v1_${userId}` | History[] | 담당자 히스토리 |
 | `projects_v1_${userId}` | Project[] | 프로젝트 |
 | `messages_v3_${userId}` | Message[] | 메세지 |
 | `meeting_records_v1_${userId}` | MeetingRecord[] | 회의록 |
@@ -62,7 +62,7 @@ askClaude(messages, systemPrompt, { raw: false })
 | 함수 | 대상 탭 |
 |------|---------|
 | `buildScheduleSystem(schedules)` | 일정 |
-| `buildClientSystem(clients, histories)` | 거래처 |
+| `buildClientSystem(clients, histories)` | 담당자 |
 | `buildProjectDelaySystem(projects)` | 프로젝트 |
 | `buildTaskExtractionSystem()` | 회의록 태스크 추출 |
 
