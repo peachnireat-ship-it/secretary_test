@@ -377,6 +377,26 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ## 세션 작업 이력
 
+### 2026-07-28
+
+#### 토픽별 보기에서 같은 이름의 토픽이 2개로 갈라져 보이는 버그 (`get_mutual_client_history` 배포 누락)
+
+**배경**: 7/27 커밋(`d6da90d` 이후)에서 히스토리 업무 토픽 기능을 만들면서 `supabase/patch_mutual_history_topic_id.sql`을 작성해 `get_mutual_client_history()` RPC가 `topic_id`까지 반환하도록 시그니처를 바꿨는데, 이 패치 파일이 실제로는 Supabase에 실행되지 않은 채 방치되어 있었음. 겉보기엔 "같은 이름의 토픽이 중복 생성된 것"처럼 보여 처음엔 `topics` 테이블 자체의 이름 중복 문제로 오인하고 접근함.
+
+**오진단 경로**: `topics`/`histories` 테이블을 직접 조회해도 실제 행은 정상(토픽 1개, 히스토리 전부 같은 `topic_id` 참조)이라 DB 데이터 자체엔 문제가 없었음. 스크린샷으로 화면을 직접 확인하고 나서야 "20260727_topicTest" 헤더 하나에는 `+ 추가` 버튼이 있고 다른 하나에는 없다는 걸 발견 — 이게 두 그룹의 `topicId`가 실제로 다르다(하나는 null)는 결정적 단서였음.
+
+**근본 원인**: 상대방이 공유 토픽에 연결해 등록한 히스토리를 `get_mutual_client_history` RPC로 가져올 때, 라이브 함수가 `topic_id`를 반환하지 않는 옛날 버전이라 클라이언트에서 `h.topicId`가 `undefined`가 됨. `ClientHistorySection.js`의 토픽별 보기 그룹핑 로직(`topicMap`)은 `key = h.topicId || '미분류'`로 그룹을 나누는데, 이 항목만 "미분류" 키로 별도 그룹이 만들어지면서도 그룹 이름은 `h.topicName`(RPC가 별도로는 정상 반환하던 값) 폴백으로 채워져 진짜 토픽과 이름만 같고 키는 다른 "가짜 중복" 그룹이 생김.
+
+**진단 방법**: Supabase SQL Editor에서 `pg_get_functiondef()`로 라이브 함수 정의를 직접 조회해 레포의 `patch_mutual_history_topic_id.sql` 내용과 다르다는 것을 확인 — `schema.sql`/patch 파일이 레포에 있어도 실제 배포 여부는 보장되지 않는다는 게 이번에도 재확인됨(`_review/secretary_test-20260723/01_architecture.md` #6에서 이미 지적된 리스크와 동일 패턴).
+
+**해결**: `patch_mutual_history_topic_id.sql`을 Supabase SQL Editor에서 실행해 라이브 함수를 최신 버전으로 갱신. 이후 재확인 시 토픽 그룹이 정상적으로 하나(4건)로 합쳐짐.
+
+**교훈**: 앱단 증상(중복처럼 보임)만 보고 관련 테이블 데이터 구조를 바꾸는 마이그레이션부터 시도하지 말 것 — 이번처럼 데이터는 멀쩡하고 "그 데이터를 가져오는 RPC의 배포 상태"가 원인인 경우가 있으므로, 상호 공유/RPC 관련 이상 증상은 `pg_get_functiondef()`로 라이브 함수 정의를 레포 파일과 대조하는 걸 먼저 확인.
+
+**참고**: 같은 세션에서 예방 차원으로 `ClientHistorySection.js`의 `handleCreateTopic()`에 같은 거래처 내 이름 중복 시 기존 토픽 id 재사용 로직과, `topics(user_id, client_id, lower(trim(name)))` DB 유니크 인덱스도 추가함(`aab4be0`) — 이건 오늘 버그의 직접 원인은 아니었지만 여전히 유효한 안전장치라 유지.
+
+---
+
 ### 2026-07-14
 
 #### 영문 혼용 회사명 AI 요약 손상 데이터 복구 (`supabase/fix_client_ai_summary.js`)
