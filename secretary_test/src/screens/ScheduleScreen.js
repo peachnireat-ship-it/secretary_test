@@ -101,6 +101,7 @@ export default function ScheduleScreen({ navigation, route }) {
   const [editTag, setEditTag] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editClientIds, setEditClientIds] = useState([]);
+  const [editProjectId, setEditProjectId] = useState(null);
   const [editStartDate, setEditStartDate] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
   const [editNotifyEmail, setEditNotifyEmail] = useState(true);
@@ -109,6 +110,10 @@ export default function ScheduleScreen({ navigation, route }) {
   const [pickerSearch, setPickerSearch] = useState('');
   const [pickerTempIds, setPickerTempIds] = useState([]);
   const pickerCallback = useRef(null);
+
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [projectPickerCurrentId, setProjectPickerCurrentId] = useState(null);
+  const projectPickerCallback = useRef(null);
 
   const [showPickerAddClient, setShowPickerAddClient] = useState(false);
   const [pickerNewName, setPickerNewName] = useState('');
@@ -122,6 +127,7 @@ export default function ScheduleScreen({ navigation, route }) {
   const [newTag, setNewTag] = useState('회의');
   const [newNotes, setNewNotes] = useState('');
   const [newClientIds, setNewClientIds] = useState([]);
+  const [newProjectId, setNewProjectId] = useState(null);
   const [newStartDate, setNewStartDate] = useState('');
   const [newStartTime, setNewStartTime] = useState('09:00');
   const [newStartAmPm, setNewStartAmPm] = useState('오전');
@@ -216,6 +222,12 @@ export default function ScheduleScreen({ navigation, route }) {
     setEditNotifyEmail(editClientIds.length > 0);
   }, [editClientIds, editMode]);
 
+  useEffect(() => {
+    if (!showAdd) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNewNotifyEmail(newClientIds.length > 0);
+  }, [newClientIds, showAdd]);
+
   useFocusEffect(useCallback(() => { load(); }, []));
 
   const monthPrefix = `${calYear}-${String(calMonth).padStart(2, '0')}`;
@@ -296,10 +308,10 @@ export default function ScheduleScreen({ navigation, route }) {
   moveMonthRef.current = moveMonth;
 
   async function saveNewSchedule(scheduleDate, startDateStr, endDateStr) {
-    const updated = await addSchedule({ date: scheduleDate, time: to24h(newStartAmPm, newStartTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, startDate: startDateStr, endDate: endDateStr, notifyEmail: newNotifyEmail });
+    const updated = await addSchedule({ date: scheduleDate, time: to24h(newStartAmPm, newStartTime), title: newTitle.trim(), tag: newTag, notes: newNotes.trim(), clientIds: newClientIds, projectId: newProjectId, startDate: startDateStr, endDate: endDateStr, notifyEmail: newNotifyEmail });
     setSchedules(updated);
     setShowAdd(false);
-    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]);
+    setNewTitle(''); setNewTime('09:00'); setNewTag('회의'); setNewNotes(''); setNewClientIds([]); setNewProjectId(null);
     setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전');
     setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전');
     setNewNotifyEmail(true);
@@ -359,6 +371,17 @@ export default function ScheduleScreen({ navigation, route }) {
   function confirmClientPicker() {
     if (pickerCallback.current) pickerCallback.current(pickerTempIds);
     setShowClientPicker(false);
+  }
+
+  function openProjectPicker(currentId, onSelect) {
+    setProjectPickerCurrentId(currentId || null);
+    projectPickerCallback.current = onSelect;
+    setShowProjectPicker(true);
+  }
+
+  function selectProject(id) {
+    if (projectPickerCallback.current) projectPickerCallback.current(id);
+    setShowProjectPicker(false);
   }
 
   async function handlePickerAddClient() {
@@ -431,12 +454,13 @@ export default function ScheduleScreen({ navigation, route }) {
       tag: editTag,
       notes: editNotes.trim(),
       clientIds: editClientIds,
+      projectId: editProjectId,
       startDate: startDateStr,
       endDate: endDateStr,
       notifyEmail: editNotifyEmail,
     });
     setSchedules(updated);
-    setViewSchedule((prev) => ({ ...prev, date: scheduleDate, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, startDate: startDateStr, endDate: endDateStr, notifyEmail: editNotifyEmail }));
+    setViewSchedule((prev) => ({ ...prev, date: scheduleDate, title: editTitle.trim(), time: saved24h, tag: editTag, notes: editNotes.trim(), clientIds: editClientIds, projectId: editProjectId, startDate: startDateStr, endDate: endDateStr, notifyEmail: editNotifyEmail }));
     setEditMode(false);
   }
 
@@ -855,7 +879,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 ))}
               </View>
 
-              <Text style={s.inputLabel}>관련 인물 · 거래처 (선택)</Text>
+              <Text style={s.inputLabel}>관련 인물 · 담당자 (선택)</Text>
               {newClientIds.length > 0 && (
                 <View style={s.selectedPeopleRow}>
                   {newClientIds.map((id) => {
@@ -872,7 +896,15 @@ export default function ScheduleScreen({ navigation, route }) {
               )}
               <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(newClientIds, setNewClientIds)}>
                 <Text style={[s.pickerTriggerText, newClientIds.length > 0 && s.pickerTriggerTextActive]}>
-                  {newClientIds.length > 0 ? `${newClientIds.length}명 선택됨 · 변경` : '거래처 인원 선택'}
+                  {newClientIds.length > 0 ? `${newClientIds.length}명 선택됨 · 변경` : '담당자 인원 선택'}
+                </Text>
+                <Text style={s.pickerTriggerIcon}>›</Text>
+              </TouchableOpacity>
+
+              <Text style={s.inputLabel}>관련 프로젝트 (선택)</Text>
+              <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(newProjectId, setNewProjectId)}>
+                <Text style={[s.pickerTriggerText, newProjectId && s.pickerTriggerTextActive]}>
+                  {newProjectId ? (projects.find((p) => p.id === newProjectId)?.title || '선택된 프로젝트') : '프로젝트 선택'}
                 </Text>
                 <Text style={s.pickerTriggerIcon}>›</Text>
               </TouchableOpacity>
@@ -884,7 +916,13 @@ export default function ScheduleScreen({ navigation, route }) {
               <TouchableOpacity
                 style={s.notifyEmailRow}
                 activeOpacity={0.7}
-                onPress={() => setNewNotifyEmail((prev) => !prev)}
+                onPress={() => {
+                  if (newClientIds.length === 0) {
+                    Alert.alert('안내', '선택된 관련 인물이 없습니다.');
+                    return;
+                  }
+                  setNewNotifyEmail((prev) => !prev);
+                }}
               >
                 <View style={[s.notifyEmailCheckbox, newNotifyEmail && s.notifyEmailCheckboxChecked]}>
                   {newNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
@@ -893,7 +931,7 @@ export default function ScheduleScreen({ navigation, route }) {
               </TouchableOpacity>
 
               <View style={s.modalBtns}>
-                <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전'); setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전'); setNewNotifyEmail(true); }}>
+                <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAdd(false); setNewClientIds([]); setNewProjectId(null); setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전'); setNewEndDate(''); setNewEndTime('06:00'); setNewEndAmPm('오후'); setNewAmPm('오전'); setNewNotifyEmail(true); }}>
                   <Text style={s.modalCancelText}>취소</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.modalConfirm} onPress={handleAdd}>
@@ -959,7 +997,233 @@ export default function ScheduleScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── 프로젝트 보기 모달 ── */}
+      {/* ── 일정 상세 모달 ── */}
+      <Modal visible={showScheduleView} animationType="slide" transparent onRequestClose={() => { setShowScheduleView(false); setEditMode(false); }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.maxH80pct, swipeSchedule.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeSchedule.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
+            {viewSchedule && (
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={s.modalTitleRow}>
+                  <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>
+                    {editMode ? '일정 수정' : viewSchedule.title}
+                  </Text>
+                  <View style={s.titleActionRow}>
+                    <TouchableOpacity onPress={() => { setShowScheduleView(false); setEditMode(false); }}>
+                      <Text style={s.closeBtn}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {editMode ? (
+                  <>
+                    <Text style={s.inputLabel}>제목</Text>
+                    <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
+
+                    <Text style={s.inputLabel}>시작일시</Text>
+                    <TextInput style={[s.input, commonStyles.mb8]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+                    <View style={s.timeRow}>
+                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.optionActive]} onPress={() => setEditStartAmPm('오전')}>
+                        <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.optionActive]} onPress={() => setEditStartAmPm('오후')}>
+                        <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                      </TouchableOpacity>
+                      <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                    </View>
+
+                    <Text style={s.inputLabel}>마감일시 (선택)</Text>
+                    <TextInput style={[s.input, commonStyles.mb8]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+                    <View style={s.timeRow}>
+                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.optionActive]} onPress={() => setEditEndAmPm('오전')}>
+                        <Text style={[s.ampmBtnText, editEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.optionActive]} onPress={() => setEditEndAmPm('오후')}>
+                        <Text style={[s.ampmBtnText, editEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+                      </TouchableOpacity>
+                      <TextInput style={[s.input, commonStyles.flex1]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+                    </View>
+
+                    <Text style={s.inputLabel}>분류</Text>
+                    <View style={s.tagRow}>
+                      {TAGS.map((t) => (
+                        <TouchableOpacity key={t} style={[s.tagOption, editTag === t && s.optionActive]} onPress={() => setEditTag(t)}>
+                          <Text style={[s.tagOptionText, editTag === t && s.tagOptionTextActive]}>{t}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={s.inputLabel}>관련 인물 · 담당자 (선택)</Text>
+                    {editClientIds.length > 0 && (
+                      <View style={s.selectedPeopleRow}>
+                        {editClientIds.map((id) => {
+                          const c = clients.find((cl) => cl.id === id);
+                          if (!c) return null;
+                          return (
+                            <View key={id} style={s.selectedPersonChip}>
+                              <TouchableOpacity onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
+                                <Text style={s.selectedPersonChipText}>{c.name}</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => setEditClientIds((prev) => prev.filter((x) => x !== id))}>
+                                <Text style={s.selectedPersonChipX}> ✕</Text>
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                    <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(editClientIds, setEditClientIds)}>
+                      <Text style={[s.pickerTriggerText, editClientIds.length > 0 && s.pickerTriggerTextActive]}>
+                        {editClientIds.length > 0 ? `${editClientIds.length}명 선택됨 · 변경` : '담당자 인원 선택'}
+                      </Text>
+                      <Text style={s.pickerTriggerIcon}>›</Text>
+                    </TouchableOpacity>
+
+                    <Text style={s.inputLabel}>관련 프로젝트 (선택)</Text>
+                    <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(editProjectId, setEditProjectId)}>
+                      <Text style={[s.pickerTriggerText, editProjectId && s.pickerTriggerTextActive]}>
+                        {editProjectId ? (projects.find((p) => p.id === editProjectId)?.title || '선택된 프로젝트') : '프로젝트 선택'}
+                      </Text>
+                      <Text style={s.pickerTriggerIcon}>›</Text>
+                    </TouchableOpacity>
+
+                    <Text style={s.inputLabel}>메모 (선택)</Text>
+                    <TextInput style={[s.input, s.h72]} value={editNotes} onChangeText={setEditNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
+
+                    {/* 알림 메일 발송 여부 */}
+                    <TouchableOpacity
+                      style={s.notifyEmailRow}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        if (editClientIds.length === 0) {
+                          Alert.alert('안내', '선택된 관련 인물이 없습니다.');
+                          return;
+                        }
+                        setEditNotifyEmail((prev) => !prev);
+                      }}
+                    >
+                      <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
+                        {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
+                      </View>
+                      <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
+                    </TouchableOpacity>
+
+                    <View style={s.modalBtns}>
+                      <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
+                        <Text style={s.modalCancelText}>취소</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
+                        <Text style={s.modalConfirmText}>저장</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={s.modalDateLabel}>{formatDateKo(viewSchedule.date)}</Text>
+
+                    <View style={s.scheduleActionRow}>
+                      <TouchableOpacity onPress={() => {
+                        const { ampm, time12 } = from24h(viewSchedule.time);
+                        setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm);
+                        setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []); setEditProjectId(viewSchedule.projectId || null);
+                        const sp = (viewSchedule.startDate || '').split(' ');
+                        setEditStartDate(sp[0] || '');
+                        if (sp[1]) { const r = from24h(sp[1]); setEditStartAmPm(r.ampm); setEditStartTime(r.time12); } else { setEditStartAmPm('오전'); setEditStartTime('09:00'); }
+                        const ep = (viewSchedule.endDate || '').split(' ');
+                        setEditEndDate(ep[0] || '');
+                        if (ep[1]) { const r = from24h(ep[1]); setEditEndAmPm(r.ampm); setEditEndTime(r.time12); } else { setEditEndAmPm('오후'); setEditEndTime('06:00'); }
+                        setEditMode(true);
+                      }}>
+                        <Text style={s.editBtn}>수정</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => Alert.alert('삭제', `"${viewSchedule.title}" 일정을 삭제할까요?`, [
+                        { text: '취소', style: 'cancel' },
+                        { text: '삭제', style: 'destructive', onPress: async () => { const updated = await deleteSchedule(viewSchedule.id); setSchedules(updated); setShowScheduleView(false); } },
+                      ])}>
+                        <Text style={s.deleteBtn}>삭제</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => confirmCopy(viewSchedule)}>
+                        <Text style={s.copyBtn}>복사</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleShare(viewSchedule)}>
+                        <Text style={s.shareBtn}>공유</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text style={s.viewLabel}>시작일시</Text>
+                    <Text style={s.viewText}>{formatStartDateTime(viewSchedule)}</Text>
+
+                    {viewSchedule.endDate ? (
+                      <>
+                        <Text style={s.viewLabel}>마감일시</Text>
+                        <Text style={s.viewText}>{formatDateTimeKo(viewSchedule.endDate)}</Text>
+                      </>
+                    ) : null}
+
+                    <Text style={s.viewLabel}>분류</Text>
+                    <View style={[s.tagBadge, { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: tagColor(viewSchedule.tag) + '22', borderColor: tagColor(viewSchedule.tag) + '55' }]}>
+                      <Text style={[s.tagText, { color: tagColor(viewSchedule.tag) }]}>{viewSchedule.tag}</Text>
+                    </View>
+
+                    {viewSchedule.notes ? (
+                      <>
+                        <Text style={s.viewLabel}>메모</Text>
+                        <Text style={s.viewText}>{viewSchedule.notes}</Text>
+                      </>
+                    ) : null}
+
+                    {(viewSchedule.clientIds?.length > 0) && (() => {
+                      const people = viewSchedule.clientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+                      if (people.length === 0) return null;
+                      return (
+                        <>
+                          <Text style={s.viewLabel}>관련 인물</Text>
+                          <View style={s.viewPeopleList}>
+                            {people.map((c) => (
+                              <TouchableOpacity key={c.id} style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
+                                <View style={s.viewPersonAvatar}>
+                                  <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
+                                </View>
+                                <View style={commonStyles.flex1}>
+                                  <Text style={s.viewPersonName}>{c.name}</Text>
+                                  {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                                </View>
+                                <Text style={s.viewPersonChevron}>›</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </>
+                      );
+                    })()}
+
+                    {viewSchedule.projectId && (() => {
+                      const proj = projects.find((p) => p.id === viewSchedule.projectId);
+                      if (!proj) return null;
+                      return (
+                        <>
+                          <Text style={s.viewLabel}>관련 프로젝트</Text>
+                          <TouchableOpacity style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
+                            <View style={commonStyles.flex1}>
+                              <Text style={s.viewPersonName}>{proj.title}</Text>
+                              <Text style={s.viewPersonSub}>{proj.status}{proj.deadline ? ` · ${proj.deadline}` : ''}</Text>
+                            </View>
+                            <Text style={s.viewPersonChevron}>›</Text>
+                          </TouchableOpacity>
+                        </>
+                      );
+                    })()}
+                  </>
+                )}
+                <View style={s.spacerH16} />
+              </ScrollView>
+            )}
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 프로젝트 보기 모달 (일정 상세 모달보다 뒤에 선언해 그 위에 겹쳐 뜨도록 함) ── */}
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
           <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.maxH80pct, swipeProject.animStyle]}>
@@ -1043,207 +1307,6 @@ export default function ScheduleScreen({ navigation, route }) {
             })()}
           </Animated.View>
         </View>
-      </Modal>
-
-      {/* ── 일정 상세 모달 ── */}
-      <Modal visible={showScheduleView} animationType="slide" transparent onRequestClose={() => { setShowScheduleView(false); setEditMode(false); }}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.maxH80pct, swipeSchedule.animStyle]}>
-            <View style={s.modalHandleWrap} {...swipeSchedule.panHandlers}>
-              <View style={s.modalHandle} />
-            </View>
-            {viewSchedule && (
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View style={s.modalTitleRow}>
-                  <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>
-                    {editMode ? '일정 수정' : viewSchedule.title}
-                  </Text>
-                  <View style={s.titleActionRow}>
-                    <TouchableOpacity onPress={() => { setShowScheduleView(false); setEditMode(false); }}>
-                      <Text style={s.closeBtn}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {editMode ? (
-                  <>
-                    <Text style={s.inputLabel}>제목</Text>
-                    <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
-
-                    <Text style={s.inputLabel}>시작일시</Text>
-                    <TextInput style={[s.input, commonStyles.mb8]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-                    <View style={s.timeRow}>
-                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.optionActive]} onPress={() => setEditStartAmPm('오전')}>
-                        <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.optionActive]} onPress={() => setEditStartAmPm('오후')}>
-                        <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
-                      </TouchableOpacity>
-                      <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
-                    </View>
-
-                    <Text style={s.inputLabel}>마감일시 (선택)</Text>
-                    <TextInput style={[s.input, commonStyles.mb8]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-                    <View style={s.timeRow}>
-                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.optionActive]} onPress={() => setEditEndAmPm('오전')}>
-                        <Text style={[s.ampmBtnText, editEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.optionActive]} onPress={() => setEditEndAmPm('오후')}>
-                        <Text style={[s.ampmBtnText, editEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
-                      </TouchableOpacity>
-                      <TextInput style={[s.input, commonStyles.flex1]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
-                    </View>
-
-                    <Text style={s.inputLabel}>분류</Text>
-                    <View style={s.tagRow}>
-                      {TAGS.map((t) => (
-                        <TouchableOpacity key={t} style={[s.tagOption, editTag === t && s.optionActive]} onPress={() => setEditTag(t)}>
-                          <Text style={[s.tagOptionText, editTag === t && s.tagOptionTextActive]}>{t}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-
-                    <Text style={s.inputLabel}>관련 인물 · 거래처 (선택)</Text>
-                    {editClientIds.length > 0 && (
-                      <View style={s.selectedPeopleRow}>
-                        {editClientIds.map((id) => {
-                          const c = clients.find((cl) => cl.id === id);
-                          if (!c) return null;
-                          return (
-                            <View key={id} style={s.selectedPersonChip}>
-                              <TouchableOpacity onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
-                                <Text style={s.selectedPersonChipText}>{c.name}</Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity onPress={() => setEditClientIds((prev) => prev.filter((x) => x !== id))}>
-                                <Text style={s.selectedPersonChipX}> ✕</Text>
-                              </TouchableOpacity>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    )}
-                    <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(editClientIds, setEditClientIds)}>
-                      <Text style={[s.pickerTriggerText, editClientIds.length > 0 && s.pickerTriggerTextActive]}>
-                        {editClientIds.length > 0 ? `${editClientIds.length}명 선택됨 · 변경` : '거래처 인원 선택'}
-                      </Text>
-                      <Text style={s.pickerTriggerIcon}>›</Text>
-                    </TouchableOpacity>
-
-                    <Text style={s.inputLabel}>메모 (선택)</Text>
-                    <TextInput style={[s.input, s.h72]} value={editNotes} onChangeText={setEditNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
-
-                    {/* 알림 메일 발송 여부 */}
-                    <TouchableOpacity
-                      style={s.notifyEmailRow}
-                      activeOpacity={0.7}
-                      onPress={() => {
-                        if (editClientIds.length === 0) {
-                          Alert.alert('안내', '선택된 관련 인물이 없습니다.');
-                          return;
-                        }
-                        setEditNotifyEmail((prev) => !prev);
-                      }}
-                    >
-                      <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
-                        {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
-                      </View>
-                      <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
-                    </TouchableOpacity>
-
-                    <View style={s.modalBtns}>
-                      <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
-                        <Text style={s.modalCancelText}>취소</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
-                        <Text style={s.modalConfirmText}>저장</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Text style={s.modalDateLabel}>{formatDateKo(viewSchedule.date)}</Text>
-
-                    <View style={s.scheduleActionRow}>
-                      <TouchableOpacity onPress={() => {
-                        const { ampm, time12 } = from24h(viewSchedule.time);
-                        setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm);
-                        setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []);
-                        const sp = (viewSchedule.startDate || '').split(' ');
-                        setEditStartDate(sp[0] || '');
-                        if (sp[1]) { const r = from24h(sp[1]); setEditStartAmPm(r.ampm); setEditStartTime(r.time12); } else { setEditStartAmPm('오전'); setEditStartTime('09:00'); }
-                        const ep = (viewSchedule.endDate || '').split(' ');
-                        setEditEndDate(ep[0] || '');
-                        if (ep[1]) { const r = from24h(ep[1]); setEditEndAmPm(r.ampm); setEditEndTime(r.time12); } else { setEditEndAmPm('오후'); setEditEndTime('06:00'); }
-                        setEditMode(true);
-                      }}>
-                        <Text style={s.editBtn}>수정</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => Alert.alert('삭제', `"${viewSchedule.title}" 일정을 삭제할까요?`, [
-                        { text: '취소', style: 'cancel' },
-                        { text: '삭제', style: 'destructive', onPress: async () => { const updated = await deleteSchedule(viewSchedule.id); setSchedules(updated); setShowScheduleView(false); } },
-                      ])}>
-                        <Text style={s.deleteBtn}>삭제</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => confirmCopy(viewSchedule)}>
-                        <Text style={s.copyBtn}>복사</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleShare(viewSchedule)}>
-                        <Text style={s.shareBtn}>공유</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text style={s.viewLabel}>시작일시</Text>
-                    <Text style={s.viewText}>{formatStartDateTime(viewSchedule)}</Text>
-
-                    {viewSchedule.endDate ? (
-                      <>
-                        <Text style={s.viewLabel}>마감일시</Text>
-                        <Text style={s.viewText}>{formatDateTimeKo(viewSchedule.endDate)}</Text>
-                      </>
-                    ) : null}
-
-                    <Text style={s.viewLabel}>분류</Text>
-                    <View style={[s.tagBadge, { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: tagColor(viewSchedule.tag) + '22', borderColor: tagColor(viewSchedule.tag) + '55' }]}>
-                      <Text style={[s.tagText, { color: tagColor(viewSchedule.tag) }]}>{viewSchedule.tag}</Text>
-                    </View>
-
-                    {viewSchedule.notes ? (
-                      <>
-                        <Text style={s.viewLabel}>메모</Text>
-                        <Text style={s.viewText}>{viewSchedule.notes}</Text>
-                      </>
-                    ) : null}
-
-                    {(viewSchedule.clientIds?.length > 0) && (() => {
-                      const people = viewSchedule.clientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
-                      if (people.length === 0) return null;
-                      return (
-                        <>
-                          <Text style={s.viewLabel}>관련 인물</Text>
-                          <View style={s.viewPeopleList}>
-                            {people.map((c) => (
-                              <TouchableOpacity key={c.id} style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
-                                <View style={s.viewPersonAvatar}>
-                                  <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
-                                </View>
-                                <View style={commonStyles.flex1}>
-                                  <Text style={s.viewPersonName}>{c.name}</Text>
-                                  {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
-                                </View>
-                                <Text style={s.viewPersonChevron}>›</Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        </>
-                      );
-                    })()}
-                  </>
-                )}
-                <View style={s.spacerH16} />
-              </ScrollView>
-            )}
-          </Animated.View>
-        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── 복사본 이름 입력 모달 ── */}
@@ -1341,7 +1404,7 @@ export default function ScheduleScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* ── 거래처 인원 피커 팝업 ── */}
+      {/* ── 담당자 인원 피커 팝업 ── */}
       <Modal visible={showClientPicker} animationType="slide" transparent onRequestClose={() => setShowClientPicker(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.sheetBase, s.pickerSheet]}>
@@ -1349,7 +1412,7 @@ export default function ScheduleScreen({ navigation, route }) {
               <TouchableOpacity onPress={() => setShowClientPicker(false)} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerCancelText}>취소</Text>
               </TouchableOpacity>
-              <Text style={s.pickerTitle}>거래처 인원 선택</Text>
+              <Text style={s.pickerTitle}>담당자 인원 선택</Text>
               <TouchableOpacity onPress={confirmClientPicker} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerConfirmText}>
                   확인{pickerTempIds.length > 0 ? ` (${pickerTempIds.length})` : ''}
@@ -1369,7 +1432,7 @@ export default function ScheduleScreen({ navigation, route }) {
 
             <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
               <TouchableOpacity style={s.pickerAddNewBtn} onPress={() => setShowPickerAddClient(true)}>
-                <Text style={s.pickerAddNewText}>+ 신규 거래처 인원 등록</Text>
+                <Text style={s.pickerAddNewText}>+ 신규 담당자 인원 등록</Text>
               </TouchableOpacity>
               {(() => {
                 const isSelf = (c) =>
@@ -1417,7 +1480,56 @@ export default function ScheduleScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* ── 신규 거래처 인원 등록 (피커에서 진입) ── */}
+      {/* ── 관련 프로젝트 선택 (콤보박스) ── */}
+      <Modal visible={showProjectPicker} animationType="slide" transparent onRequestClose={() => setShowProjectPicker(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.sheetBase, s.pickerSheet]}>
+            <View style={s.pickerHeader}>
+              <TouchableOpacity onPress={() => setShowProjectPicker(false)} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={s.pickerTitle}>관련 프로젝트 선택</Text>
+              <View style={s.pickerHeaderBtn} />
+            </View>
+
+            <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity
+                style={[s.pickerRow, !projectPickerCurrentId && s.pickerRowSelected]}
+                onPress={() => selectProject(null)}
+                activeOpacity={0.7}
+              >
+                <View style={s.pickerNameWrap}>
+                  <Text style={[s.pickerName, !projectPickerCurrentId && s.pickerNameSelected]}>선택 안 함</Text>
+                </View>
+              </TouchableOpacity>
+              {projects.length === 0 ? (
+                <Text style={s.clientSearchEmpty}>등록된 프로젝트가 없습니다</Text>
+              ) : projects.map((p) => {
+                const selected = p.id === projectPickerCurrentId;
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[s.pickerRow, selected && s.pickerRowSelected]}
+                    onPress={() => selectProject(p.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={s.pickerNameWrap}>
+                      <Text style={[s.pickerName, selected && s.pickerNameSelected]}>{p.title}</Text>
+                      <Text style={s.pickerSub}>{p.status}{p.deadline ? ` · ${p.deadline}` : ''}</Text>
+                    </View>
+                    <View style={[s.pickerCheck, selected && s.pickerCheckSelected]}>
+                      {selected && <Text style={s.pickerCheckMark}>✓</Text>}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={s.spacerH40} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── 신규 담당자 인원 등록 (피커에서 진입) ── */}
       <Modal visible={showPickerAddClient} animationType="slide" transparent onRequestClose={() => setShowPickerAddClient(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
           <View style={[s.sheetBase, s.pickerSheet]}>
@@ -1425,7 +1537,7 @@ export default function ScheduleScreen({ navigation, route }) {
               <TouchableOpacity onPress={() => setShowPickerAddClient(false)} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerCancelText}>취소</Text>
               </TouchableOpacity>
-              <Text style={s.pickerTitle}>신규 거래처 인원 등록</Text>
+              <Text style={s.pickerTitle}>신규 담당자 인원 등록</Text>
               <TouchableOpacity onPress={handlePickerAddClient} style={s.pickerHeaderBtn}>
                 <Text style={s.pickerConfirmText}>추가</Text>
               </TouchableOpacity>
