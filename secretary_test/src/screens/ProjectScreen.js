@@ -275,6 +275,14 @@ export default function ProjectScreen({ navigation, route }) {
   }, [viewMode, currentUser?.isCompanyAdmin]));
 
   function openCompanyDetail(project) {
+    // 회사 전체 목록에는 관리자 본인의 프로젝트도 포함된다(같은 회사 소속 전체를 보여주므로).
+    // 본인 소유(= "내 프로젝트" 목록에도 있는 항목)는 조회 전용이 아니라 평소처럼 수정 가능한
+    // 상세 모달로 열어야 한다 — 다른 직원의 프로젝트만 조회 전용으로 제한.
+    const own = projects.find((p) => p.id === project.id);
+    if (own) {
+      openDetail(own);
+      return;
+    }
     setCompanyDetailProject(project);
     setShowCompanyDetail(true);
   }
