@@ -166,6 +166,11 @@ export default function ClientScreen({ navigation, route }) {
     const matchesTab = activeTab === 'all' || favorites.includes(c.id);
     return matchesSearch && matchesTab;
   }).sort((a, b) => {
+    if (activeTab === 'all') {
+      const aFav = favorites.includes(a.id);
+      const bFav = favorites.includes(b.id);
+      if (aFav !== bFav) return aFav ? -1 : 1;
+    }
     const aKo = /^[가-힣]/.test(a.name);
     const bKo = /^[가-힣]/.test(b.name);
     let result;

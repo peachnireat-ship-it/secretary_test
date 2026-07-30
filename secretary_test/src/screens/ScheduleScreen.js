@@ -384,13 +384,23 @@ export default function ScheduleScreen({ navigation, route }) {
     setShowProjectPicker(false);
   }
 
-  // 관련 프로젝트를 선택하면 그 프로젝트의 관련 인물을 일정의 관련 인물에도 자동으로 추가한다
+  // 관련 프로젝트를 선택하면 그 프로젝트의 관련 인물을 일정의 관련 인물에도 추가할지 확인 후 반영한다
   // (이미 선택돼 있던 인물은 유지, 중복은 제거).
   function applyProjectClientIds(projectId, setClientIds) {
     if (!projectId) return;
     const project = projects.find((p) => p.id === projectId);
     if (!project?.clientIds?.length) return;
-    setClientIds((prev) => [...new Set([...prev, ...project.clientIds])]);
+    Alert.alert(
+      '관련 인물 세팅',
+      '선택한 프로젝트의 관련 인물을 이 일정의 관련 인물에도 추가할까요?',
+      [
+        { text: '아니오', style: 'cancel' },
+        {
+          text: '예',
+          onPress: () => setClientIds((prev) => [...new Set([...prev, ...project.clientIds])]),
+        },
+      ]
+    );
   }
 
   async function handlePickerAddClient() {
