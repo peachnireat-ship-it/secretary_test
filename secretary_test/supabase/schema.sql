@@ -145,10 +145,17 @@ create table if not exists projects (
   -- patch_project_topics.sql 참고.
   owner_client_id text references clients(id) on delete set null,
   meeting_record_ids jsonb not null default '[]',
+  -- 관련 인물 중 앱에 가입된 계정(clients.linked_profile_id)에게 자동으로 만들어준 사본이면
+  -- 원본 프로젝트를 가리킨다. 원본 삭제 시 사본도 함께 삭제된다(on delete cascade). 사본 관리는
+  -- sync_project_mirrors() RPC가 담당한다 — 함수 정의는 patch_project_mirror.sql 참고
+  -- (schedules.origin_schedule_id와 동일 패턴 — schema.sql에는 컬럼만 반영하고 함수 본문은
+  -- patch 파일에만 둔다).
+  origin_project_id text references projects(id) on delete cascade,
   created_at bigint not null,
   updated_at bigint
 );
 create index if not exists projects_owner_client_idx on projects(owner_client_id);
+create index if not exists projects_origin_idx on projects(origin_project_id);
 
 -- 프로젝트의 owner_client_id가 실제로 그 프로젝트 소유자(user_id)의 담당자인지 강제한다.
 create or replace function validate_project_owner_client_ownership()
@@ -356,6 +363,33 @@ as $$
   where my_company_id() is not null and p.company_id = my_company_id()
 $$;
 grant execute on function get_company_colleagues() to authenticated;
+
+-- get_company_projects(): 회사 관리자가 같은 회사 소속 전체 부서의 프로젝트를 소유자 이름/부서명과
+-- 함께 조회하기 위한 함수. projects_select_company_admin RLS(위 참고)는 projects 테이블 행 단위
+-- 접근만 허용할 뿐, PostgREST의 profiles!inner(...) 임베드 조회는 profiles 자체의 SELECT RLS가
+-- 본인 행만 허용하므로(profiles_select_own, get_company_colleagues() 도입 배경과 동일 이유)
+-- 다른 직원의 profiles 행을 끌어오지 못해 !inner 조인에 걸려 결과가 통째로 사라진다. 컬럼 단위로
+-- 필요한 값(name, team, department name)만 SECURITY DEFINER로 안전하게 노출해 이 문제를 피한다.
+create or replace function get_company_projects()
+returns table (
+  id text, title text, deadline text, start_date text, status text, priority text, notes text,
+  progress int, client_ids jsonb, owner_client_id text, meeting_record_ids jsonb,
+  origin_project_id text, created_at bigint, updated_at bigint,
+  owner_name text, owner_team text, department_name text
+)
+language sql security definer stable
+set search_path = public
+as $$
+  select p.id, p.title, p.deadline, p.start_date, p.status, p.priority, p.notes, p.progress,
+    p.client_ids, p.owner_client_id, p.meeting_record_ids, p.origin_project_id, p.created_at, p.updated_at,
+    pr.name, pr.team, d.name
+  from projects p
+  join profiles pr on pr.id = p.user_id
+  left join departments d on d.id = pr.department_id
+  where my_is_company_admin() and pr.company_id = my_company_id()
+  order by p.created_at desc
+$$;
+grant execute on function get_company_projects() to authenticated;
 
 -- 설정 화면 "계정 전환" 목록을 ROSTER(하드코딩 테스트 계정)에서 DB의 모든 가입 계정으로
 -- 확장하기 위한 조회 함수. get_company_colleagues()와 동일한 이유(RLS는 행 단위 통제만

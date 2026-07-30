@@ -750,12 +750,21 @@ export async function saveProjects(projects) {
   if (error) throw error;
 }
 
+// 프로젝트의 관련 인물 중 이 앱에 가입된 계정(clients.linked_profile_id)에게 동일한 프로젝트 사본을
+// 만들어준다(sync_project_mirrors RPC, patch_project_mirror.sql). 관련 인물에서 빠지면 그
+// 사람의 사본도 함께 삭제된다. 실패해도(패치 미실행 등) 핵심 저장 자체는 막지 않는다.
+async function syncProjectMirrors(projectId) {
+  const { error } = await supabase.rpc('sync_project_mirrors', { p_project_id: projectId });
+  if (error) console.warn('syncProjectMirrors 실패:', error.message);
+}
+
 export async function addProject(project) {
   const user = await getCurrentUser();
   await assertClientIdsOwned(user.id, project.clientIds);
   const row = { id: project.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(project, PROJECT_KEYMAP) };
   const { error } = await supabase.from('projects').insert(row);
   if (error) throw error;
+  await syncProjectMirrors(row.id);
   return getProjects();
 }
 
@@ -765,6 +774,7 @@ export async function updateProject(id, changes) {
   const row = { ...toRow(changes, PROJECT_KEYMAP), updated_at: Date.now() };
   const { error } = await supabase.from('projects').update(row).eq('id', id).eq('user_id', user.id);
   if (error) throw error;
+  await syncProjectMirrors(id);
   return getProjects();
 }
 
@@ -796,22 +806,21 @@ export async function deleteProjectAsCompanyAdmin(id) {
 }
 
 // 회사 관리자 전용: 같은 회사 소속 전체 부서의 프로젝트를 부서별로 그룹핑해서 반환한다.
-// RLS(projects_select_company_admin)가 "같은 회사 소속의 프로젝트만" 이미 필터링해주므로
-// 여기서 company_id로 다시 필터링할 필요는 없다(회사 관리자가 아니면 RLS가 애초에 빈 결과를 반환).
+// get_company_projects() RPC(SECURITY DEFINER, patch_get_company_projects.sql)를 사용한다 —
+// 예전에는 projects.select('*, profiles!inner(...)')로 직접 임베드 조회를 했었지만, 다른 직원의
+// profiles 행은 profiles_select_own RLS에 막혀 !inner 조인에서 통째로 탈락하는 버그가 있었다
+// (get_company_colleagues()와 동일한 이유 — 자세한 배경은 patch_get_company_projects.sql 참고).
 export async function getCompanyProjects() {
-  const { data, error } = await supabase
-    .from('projects')
-    .select('*, profiles!inner(name, team, department_id, departments(name))')
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.rpc('get_company_projects');
   if (error) throw error;
 
   const groups = new Map();
   for (const row of data) {
-    const { profiles: owner, ...projectRow } = row;
+    const { owner_name, owner_team, department_name, ...projectRow } = row;
     const project = fromRow(projectRow, PROJECT_KEYMAP);
-    project.ownerName = owner?.name || '';
-    project.ownerTeam = owner?.team || '';
-    const departmentName = owner?.departments?.name || '미배정';
+    project.ownerName = owner_name || '';
+    project.ownerTeam = owner_team || '';
+    const departmentName = department_name || '미배정';
     if (!groups.has(departmentName)) groups.set(departmentName, []);
     groups.get(departmentName).push(project);
   }
