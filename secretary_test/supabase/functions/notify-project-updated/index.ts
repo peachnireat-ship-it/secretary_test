@@ -23,84 +23,13 @@
 //    자세한 내용은 supabase/patch_project_update_notify_trigger.sql, README_notify_project_created.md 참고)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import { createGmailSmtpClient, sendAndCloseSmtp, verifyWebhookSecret } from '../_shared/mail.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const GMAIL_USER = Deno.env.get('GMAIL_USER');
 const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD');
 const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET');
-
-// denomailer@1.6.0은 제목에 비ASCII(한글 등) 문자가 일정 길이를 넘으면 RFC 2047
-// encoded-word를 올바르게 folding하지 않고 중간에서 그냥 잘라버리는 버그가 있다
-// (https://github.com/EC-Nordbund/denomailer/issues/90, 미해결). 그 결과 헤더가
-// 깨지면서 수신 메일 클라이언트에 제목이 인코딩 원문 그대로 노출되고, 본문도
-// raw MIME 소스가 그대로 보이는 문제가 발생한다. 라이브러리가 제공하는
-// client.preprocessors 훅으로 제목만 RFC 2047 규격대로 직접 인코딩해 덮어써서 우회한다.
-// (notify-project-created/index.ts와 동일한 함수를 그대로 복사— 한글 제목이 포함된
-//  모든 발신 메일에 공통으로 필요하다)
-function encodeRfc2047Subject(text: string): string {
-  // 보안 재감사(_review/secretary_test-20260723/02_security.md 발견 #4) CRLF 헤더 인젝션 방지.
-  // 비ASCII 체크보다 먼저 개행 문자를 공백으로 치환해, 순수 ASCII 문자열에 CR/LF가 섞여 있어도
-  // 인코딩 없이 그대로 mail.subject에 들어가지 않도록 한다.
-  text = text.replace(/[\r\n]+/g, ' ');
-  // deno-lint-ignore no-control-regex
-  if (!/[^\x00-\x7f]/.test(text)) return text; // ASCII만 있으면 인코딩 불필요
-
-  const CHARSET = 'utf-8';
-  const PREFIX = `=?${CHARSET}?Q?`;
-  const SUFFIX = '?=';
-  const MAX_PAYLOAD_LEN = 75 - PREFIX.length - SUFFIX.length; // encoded-word 전체 75자 제한
-  const SAFE_CHAR = /^[A-Za-z0-9!*+\-/]$/;
-  const encoder = new TextEncoder();
-
-  // 문자(코드포인트) 단위로 토큰화 — 멀티바이트 문자가 encoded-word 경계에서
-  // 잘리지 않도록 반드시 문자 단위로만 줄바꿈한다(RFC 2047 §5 규칙 3).
-  const charTokens: string[] = [];
-  for (const ch of text) {
-    if (ch === ' ') {
-      charTokens.push('_');
-    } else if (SAFE_CHAR.test(ch)) {
-      charTokens.push(ch);
-    } else {
-      let enc = '';
-      for (const byte of encoder.encode(ch)) {
-        enc += '=' + byte.toString(16).toUpperCase().padStart(2, '0');
-      }
-      charTokens.push(enc);
-    }
-  }
-
-  const words: string[] = [];
-  let current = '';
-  for (const token of charTokens) {
-    if (current.length + token.length > MAX_PAYLOAD_LEN) {
-      words.push(current);
-      current = '';
-    }
-    current += token;
-  }
-  if (current) words.push(current);
-
-  // encoded-word 사이는 RFC 5322 folding 규칙에 따라 CRLF + 공백(WSP)으로 연결한다.
-  return words.map((w) => `${PREFIX}${w}${SUFFIX}`).join('\r\n ');
-}
-
-// denomailer의 본문 quoted-printable 인코더(quotedPrintableEncode)에도 subject와 같은 계열의
-// 버그가 있다: 74자 줄바꿈 지점을 정할 때 "=XX" 이스케이프 3바이트 경계를 잘못 계산해, 한글 등
-// 멀티바이트 문자의 이스케이프 시퀀스가 중간에서 깨진 채로 줄이 나뉘는 경우가 있다(예: "관련
-// 인물(ID): (없음)"의 "음"이 "ec�Œ" 형태로 깨져 수신됨 — 실제 보고된 버그). base64는 4문자
-// 단위로만 줄을 나누므로 이런 바이트 경계 문제 자체가 없어, 본문은 quoted-printable 대신
-// base64로 직접 인코딩해 우회한다.
-function encodeBodyBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  const b64 = btoa(binary);
-  const lines: string[] = [];
-  for (let i = 0; i < b64.length; i += 76) lines.push(b64.slice(i, i + 76));
-  return lines.join('\r\n');
-}
 
 // ── 변경 전/후 비교 대상 필드 (요구사항: 이 8개 중 실제로 값이 달라진 것만 표시) ──
 const COMPARE_FIELDS = [
@@ -143,36 +72,23 @@ const CHANGED_VALUE_COLOR = '#5B7FC4';
 Deno.serve(async (req) => {
   try {
     // ── 0) 공유 시크릿 검증 (--no-verify-jwt 배포이므로 이 검증이 유일한 인증 수단) ──
-    // WEBHOOK_SECRET 자체가 설정되지 않은 경우 fail-open으로 검증을 건너뛰면 무방비 공개
-    // 엔드포인트가 되므로, 반드시 fail-closed로 즉시 차단한다.
-    if (!WEBHOOK_SECRET) {
-      console.error('[notify-project-updated] WEBHOOK_SECRET 환경변수가 설정되지 않았습니다.');
-      return new Response(JSON.stringify({ error: 'Server misconfigured: WEBHOOK_SECRET not set' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    const incomingSecret = req.headers.get('x-webhook-secret');
-    if (incomingSecret !== WEBHOOK_SECRET) {
-      return new Response(JSON.stringify({ error: 'Unauthorized: invalid webhook secret' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const secretError = verifyWebhookSecret(req, WEBHOOK_SECRET, '[notify-project-updated]');
+    if (secretError) return secretError;
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다.');
     }
 
-    // ── 1) 요청 body 파싱: project_id, user_id, old, new ──
+    // ── 1) 요청 body 파싱: project_id, user_id, old, new, is_recent_creation ──
     // (트리거가 old/new 전체를 함께 보내주므로 projects 테이블을 다시 조회할 필요가 없다)
-    let projectId, userId, oldData, newData;
+    let projectId, userId, oldData, newData, isRecentCreation;
     try {
       const body = await req.json();
       projectId = body?.project_id;
       userId = body?.user_id;
       oldData = body?.old || {};
       newData = body?.new || {};
+      isRecentCreation = !!body?.is_recent_creation;
     } catch {
       throw new Error('요청 body를 JSON으로 파싱할 수 없습니다. { project_id, user_id, old, new } 형태여야 합니다.');
     }
@@ -323,40 +239,19 @@ Deno.serve(async (req) => {
     if (notesHtmlDisplay || changedFieldSet.has('notes')) htmlItems.push(`<li><strong>메모:</strong> ${notesHtmlDisplay}</li>`);
     const htmlBody = `<p>프로젝트 내용이 수정되었습니다.</p><ul>${htmlItems.join('')}</ul>`;
 
-    const smtpClient = new SMTPClient({
-      connection: {
-        hostname: 'smtp.gmail.com',
-        port: 465,
-        tls: true,
-        auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
-      },
-      client: {
-        // denomailer 내부의 버그 있는 제목/본문 인코딩 결과를 우리가 직접 만든 안전한
-        // 인코딩 결과로 교체한다(위 encodeRfc2047Subject, encodeBodyBase64 참고).
-        preprocessors: [(mail) => {
-          mail.subject = encodeRfc2047Subject(subject);
-          mail.mimeContent = [
-            { mimeType: 'text/plain; charset="utf-8"', content: encodeBodyBase64(textBody), transferEncoding: 'base64' },
-            { mimeType: 'text/html; charset="utf-8"', content: encodeBodyBase64(htmlBody), transferEncoding: 'base64' },
-          ];
-          return mail;
-        }],
-      },
-    });
-
-    try {
-      await smtpClient.send({
-        from: GMAIL_USER,
-        to: recipients,
-        subject,
-        content: textBody,
-        html: htmlBody,
-      });
-    } catch (smtpErr) {
-      throw new Error(`Gmail SMTP 발송 실패: ${smtpErr instanceof Error ? smtpErr.message : String(smtpErr)}`);
-    } finally {
-      await smtpClient.close();
+    // 이 UPDATE가 프로젝트 생성 직후(트리거의 is_recent_creation, 15초 이내) 발생한 경우 —
+    // 예: ProjectScreen.js load()의 startDate 백필, syncProjectMirrors 등 생성 흐름의 연장으로
+    // 보이는 UPDATE — notify-project-created 쪽 SMTP 발송이 먼저 끝날 시간을 벌어주기 위해
+    // 발송 직전에 짧게 대기한다. INSERT가 UPDATE보다 먼저 커밋되므로 notify-project-created의
+    // net.http_post도 이 함수보다 먼저 큐잉되지만, 두 Edge Function 호출은 완전히 독립적인
+    // 비동기 실행이라 그 자체만으로는 도착 순서가 보장되지 않는다("새 프로젝트 등록" 메일보다
+    // "프로젝트 내용 수정" 메일이 먼저 도착하는 순서 역전이 실제로 관찰됨).
+    if (isRecentCreation) {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
     }
+
+    const smtpClient = createGmailSmtpClient({ gmailUser: GMAIL_USER, gmailAppPassword: GMAIL_APP_PASSWORD }, subject, textBody, htmlBody);
+    await sendAndCloseSmtp(smtpClient, { from: GMAIL_USER, to: recipients, subject, content: textBody, html: htmlBody });
 
     console.log(`[notify-project-updated] project_id=${projectId}: ${recipients.length}명에게 메일 발송 완료(변경 필드 ${rawChanges.length}개).`);
     return new Response(JSON.stringify({ ok: true, skipped: false, recipients, changedFields: rawChanges.map((c) => c.field) }), {

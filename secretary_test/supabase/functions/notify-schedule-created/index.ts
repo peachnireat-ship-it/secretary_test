@@ -20,7 +20,7 @@
 // - WEBHOOK_SECRET: DB 트리거가 보내는 x-webhook-secret 헤더와 비교할 공유 시크릿
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import { createGmailSmtpClient, sendAndCloseSmtp, verifyWebhookSecret } from '../_shared/mail.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -28,79 +28,11 @@ const GMAIL_USER = Deno.env.get('GMAIL_USER');
 const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD');
 const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET');
 
-// denomailer@1.6.0 제목 인코딩 버그 우회 (notify-project-created/updated와 동일한 함수)
-function encodeRfc2047Subject(text: string): string {
-  // 보안 재감사(_review/secretary_test-20260723/02_security.md 발견 #4) CRLF 헤더 인젝션 방지.
-  // 비ASCII 체크보다 먼저 개행 문자를 공백으로 치환해, 순수 ASCII 문자열에 CR/LF가 섞여 있어도
-  // 인코딩 없이 그대로 mail.subject에 들어가지 않도록 한다.
-  text = text.replace(/[\r\n]+/g, ' ');
-  // deno-lint-ignore no-control-regex
-  if (!/[^\x00-\x7f]/.test(text)) return text;
-
-  const CHARSET = 'utf-8';
-  const PREFIX = `=?${CHARSET}?Q?`;
-  const SUFFIX = '?=';
-  const MAX_PAYLOAD_LEN = 75 - PREFIX.length - SUFFIX.length;
-  const SAFE_CHAR = /^[A-Za-z0-9!*+\-/]$/;
-  const encoder = new TextEncoder();
-
-  const charTokens: string[] = [];
-  for (const ch of text) {
-    if (ch === ' ') {
-      charTokens.push('_');
-    } else if (SAFE_CHAR.test(ch)) {
-      charTokens.push(ch);
-    } else {
-      let enc = '';
-      for (const byte of encoder.encode(ch)) {
-        enc += '=' + byte.toString(16).toUpperCase().padStart(2, '0');
-      }
-      charTokens.push(enc);
-    }
-  }
-
-  const words: string[] = [];
-  let current = '';
-  for (const token of charTokens) {
-    if (current.length + token.length > MAX_PAYLOAD_LEN) {
-      words.push(current);
-      current = '';
-    }
-    current += token;
-  }
-  if (current) words.push(current);
-
-  return words.map((w) => `${PREFIX}${w}${SUFFIX}`).join('\r\n ');
-}
-
-// denomailer 본문 quoted-printable 인코더 버그 우회 (notify-project-created/updated와 동일한 함수)
-function encodeBodyBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  const b64 = btoa(binary);
-  const lines: string[] = [];
-  for (let i = 0; i < b64.length; i += 76) lines.push(b64.slice(i, i + 76));
-  return lines.join('\r\n');
-}
-
 Deno.serve(async (req) => {
   try {
     // ── 0) 공유 시크릿 검증 ──
-    if (!WEBHOOK_SECRET) {
-      console.error('[notify-schedule-created] WEBHOOK_SECRET 환경변수가 설정되지 않았습니다.');
-      return new Response(JSON.stringify({ error: 'Server misconfigured: WEBHOOK_SECRET not set' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    const incomingSecret = req.headers.get('x-webhook-secret');
-    if (incomingSecret !== WEBHOOK_SECRET) {
-      return new Response(JSON.stringify({ error: 'Unauthorized: invalid webhook secret' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const secretError = verifyWebhookSecret(req, WEBHOOK_SECRET, '[notify-schedule-created]');
+    if (secretError) return secretError;
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다.');
@@ -236,38 +168,8 @@ Deno.serve(async (req) => {
     if (notesText) htmlItems.push(`<li><strong>메모:</strong> ${notesText}</li>`);
     const htmlBody = `<p>새 일정이 등록되었습니다.</p><ul>${htmlItems.join('')}</ul>`;
 
-    const smtpClient = new SMTPClient({
-      connection: {
-        hostname: 'smtp.gmail.com',
-        port: 465,
-        tls: true,
-        auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
-      },
-      client: {
-        preprocessors: [(mail) => {
-          mail.subject = encodeRfc2047Subject(subject);
-          mail.mimeContent = [
-            { mimeType: 'text/plain; charset="utf-8"', content: encodeBodyBase64(textBody), transferEncoding: 'base64' },
-            { mimeType: 'text/html; charset="utf-8"', content: encodeBodyBase64(htmlBody), transferEncoding: 'base64' },
-          ];
-          return mail;
-        }],
-      },
-    });
-
-    try {
-      await smtpClient.send({
-        from: GMAIL_USER,
-        to: recipients,
-        subject,
-        content: textBody,
-        html: htmlBody,
-      });
-    } catch (smtpErr) {
-      throw new Error(`Gmail SMTP 발송 실패: ${smtpErr instanceof Error ? smtpErr.message : String(smtpErr)}`);
-    } finally {
-      await smtpClient.close();
-    }
+    const smtpClient = createGmailSmtpClient({ gmailUser: GMAIL_USER, gmailAppPassword: GMAIL_APP_PASSWORD }, subject, textBody, htmlBody);
+    await sendAndCloseSmtp(smtpClient, { from: GMAIL_USER, to: recipients, subject, content: textBody, html: htmlBody });
 
     console.log(`[notify-schedule-created] schedule_id=${scheduleId}: ${recipients.length}명에게 메일 발송 완료.`);
     return new Response(JSON.stringify({ ok: true, skipped: false, recipients }), {

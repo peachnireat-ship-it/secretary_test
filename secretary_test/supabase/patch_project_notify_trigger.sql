@@ -57,4 +57,13 @@ drop trigger if exists trg_notify_project_created on projects;
 create trigger trg_notify_project_created
   after insert on projects
   for each row
+  -- sync_project_mirrors()(patch_project_mirror.sql)가 관련 인물에게 만들어주는 사본
+  -- (origin_project_id not null)까지 이 트리거를 타면, 사본의 user_id가 그 관련 인물
+  -- 본인이라 "등록자"를 사본 행 기준으로 조회하면서 실제 프로젝트 등록자가 아니라 그
+  -- 관련 인물의 이름이 주최자로 잘못 표시된 채 "새 프로젝트 등록" 메일이 한 번 더
+  -- 발송된다(원본 INSERT에서 이미 올바른 주최자로 정상 발송됨). schedules 쪽은 사본에
+  -- notify_email:false를 심어 동일한 문제를 이미 피하고 있었는데(patch_schedule_mirror.sql),
+  -- projects 쪽에는 이 방어가 빠져 있었다. origin_project_id가 있는(=사본) 행은 애초에
+  -- 이 트리거 자체를 타지 않도록 제외한다.
+  when (new.origin_project_id is null)
   execute function notify_project_created();

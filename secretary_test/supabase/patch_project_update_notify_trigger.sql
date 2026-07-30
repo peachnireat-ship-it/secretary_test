@@ -27,6 +27,16 @@
 -- (notify-project-created 트리거에서 이미 활성화했다면 아래는 그냥 no-op으로 통과된다)
 create extension if not exists pg_net;
 
+-- 메일 도착 순서 보정 배경: addProject() 직후(예: ProjectScreen.js load()의 startDate 백필,
+-- syncProjectMirrors 등) 같은 프로젝트가 INSERT되자마자 짧은 시간 안에 다시 UPDATE되는 경우가
+-- 있다. INSERT/UPDATE 트리거 모두 net.http_post로 각자 독립적인 비동기 HTTP 요청을 큐에 넣을
+-- 뿐이라, 두 Edge Function 호출(및 그 안의 Gmail SMTP 발송)이 서로 다른 속도로 완료되면서
+-- "프로젝트 내용 수정" 메일이 "새 프로젝트 등록" 메일보다 먼저 도착하는 순서 역전이 실제로
+-- 관찰됐다. DB 트리거 안에서 pg_sleep으로 지연시키면 UPDATE 트랜잭션 자체(및 이를 호출한
+-- updateProject())가 그 시간만큼 블로킹되므로, 대신 new.created_at이 아주 최근(15초 이내)이면
+-- "이 UPDATE는 사실상 생성 흐름의 연장"으로 보고 is_recent_creation 플래그를 payload에 실어
+-- Edge Function(notify-project-updated) 쪽에서 발송 전에 지연시키도록 위임한다(트랜잭션은
+-- 즉시 커밋되고, 지연은 별도 비동기 실행에서만 발생).
 create or replace function notify_project_updated()
 returns trigger
 language plpgsql
@@ -36,7 +46,11 @@ as $$
 declare
   edge_function_url text := 'https://peodtjwyajgratgshluy.supabase.co/functions/v1/notify-project-updated';
   webhook_secret text;
+  is_recent_creation boolean;
 begin
+  is_recent_creation := new.created_at is not null
+    and (extract(epoch from clock_timestamp()) * 1000 - new.created_at) < 15000;
+
   -- Vault에서 webhook secret 조회 (notify-project-created와 동일한 시크릿을 재사용)
   select decrypted_secret into webhook_secret
   from vault.decrypted_secrets
@@ -58,6 +72,7 @@ begin
       body := jsonb_build_object(
         'project_id', new.id,
         'user_id', new.user_id,
+        'is_recent_creation', is_recent_creation,
         'old', jsonb_build_object(
           'title', old.title,
           'status', old.status,
@@ -95,14 +110,23 @@ create trigger trg_notify_project_updated
   -- 실제로 의미 있는 필드(title/status/priority/progress/start_date/deadline/notes/client_ids)가
   -- 하나라도 바뀐 경우에만 발동. updated_at만 갱신되거나 값이 완전히 동일한 단순 재저장 UPDATE는
   -- 여기서 걸러져 함수 본문까지 진입하지 않으므로 불필요한 메일이 발송되지 않는다.
+  -- new.origin_project_id is null: sync_project_mirrors()가 원본 수정 시 관련 인물의 사본도
+  -- on conflict do update로 함께 갱신하는데, 사본 행의 user_id는 그 관련 인물 본인이라
+  -- 이 트리거를 그대로 타면 "등록자"가 실제 원본 등록자가 아니라 그 관련 인물로 잘못 표시된
+  -- "프로젝트 내용 수정" 메일이 원본 수정 메일과 별도로 한 번 더 발송된다(trg_notify_project_created의
+  -- 동일한 문제와 같은 원인 — patch_project_notify_trigger.sql 참고). 사본(origin_project_id
+  -- not null) 행의 UPDATE는 애초에 이 트리거를 타지 않도록 제외한다.
   when (
-    old.title is distinct from new.title
-    or old.status is distinct from new.status
-    or old.priority is distinct from new.priority
-    or old.progress is distinct from new.progress
-    or old.start_date is distinct from new.start_date
-    or old.deadline is distinct from new.deadline
-    or old.notes is distinct from new.notes
-    or old.client_ids is distinct from new.client_ids
+    new.origin_project_id is null
+    and (
+      old.title is distinct from new.title
+      or old.status is distinct from new.status
+      or old.priority is distinct from new.priority
+      or old.progress is distinct from new.progress
+      or old.start_date is distinct from new.start_date
+      or old.deadline is distinct from new.deadline
+      or old.notes is distinct from new.notes
+      or old.client_ids is distinct from new.client_ids
+    )
   )
   execute function notify_project_updated();

@@ -16,7 +16,7 @@
 // - GMAIL_APP_PASSWORD: Gmail 앱 비밀번호
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import { createGmailSmtpClient, sendAndCloseSmtp } from '../_shared/mail.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
@@ -27,66 +27,6 @@ const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD');
 // AI 초안이 지나치게 길어지거나 남용되는 것을 막기 위한 상한
 const MAX_SUBJECT_LEN = 200;
 const MAX_BODY_LEN = 5000;
-
-// denomailer@1.6.0은 제목에 비ASCII(한글 등) 문자가 일정 길이를 넘으면 RFC 2047
-// encoded-word를 올바르게 folding하지 않고 중간에서 그냥 잘라버리는 버그가 있다
-// (https://github.com/EC-Nordbund/denomailer/issues/90, 미해결). notify-project-created와
-// 동일한 우회 로직을 그대로 사용한다.
-function encodeRfc2047Subject(text: string): string {
-  // 보안 재감사(_review/secretary_test-20260723/02_security.md 발견 #4) CRLF 헤더 인젝션 방지.
-  // 비ASCII 체크보다 먼저 개행 문자를 공백으로 치환해, 순수 ASCII 문자열에 CR/LF가 섞여 있어도
-  // 인코딩 없이 그대로 mail.subject에 들어가지 않도록 한다.
-  text = text.replace(/[\r\n]+/g, ' ');
-  // deno-lint-ignore no-control-regex
-  if (!/[^\x00-\x7f]/.test(text)) return text; // ASCII만 있으면 인코딩 불필요
-
-  const CHARSET = 'utf-8';
-  const PREFIX = `=?${CHARSET}?Q?`;
-  const SUFFIX = '?=';
-  const MAX_PAYLOAD_LEN = 75 - PREFIX.length - SUFFIX.length; // encoded-word 전체 75자 제한
-  const SAFE_CHAR = /^[A-Za-z0-9!*+\-/]$/;
-  const encoder = new TextEncoder();
-
-  const charTokens: string[] = [];
-  for (const ch of text) {
-    if (ch === ' ') {
-      charTokens.push('_');
-    } else if (SAFE_CHAR.test(ch)) {
-      charTokens.push(ch);
-    } else {
-      let enc = '';
-      for (const byte of encoder.encode(ch)) {
-        enc += '=' + byte.toString(16).toUpperCase().padStart(2, '0');
-      }
-      charTokens.push(enc);
-    }
-  }
-
-  const words: string[] = [];
-  let current = '';
-  for (const token of charTokens) {
-    if (current.length + token.length > MAX_PAYLOAD_LEN) {
-      words.push(current);
-      current = '';
-    }
-    current += token;
-  }
-  if (current) words.push(current);
-
-  return words.map((w) => `${PREFIX}${w}${SUFFIX}`).join('\r\n ');
-}
-
-// denomailer의 본문 quoted-printable 인코더 버그(한글 등 멀티바이트 이스케이프가 줄바꿈
-// 경계에서 깨지는 문제) 회피 — notify-project-created와 동일하게 base64로 직접 인코딩한다.
-function encodeBodyBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  const b64 = btoa(binary);
-  const lines: string[] = [];
-  for (let i = 0; i < b64.length; i += 76) lines.push(b64.slice(i, i + 76));
-  return lines.join('\r\n');
-}
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -192,38 +132,8 @@ Deno.serve(async (req) => {
       .map((para) => `<p>${para.split('\n').map(escapeHtml).join('<br>')}</p>`)
       .join('');
 
-    const smtpClient = new SMTPClient({
-      connection: {
-        hostname: 'smtp.gmail.com',
-        port: 465,
-        tls: true,
-        auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD },
-      },
-      client: {
-        preprocessors: [(mail) => {
-          mail.subject = encodeRfc2047Subject(subject!);
-          mail.mimeContent = [
-            { mimeType: 'text/plain; charset="utf-8"', content: encodeBodyBase64(body!), transferEncoding: 'base64' },
-            { mimeType: 'text/html; charset="utf-8"', content: encodeBodyBase64(htmlBody), transferEncoding: 'base64' },
-          ];
-          return mail;
-        }],
-      },
-    });
-
-    try {
-      await smtpClient.send({
-        from: GMAIL_USER,
-        to: [recipientEmail],
-        subject,
-        content: body,
-        html: htmlBody,
-      });
-    } catch (smtpErr) {
-      throw new Error(`Gmail SMTP 발송 실패: ${smtpErr instanceof Error ? smtpErr.message : String(smtpErr)}`);
-    } finally {
-      await smtpClient.close();
-    }
+    const smtpClient = createGmailSmtpClient({ gmailUser: GMAIL_USER, gmailAppPassword: GMAIL_APP_PASSWORD }, subject, body, htmlBody);
+    await sendAndCloseSmtp(smtpClient, { from: GMAIL_USER, to: [recipientEmail], subject, content: body, html: htmlBody });
 
     console.log(`[send-client-email] user_id=${user.id} client_id=${clientId}: 메일 발송 완료 (${recipientEmail}).`);
     return new Response(JSON.stringify({ ok: true, recipient: recipientEmail }), {
