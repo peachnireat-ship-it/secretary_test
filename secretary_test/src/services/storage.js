@@ -830,11 +830,45 @@ export async function getCompanyEmployees() {
   const groups = new Map();
   for (const row of profilesData || []) {
     const departmentName = deptNameById.get(row.department_id) || '미배정';
-    const employee = { id: row.id, name: row.name || '', role: row.role || '', isCompanyAdmin: !!row.is_company_admin };
+    const employee = { id: row.id, name: row.name || '', role: row.role || '', isCompanyAdmin: !!row.is_company_admin, departmentId: row.department_id || null };
     if (!groups.has(departmentName)) groups.set(departmentName, []);
     groups.get(departmentName).push(employee);
   }
   return [...groups.entries()].map(([departmentName, employees]) => ({ departmentName, employees }));
+}
+
+// 회사 관리자 전용: 같은 회사 소속 부서 목록. 부서 관리 모달의 목록·재배치 chip에 사용된다.
+export async function getCompanyDepartments() {
+  const user = await getCurrentUser();
+  if (!user?.companyId) return [];
+  const { data, error } = await supabase.from('departments').select('id, name').eq('company_id', user.companyId);
+  if (error) throw error;
+  return (data || []).map((d) => ({ id: d.id, name: d.name }));
+}
+
+// 회사 관리자 전용: 부서 추가. RPC 내부에서 my_is_company_admin() 체크 및 중복/미입력 검증(한국어 예외 메시지) 수행.
+export async function createDepartment(name) {
+  const { data, error } = await supabase.rpc('create_department', { p_name: name });
+  if (error) throw error;
+  return data;
+}
+
+// 회사 관리자 전용: 부서명 변경.
+export async function renameDepartment(id, name) {
+  const { error } = await supabase.rpc('rename_department', { p_department_id: id, p_new_name: name });
+  if (error) throw error;
+}
+
+// 회사 관리자 전용: 부서 삭제. 소속 직원은 자동으로 미배정 처리된다(FK on delete set null).
+export async function deleteDepartment(id) {
+  const { error } = await supabase.rpc('delete_department', { p_department_id: id });
+  if (error) throw error;
+}
+
+// 회사 관리자 전용: 직원의 소속 부서 재배치. departmentId에 null을 넘기면 "미배정"으로 변경된다.
+export async function assignEmployeeDepartment(employeeId, departmentId) {
+  const { error } = await supabase.rpc('assign_employee_department', { p_employee_id: employeeId, p_department_id: departmentId });
+  if (error) throw error;
 }
 
 // ── Messages (교차 계정 배달: mailbox_owner_id로 조회, sender_id로 RLS 검증) ──

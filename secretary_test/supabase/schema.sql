@@ -71,6 +71,9 @@ create table if not exists schedules (
   origin_schedule_id text references schedules(id) on delete cascade,
   created_at bigint not null
 );
+-- schedules 테이블이 이 컬럼 추가 이전에 이미 생성되어 있었다면 위 create table은 no-op이라
+-- 컬럼이 실제로는 없을 수 있다(42703 원인). alter로 한 번 더 명시적으로 보장한다(멱등).
+alter table schedules add column if not exists origin_schedule_id text references schedules(id) on delete cascade;
 create index if not exists schedules_user_date_idx on schedules(user_id, date);
 create index if not exists schedules_origin_idx on schedules(origin_schedule_id);
 
@@ -154,6 +157,10 @@ create table if not exists projects (
   created_at bigint not null,
   updated_at bigint
 );
+-- projects 테이블이 이 컬럼 추가 이전에 이미 생성되어 있었다면 위 create table은 no-op이라
+-- 컬럼이 실제로는 없을 수 있다(schedules.origin_schedule_id와 동일한 문제). alter로 한 번 더
+-- 명시적으로 보장한다(멱등, patch_get_company_projects.sql에도 동일한 alter가 있음).
+alter table projects add column if not exists origin_project_id text references projects(id) on delete cascade;
 create index if not exists projects_owner_client_idx on projects(owner_client_id);
 create index if not exists projects_origin_idx on projects(origin_project_id);
 
@@ -290,22 +297,30 @@ set search_path = public
 as $$ select coalesce(is_company_admin, false) from profiles where id = auth.uid() $$;
 
 -- ── companies / departments 정책: 같은 회사 소속만 조회 ────
+-- create policy는 if not exists를 지원하지 않아, schema.sql을 반복 실행해도 안전하도록
+-- (42710 already exists 에러 방지) 매번 drop policy if exists를 먼저 실행한다.
+drop policy if exists companies_select_same_company on companies;
 create policy companies_select_same_company on companies
   for select using (id = my_company_id());
 
 -- 회원가입 화면(회사직원)에서 미로그인/미소속 상태로도 회사 목록을 봐야 하므로 공개 조회도 허용한다.
 -- 위 companies_select_same_company와는 permissive 정책이라 OR로 합쳐져 충돌 없다.
+drop policy if exists companies_select_public on companies;
 create policy companies_select_public on companies
   for select using (true);
 
+drop policy if exists departments_select_same_company on departments;
 create policy departments_select_same_company on departments
   for select using (company_id = my_company_id());
 
 -- ── profiles 정책: 본인만 조회/수정 ───────────────────────
+drop policy if exists profiles_select_own on profiles;
 create policy profiles_select_own on profiles
   for select using (id = auth.uid());
+drop policy if exists profiles_update_own on profiles;
 create policy profiles_update_own on profiles
   for update using (id = auth.uid()) with check (id = auth.uid());
+drop policy if exists profiles_insert_own on profiles;
 create policy profiles_insert_own on profiles
   for insert with check (id = auth.uid());
 
@@ -336,6 +351,7 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_prevent_privileged_profile_self_update on profiles;
 create trigger trg_prevent_privileged_profile_self_update
 before update on profiles
 for each row execute function prevent_privileged_profile_self_update();
@@ -402,6 +418,112 @@ as $$
   order by p.created_at desc
 $$;
 grant execute on function get_company_projects() to authenticated;
+
+-- 회사 관리자용 부서 관리(조직 구조 세팅): 부서 추가/이름변경/삭제, 직원 소속 부서 재배치.
+-- departments 테이블은 조회(departments_select_same_company)만 RLS로 허용되어 있고 insert/
+-- update/delete 정책이 없으므로(회원가입 시 signup_join_company_as_employee()가 SECURITY
+-- DEFINER로만 생성), get_company_projects()와 동일한 패턴으로 관리자 전용 CRUD 함수를 제공한다.
+-- 자세한 배경은 patch_department_management.sql 참고.
+create or replace function create_department(p_name text)
+returns uuid
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+  v_name text := btrim(coalesce(p_name, ''));
+  v_id uuid;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 부서를 추가할 수 있습니다.';
+  end if;
+  if v_name = '' then
+    raise exception '부서명을 입력해주세요.';
+  end if;
+  v_company_id := my_company_id();
+  if v_company_id is null then
+    raise exception '소속된 회사가 없습니다.';
+  end if;
+  if exists (select 1 from departments where company_id = v_company_id and name = v_name) then
+    raise exception '이미 존재하는 부서명입니다.';
+  end if;
+  insert into departments (company_id, name) values (v_company_id, v_name) returning id into v_id;
+  return v_id;
+end;
+$$;
+grant execute on function create_department(text) to authenticated;
+
+create or replace function rename_department(p_department_id uuid, p_new_name text)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+  v_name text := btrim(coalesce(p_new_name, ''));
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 부서명을 수정할 수 있습니다.';
+  end if;
+  if v_name = '' then
+    raise exception '부서명을 입력해주세요.';
+  end if;
+  v_company_id := my_company_id();
+  if not exists (select 1 from departments where id = p_department_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 부서입니다.';
+  end if;
+  if exists (select 1 from departments where company_id = v_company_id and name = v_name and id <> p_department_id) then
+    raise exception '이미 존재하는 부서명입니다.';
+  end if;
+  update departments set name = v_name where id = p_department_id;
+end;
+$$;
+grant execute on function rename_department(uuid, text) to authenticated;
+
+create or replace function delete_department(p_department_id uuid)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 부서를 삭제할 수 있습니다.';
+  end if;
+  v_company_id := my_company_id();
+  if not exists (select 1 from departments where id = p_department_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 부서입니다.';
+  end if;
+  -- profiles.department_id는 on delete set null(위 profiles 테이블 정의)이라 소속 직원은
+  -- 이 삭제만으로 자동으로 미배정 처리된다.
+  delete from departments where id = p_department_id;
+end;
+$$;
+grant execute on function delete_department(uuid) to authenticated;
+
+create or replace function assign_employee_department(p_employee_id uuid, p_department_id uuid)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 직원의 소속 부서를 변경할 수 있습니다.';
+  end if;
+  v_company_id := my_company_id();
+  if not exists (select 1 from profiles where id = p_employee_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 같은 회사 소속이 아닌 직원입니다.';
+  end if;
+  if p_department_id is not null and not exists (select 1 from departments where id = p_department_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 부서입니다.';
+  end if;
+  update profiles set department_id = p_department_id where id = p_employee_id;
+end;
+$$;
+grant execute on function assign_employee_department(uuid, uuid) to authenticated;
 
 -- 설정 화면 "계정 전환" 목록을 ROSTER(하드코딩 테스트 계정)에서 DB의 모든 가입 계정으로
 -- 확장하기 위한 조회 함수. get_company_colleagues()와 동일한 이유(RLS는 행 단위 통제만
@@ -648,29 +770,38 @@ $$;
 grant execute on function signup_join_company_as_employee(text, text) to authenticated;
 
 -- ── user_id = auth.uid() 공통 정책 (schedules/clients/histories/projects/meeting_records) ──
+-- (아래 전부 동일한 이유로 drop policy if exists를 먼저 실행 — companies/departments/profiles
+-- 정책 섹션 상단 주석 참고)
+drop policy if exists schedules_all_own on schedules;
 create policy schedules_all_own on schedules
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+drop policy if exists clients_all_own on clients;
 create policy clients_all_own on clients
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+drop policy if exists topics_all_own on topics;
 create policy topics_all_own on topics
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+drop policy if exists histories_all_own on histories;
 create policy histories_all_own on histories
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+drop policy if exists projects_all_own on projects;
 create policy projects_all_own on projects
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- 회사 관리자는 같은 회사 소속 전체 프로젝트를 select/update/delete할 수 있다
 -- (insert는 제외 — 남의 이름으로 새 프로젝트를 만드는 것은 범위 밖)
+drop policy if exists projects_select_company_admin on projects;
 create policy projects_select_company_admin on projects
   for select using (
     my_is_company_admin()
     and exists (select 1 from profiles p where p.id = projects.user_id and p.company_id = my_company_id())
   );
 
+drop policy if exists projects_update_company_admin on projects;
 create policy projects_update_company_admin on projects
   for update using (
     my_is_company_admin()
@@ -680,33 +811,40 @@ create policy projects_update_company_admin on projects
     and exists (select 1 from profiles p where p.id = projects.user_id and p.company_id = my_company_id())
   );
 
+drop policy if exists projects_delete_company_admin on projects;
 create policy projects_delete_company_admin on projects
   for delete using (
     my_is_company_admin()
     and exists (select 1 from profiles p where p.id = projects.user_id and p.company_id = my_company_id())
   );
 
+drop policy if exists meeting_records_all_own on meeting_records;
 create policy meeting_records_all_own on meeting_records
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+drop policy if exists client_favorites_all_own on client_favorites;
 create policy client_favorites_all_own on client_favorites
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- ── messages 정책 (교차 계정 배달 특수 케이스) ────────────
+drop policy if exists messages_select_own_mailbox on messages;
 create policy messages_select_own_mailbox on messages
   for select using (mailbox_owner_id = auth.uid());
 
 -- sender_id = auth.uid(): 실제 발신자로서 남의 메일함에 배달(addMessageForUser)
 -- mailbox_owner_id = auth.uid(): 과거 로컬 샘플 데이터처럼 fromId가 실제 발신자가 아니어도,
 -- 자기 자신의 메일함에 넣는 것은 안전하므로 허용(마이그레이션에서 필요)
+drop policy if exists messages_insert_as_sender on messages;
 create policy messages_insert_as_sender on messages
   for insert with check (sender_id = auth.uid() or mailbox_owner_id = auth.uid());
 
+drop policy if exists messages_update_own_mailbox_or_sender on messages;
 create policy messages_update_own_mailbox_or_sender on messages
   for update
   using (mailbox_owner_id = auth.uid() or sender_id = auth.uid())
   with check (mailbox_owner_id = auth.uid() or sender_id = auth.uid());
 
+drop policy if exists messages_delete_own_mailbox on messages;
 create policy messages_delete_own_mailbox on messages
   for delete using (mailbox_owner_id = auth.uid());
 
