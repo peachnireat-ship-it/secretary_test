@@ -377,6 +377,33 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ## 세션 작업 이력
 
+### 2026-07-30
+
+#### 일정 관련 인물 세팅 확인창 추가, 담당자 즐겨찾기 정렬 (`092e0f4`)
+
+- 일정에서 관련 프로젝트를 선택하면 그 프로젝트의 관련 인물을 자동 병합하던 것을 Alert 확인(예/아니오)을 거치도록 변경
+- 담당자 화면 '전체' 탭에서 즐겨찾기 표시된 인원이 최상위에 오도록 정렬 기준 추가(즐겨찾기 탭 자체는 영향 없음)
+
+#### 회사 관리자용 프로젝트 메뉴 통합 조회 (`f0195f1`)
+
+- 관련 인물로 태그된 회사 직원에게도 프로젝트 사본이 자동 생성되도록 `sync_project_mirrors`를 추가(schedules 사본 로직과 동일 패턴)
+- `getCompanyProjects()`가 쓰던 `profiles!inner` 임베드 조회가 07-24 보안 패치 이후 profiles RLS에 막혀 관리자 본인 프로젝트만 반환하던 버그를 `get_company_projects()` SECURITY DEFINER 함수로 교체해 수정
+- 프로젝트 조회가 프로젝트 메뉴로 옮겨졌으므로 회사 탭(CompanyScreen)의 프로젝트 세그먼트는 제거하고 직원 목록만 남김
+
+#### 회사 관리자 탭 통합, 담당자 콤보박스, 회사 프로젝트 관련 인물 조회 (`91c4683`)
+
+- 회사인원/회사 탭을 회사관리 탭 하나로 통합, 관리자도 개인 담당자 탭 유지
+- 회원가입 시 소속 회사 선택을 콤보박스(검색+선택) 방식으로 변경
+- 회사 전체 프로젝트 상세는 조회만 가능하도록 제한(수정 기능 제거), 관련 인물 표시 추가
+- 기존 회원 검색이 discoverable 미동의 상태의 같은 회사 동료도 찾을 수 있도록 확장(연락처는 옵트인 시에만 노출)
+
+#### 알림 메일 Edge Function 공유 모듈 추출 및 순서/주최자 버그 수정 (`0e93eb6`)
+
+- 5개 Edge Function에 중복돼 있던 denomailer 인코딩 버그 우회, 웹훅 시크릿 검증, Gmail SMTP 발송 로직을 `supabase/functions/_shared/mail.ts`로 통합
+- 프로젝트 생성 직후 짧은 시간 안에 이어지는 UPDATE(startDate 백필 등)로 인해 "수정" 메일이 "등록" 메일보다 먼저 도착하던 순서 역전을 `is_recent_creation` 플래그(생성 후 15초 이내 UPDATE 판별) + 발송 전 지연으로 완화
+- `sync_project_mirrors()`가 관련 인물에게 만드는 프로젝트 사본의 INSERT/UPDATE가 알림 트리거를 함께 타면서, 사본 행의 `user_id` 기준으로 등록자를 조회해 실제 등록자가 아니라 관련 인물 이름이 주최자로 잘못 표시되던 버그 수정(`origin_project_id`가 있는 사본 행은 트리거 대상에서 제외 — `trg_notify_project_created`/`trg_notify_project_updated` 양쪽 모두 적용)
+- **배포·테스트 확인**: `patch_project_update_notify_trigger.sql`을 Supabase에 배포 후, 사용자가 프로젝트 등록·수정 양쪽을 직접 테스트해 "수정 시 새 프로젝트 등록 메일이 발송되지 않음" 및 정상 동작 확인 완료(트리거가 INSERT/UPDATE로 애초에 분리되어 있어 구조적으로 보장됨)
+
 ### 2026-07-28
 
 #### 토픽별 보기에서 같은 이름의 토픽이 2개로 갈라져 보이는 버그 (`get_mutual_client_history` 배포 누락)
