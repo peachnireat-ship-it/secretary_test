@@ -1,6 +1,6 @@
 import {
   Text, View, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView,
+  KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, Modal,
 } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +24,8 @@ export default function LoginScreen({ onLogin }) {
   const [accountType, setAccountType] = useState(null); // null | 'admin' | 'employee'
   const [departmentName, setDepartmentName] = useState('');
   const [companyList, setCompanyList] = useState([]);
+  const [showCompanyPicker, setShowCompanyPicker] = useState(false);
+  const [companySearch, setCompanySearch] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,19 @@ export default function LoginScreen({ onLogin }) {
     setAccountType(null);
     setDepartmentName('');
     setCompanyList([]);
+    setShowCompanyPicker(false);
+    setCompanySearch('');
+  }
+
+  function openCompanyPicker() {
+    setCompanySearch('');
+    setShowCompanyPicker(true);
+  }
+
+  function selectCompany(name) {
+    setTeam(name);
+    setError('');
+    setShowCompanyPicker(false);
   }
 
   async function handleLogin() {
@@ -111,6 +126,12 @@ export default function LoginScreen({ onLogin }) {
     setError('');
   }
 
+  const companySearchTrimmed = companySearch.trim();
+  const filteredCompanies = companyList.filter((c) =>
+    !companySearchTrimmed || c.name.toLowerCase().includes(companySearchTrimmed.toLowerCase())
+  );
+  const companySearchHasExactMatch = companyList.some((c) => c.name.toLowerCase() === companySearchTrimmed.toLowerCase());
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.root}>
       <ScrollView
@@ -167,28 +188,22 @@ export default function LoginScreen({ onLogin }) {
               />
 
               <Text style={s.label}>소속 회사</Text>
-              {accountType === 'employee' && companyList.length > 0 && (
-                <View style={s.companyChipRow}>
-                  {companyList.map((c) => (
-                    <TouchableOpacity
-                      key={c.id}
-                      style={[s.companyChip, team === c.name && s.companyChipActive]}
-                      onPress={() => { setTeam(c.name); setError(''); }}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[s.companyChipText, team === c.name && s.companyChipTextActive]}>{c.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+              {accountType === 'employee' ? (
+                <TouchableOpacity style={s.pickerTrigger} onPress={openCompanyPicker} activeOpacity={0.8}>
+                  <Text style={[s.pickerTriggerText, team && s.pickerTriggerTextActive]}>
+                    {team || '회사 선택'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TextInput
+                  style={s.input}
+                  value={team}
+                  onChangeText={(v) => { setTeam(v); setError(''); }}
+                  placeholder="회사명"
+                  placeholderTextColor={C.textDim}
+                  autoCorrect={false}
+                />
               )}
-              <TextInput
-                style={s.input}
-                value={team}
-                onChangeText={(v) => { setTeam(v); setError(''); }}
-                placeholder="회사명"
-                placeholderTextColor={C.textDim}
-                autoCorrect={false}
-              />
 
               {accountType === 'employee' && (
                 <>
@@ -303,6 +318,64 @@ export default function LoginScreen({ onLogin }) {
           </View>
         )}
       </ScrollView>
+
+      {/* ── 소속 회사 선택 (콤보박스) ── */}
+      <Modal visible={showCompanyPicker} animationType="slide" transparent onRequestClose={() => setShowCompanyPicker(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.sheetBase, s.pickerSheet]}>
+            <View style={s.pickerHeader}>
+              <TouchableOpacity onPress={() => setShowCompanyPicker(false)} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={s.pickerTitle}>소속 회사 선택</Text>
+              <View style={s.pickerHeaderBtn} />
+            </View>
+
+            <View style={s.pickerSearchWrap}>
+              <TextInput
+                style={s.pickerSearchInput}
+                value={companySearch}
+                onChangeText={setCompanySearch}
+                placeholder="회사명 검색"
+                placeholderTextColor={C.textDim}
+                autoCorrect={false}
+                autoFocus
+              />
+            </View>
+
+            <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
+              {!!companySearchTrimmed && !companySearchHasExactMatch && (
+                <TouchableOpacity style={s.pickerAddNewBtn} onPress={() => selectCompany(companySearchTrimmed)}>
+                  <Text style={s.pickerAddNewText}>+ “{companySearchTrimmed}” 신규 회사로 등록</Text>
+                </TouchableOpacity>
+              )}
+              {filteredCompanies.length === 0 ? (
+                companySearchTrimmed ? null : <Text style={s.pickerEmptyText}>등록된 회사가 없습니다. 회사명을 검색해 새로 등록해주세요.</Text>
+              ) : (
+                filteredCompanies.map((c) => {
+                  const selected = team === c.name;
+                  return (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[s.pickerRow, selected && s.pickerRowSelected]}
+                      onPress={() => selectCompany(c.name)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={s.pickerNameWrap}>
+                        <Text style={[s.pickerName, selected && s.pickerNameSelected]}>{c.name}</Text>
+                      </View>
+                      <View style={[s.pickerCheck, selected && s.pickerCheckSelected]}>
+                        {selected && <Text style={s.pickerCheckMark}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+              <View style={s.spacerH40} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -322,11 +395,36 @@ const s = StyleSheet.create({
   accountTypeBtnActive: { backgroundColor: C.companyIndigo + '22', borderColor: C.companyIndigo },
   accountTypeText: { color: C.textSecondary, fontSize: 14, fontWeight: '600' },
   accountTypeTextActive: { color: C.companyIndigo },
-  companyChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  companyChip: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  companyChipActive: { backgroundColor: C.companyIndigo + '22', borderColor: C.companyIndigo },
-  companyChipText: { color: C.textSecondary, fontSize: 13 },
-  companyChipTextActive: { color: C.companyIndigo, fontWeight: '600' },
+  pickerTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14 },
+  pickerTriggerText: { color: C.textDim, fontSize: 14 },
+  pickerTriggerTextActive: { color: C.textPrimary },
+
+  modalOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center' }
+    : { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  sheetBase: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, width: '100%', maxWidth: 480 }
+    : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  pickerSheet: { height: '70%' },
+  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerHeaderBtn: { minWidth: 52 },
+  pickerTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '500' },
+  pickerCancelText: { color: C.textSecondary, fontSize: 15 },
+  pickerSearchWrap: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerSearchInput: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 10 },
+  pickerList: { flex: 1 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
+  pickerRowSelected: { backgroundColor: C.accentBlue + '0D' },
+  pickerNameWrap: { flex: 1 },
+  pickerName: { color: C.textPrimary, fontSize: 14 },
+  pickerNameSelected: { color: C.accentBlue, fontWeight: '500' },
+  pickerCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  pickerCheckSelected: { backgroundColor: C.accentBlue, borderColor: C.accentBlue },
+  pickerCheckMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  pickerAddNewBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.accentBlue + '0A' },
+  pickerAddNewText: { color: C.accentBlue, fontSize: 14, fontWeight: '500' },
+  pickerEmptyText: { color: C.textDim, fontSize: 12, padding: 20, textAlign: 'center' },
+  spacerH40: { height: 40 },
   error: { color: C.red, fontSize: 12, marginTop: 8 },
   info: { color: C.accentTeal, fontSize: 12, marginTop: 8 },
   loginBtn: { marginTop: 28, backgroundColor: C.accentBlue, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },

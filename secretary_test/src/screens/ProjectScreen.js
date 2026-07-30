@@ -12,7 +12,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
 import { useUser } from '../context/UserContext';
-import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules, getTopics, addTopic, getCompanyProjects, updateProjectAsCompanyAdmin, deleteProjectAsCompanyAdmin } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules, getTopics, addTopic, getCompanyProjects } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
 import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectForm';
@@ -106,14 +106,9 @@ export default function ProjectScreen({ navigation, route }) {
   const [viewMode, setViewMode] = useState('mine'); // 'mine' | 'company'
   const [companyGroups, setCompanyGroups] = useState([]);
   const [companyLoading, setCompanyLoading] = useState(false);
+  // 회사 전체 보기는 조회 전용이다 — 다른 부서 직원의 프로젝트를 수정/삭제할 수 없다.
   const [showCompanyDetail, setShowCompanyDetail] = useState(false);
   const [companyDetailProject, setCompanyDetailProject] = useState(null);
-  const [companyEditTitle, setCompanyEditTitle] = useState('');
-  const [companyEditDeadline, setCompanyEditDeadline] = useState('');
-  const [companyEditStatus, setCompanyEditStatus] = useState('진행중');
-  const [companyEditProgress, setCompanyEditProgress] = useState(0);
-  const [companyEditPriority, setCompanyEditPriority] = useState('보통');
-  const [companyEditNotes, setCompanyEditNotes] = useState('');
 
   const [copyTarget, setCopyTarget] = useState(null);
   const [copyTitleInput, setCopyTitleInput] = useState('');
@@ -281,53 +276,7 @@ export default function ProjectScreen({ navigation, route }) {
 
   function openCompanyDetail(project) {
     setCompanyDetailProject(project);
-    setCompanyEditTitle(project.title || '');
-    setCompanyEditDeadline(project.deadline || '');
-    setCompanyEditStatus(project.status || '진행중');
-    setCompanyEditProgress(project.progress || 0);
-    setCompanyEditPriority(project.priority || '보통');
-    setCompanyEditNotes(project.notes || '');
     setShowCompanyDetail(true);
-  }
-
-  async function handleCompanySave() {
-    if (!companyEditTitle.trim()) {
-      Alert.alert('알림', '제목을 입력해주세요.');
-      return;
-    }
-    try {
-      await updateProjectAsCompanyAdmin(companyDetailProject.id, {
-        title: companyEditTitle.trim(),
-        deadline: companyEditDeadline,
-        status: companyEditStatus,
-        progress: companyEditProgress,
-        priority: companyEditPriority,
-        notes: companyEditNotes,
-      });
-      setShowCompanyDetail(false);
-      await loadCompanyProjects();
-    } catch {
-      Alert.alert('오류', '프로젝트를 수정하지 못했습니다.');
-    }
-  }
-
-  function handleCompanyDelete() {
-    Alert.alert('삭제', `"${companyDetailProject.title}" 프로젝트를 삭제할까요?`, [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteProjectAsCompanyAdmin(companyDetailProject.id);
-            setShowCompanyDetail(false);
-            await loadCompanyProjects();
-          } catch {
-            Alert.alert('오류', '프로젝트를 삭제하지 못했습니다.');
-          }
-        },
-      },
-    ]);
   }
 
   const companyProjectCount = companyGroups.reduce((sum, g) => sum + g.projects.length, 0);
@@ -1950,95 +1899,82 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* ── 회사 전체 보기: 프로젝트 상세/수정 모달 (회사 관리자 전용) ── */}
+      {/* ── 회사 전체 보기: 프로젝트 상세 (조회 전용 — 회사 관리자도 다른 부서 프로젝트는 수정 불가) ── */}
       <Modal visible={showCompanyDetail} animationType="slide" transparent onRequestClose={() => setShowCompanyDetail(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, commonStyles.maxH90pct, swipeCompanyDetail.animStyle]}>
+        <View style={s.modalOverlay}>
+          <Animated.View style={[s.modalSheet, commonStyles.maxH80pct, swipeCompanyDetail.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeCompanyDetail.panHandlers}>
               <View style={s.modalHandle} />
             </View>
-            {companyDetailProject && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={s.detailHeader}>
-                  <View style={commonStyles.flex1}>
-                    <Text style={s.inputLabel}>제목</Text>
-                    <TextInput style={s.input} value={companyEditTitle} onChangeText={setCompanyEditTitle} placeholderTextColor={C.textDim} />
+            {companyDetailProject && (() => {
+              const days = daysUntil(companyDetailProject.deadline);
+              const isCompleted = companyDetailProject.status === '완료';
+              return (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View style={s.detailHeader}>
+                    <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>{companyDetailProject.title}</Text>
+                    <TouchableOpacity onPress={() => setShowCompanyDetail(false)} style={commonStyles.ml12}>
+                      <Text style={s.closeBtn}>✕</Text>
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity onPress={() => setShowCompanyDetail(false)} style={s.closeBtnOffset}>
-                    <Text style={s.closeBtn}>✕</Text>
-                  </TouchableOpacity>
-                </View>
 
-                <Text style={s.inputLabel}>담당 부서 · 담당자</Text>
-                <Text style={s.ownerText}>{companyDetailProject.ownerTeam} · {companyDetailProject.ownerName}</Text>
+                  <Text style={s.inputLabel}>담당 부서 · 담당자</Text>
+                  <Text style={s.viewText}>{companyDetailProject.ownerTeam} · {companyDetailProject.ownerName}</Text>
 
-                <Text style={s.inputLabel}>상태</Text>
-                <View style={s.optionRow}>
-                  {STATUSES.map((st) => (
-                    <TouchableOpacity key={st} style={[s.optionBtn, companyEditStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => setCompanyEditStatus(st)}>
-                      <Text style={[s.optionText, companyEditStatus === st && { color: statusColor(st) }]}>{st}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                  <View style={s.viewBadgeRow}>
+                    <View style={[s.statusBadge, { borderColor: statusColor(companyDetailProject.status) + '66', backgroundColor: statusColor(companyDetailProject.status) + '18' }]}>
+                      <Text style={[s.statusText, { color: statusColor(companyDetailProject.status) }]}>{companyDetailProject.status}</Text>
+                    </View>
+                    <View style={[s.priorityBadge, { borderColor: priorityColor(companyDetailProject.priority) + '55' }]}>
+                      <Text style={[s.priorityText, { color: priorityColor(companyDetailProject.priority) }]}>{companyDetailProject.priority}</Text>
+                    </View>
+                  </View>
 
-                <Text style={s.inputLabel}>우선순위</Text>
-                <View style={s.optionRow}>
-                  {PRIORITIES.map((pr) => (
-                    <TouchableOpacity key={pr} style={[s.optionBtn, companyEditPriority === pr && { borderColor: priorityColor(pr) + '88', backgroundColor: priorityColor(pr) + '18' }]} onPress={() => setCompanyEditPriority(pr)}>
-                      <Text style={[s.optionText, companyEditPriority === pr && { color: priorityColor(pr) }]}>{pr}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                  <Text style={s.inputLabel}>진행률</Text>
+                  <View style={s.progressTrack}>
+                    <View style={[s.progressFill, { width: `${companyDetailProject.progress}%`, backgroundColor: statusColor(companyDetailProject.status) }]} />
+                  </View>
+                  <Text style={[s.progressLabel, s.progressLabelSpacing]}>{companyDetailProject.progress}% 완료</Text>
 
-                <Text style={s.inputLabel}>진행률 (%)</Text>
-                <View style={s.sliderWrap}>
-                  <Text style={s.sliderVal}>{companyEditProgress}%</Text>
-                  <Slider
-                    style={s.slider}
-                    minimumValue={0}
-                    maximumValue={100}
-                    step={1}
-                    value={companyEditProgress}
-                    onValueChange={(v) => setCompanyEditProgress(Math.round(v))}
-                    minimumTrackTintColor={statusColor(companyEditStatus)}
-                    maximumTrackTintColor={C.border}
-                    thumbTintColor={statusColor(companyEditStatus)}
-                  />
-                </View>
+                  <Text style={s.inputLabel}>마감일</Text>
+                  <Text style={[s.viewText, days < 0 && !isCompleted && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                    {companyDetailProject.deadline}{isCompleted && days < 0 ? '' : `  ·  ${daysLabel(days)}`}
+                  </Text>
 
-                <Text style={s.inputLabel}>마감일</Text>
-                <TextInput
-                  style={s.input}
-                  value={companyEditDeadline}
-                  onChangeText={(t) => setCompanyEditDeadline(formatDeadline(t))}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={C.textDim}
-                  keyboardType="numeric"
-                  maxLength={10}
-                />
+                  {companyDetailProject.notes ? (
+                    <>
+                      <Text style={s.inputLabel}>메모</Text>
+                      <Text style={s.viewText}>{companyDetailProject.notes}</Text>
+                    </>
+                  ) : null}
 
-                <Text style={s.inputLabel}>메모</Text>
-                <TextInput
-                  style={[s.input, s.h80]}
-                  value={companyEditNotes}
-                  onChangeText={setCompanyEditNotes}
-                  multiline
-                  placeholder="메모를 입력하세요"
-                  placeholderTextColor={C.textDim}
-                />
+                  {companyDetailProject.relatedPeople?.length > 0 && (
+                    <>
+                      <Text style={s.inputLabel}>관련 인물</Text>
+                      <View style={s.relatedPeopleRow}>
+                        {companyDetailProject.relatedPeople.map((c) => (
+                          <View key={c.id} style={s.relatedPersonChip}>
+                            <View style={s.personChipInner}>
+                              <View style={s.relatedPersonAvatar}>
+                                <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
+                              </View>
+                              <View style={commonStyles.flex1}>
+                                <Text style={s.relatedPersonName}>{c.name}</Text>
+                                {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                              </View>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  )}
 
-                <View style={s.modalBtns}>
-                  <TouchableOpacity style={s.modalCancel} onPress={handleCompanyDelete}>
-                    <Text style={[s.modalCancelText, s.textRed]}>삭제</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.modalConfirm} onPress={handleCompanySave}>
-                    <Text style={s.modalConfirmText}>저장</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            )}
+                  <View style={s.spacerH8} />
+                </ScrollView>
+              );
+            })()}
           </Animated.View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
   );
@@ -2068,7 +2004,6 @@ const s = StyleSheet.create({
   deptMeta: { color: C.textDim, fontSize: 11 },
   ownerChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: C.companyIndigo + '18', borderWidth: 1, borderColor: C.companyIndigo + '44' },
   ownerChipText: { color: C.companyIndigo, fontSize: 10, fontWeight: '500' },
-  ownerText: { color: C.textSecondary, fontSize: 13, marginBottom: 4 },
 
   filterWrap: { maxHeight: 44 },
   filterRow: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },

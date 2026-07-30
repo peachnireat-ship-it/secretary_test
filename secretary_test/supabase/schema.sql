@@ -370,19 +370,31 @@ grant execute on function get_company_colleagues() to authenticated;
 -- 본인 행만 허용하므로(profiles_select_own, get_company_colleagues() 도입 배경과 동일 이유)
 -- 다른 직원의 profiles 행을 끌어오지 못해 !inner 조인에 걸려 결과가 통째로 사라진다. 컬럼 단위로
 -- 필요한 값(name, team, department name)만 SECURITY DEFINER로 안전하게 노출해 이 문제를 피한다.
+-- related_people: 프로젝트의 client_ids가 가리키는, 그 프로젝트 소유자 본인의 clients 행(이름/
+-- 회사/직책)을 함께 반환한다. clients도 profiles와 동일하게 본인 소유 행만 select 가능한 RLS라
+-- (clients_all_own) 관리자가 다른 직원의 clients를 직접 조회할 수 없어서, 여기서도 SECURITY
+-- DEFINER로 그 프로젝트 소유자(c.user_id = p.user_id) 소유이면서 해당 프로젝트에 실제로 연결된
+-- id만 한정해 안전하게 노출한다(patch_company_project_related_people.sql 참고).
 create or replace function get_company_projects()
 returns table (
   id text, title text, deadline text, start_date text, status text, priority text, notes text,
   progress int, client_ids jsonb, owner_client_id text, meeting_record_ids jsonb,
   origin_project_id text, created_at bigint, updated_at bigint,
-  owner_name text, owner_team text, department_name text
+  owner_name text, owner_team text, department_name text, related_people jsonb
 )
 language sql security definer stable
 set search_path = public
 as $$
   select p.id, p.title, p.deadline, p.start_date, p.status, p.priority, p.notes, p.progress,
     p.client_ids, p.owner_client_id, p.meeting_record_ids, p.origin_project_id, p.created_at, p.updated_at,
-    pr.name, pr.team, d.name
+    pr.name, pr.team, d.name,
+    coalesce(
+      (select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'company', c.company, 'role', c.role))
+       from clients c
+       where c.user_id = p.user_id
+         and c.id in (select jsonb_array_elements_text(coalesce(p.client_ids, '[]'::jsonb)))),
+      '[]'::jsonb
+    )
   from projects p
   join profiles pr on pr.id = p.user_id
   left join departments d on d.id = pr.department_id
@@ -407,9 +419,13 @@ grant execute on function get_all_accounts_for_switch() to authenticated;
 -- 담당자(clients) 추가 시 기존 가입 회원을 검색해 linked_profile_id로 연결할 수 있게 하는 함수.
 -- get_company_colleagues()/get_all_accounts_for_switch()와 동일한 이유로 SECURITY DEFINER 함수로
 -- 감싸 필요한 컬럼(id, name, email, team, role, contact)만 반환한다. discoverable=true(옵트인)로
--- 설정한 계정만 대상이며, 검색어 없이는 결과를 반환하지 않는다(전체 덤프 방지), 호출자 자신은 제외,
--- 최대 20건. contact(연락처)는 검색 결과 선택 시 담당자로 즉시 자동 추가되는 용도로 함께
--- 노출된다(옵트인 동의 범위 확장 — 자세한 배경은 patch_profile_discoverable_search.sql,
+-- 설정한 계정 전체, 또는 같은 회사 소속 동료(get_company_colleagues()와 동일한 전제 —
+-- 같은 회사면 discoverable 여부와 무관하게 이미 서로 존재를 알 수 있는 사이이므로 검색 대상에
+-- 포함한다)가 대상이다. 검색어 없이는 결과를 반환하지 않는다(전체 덤프 방지), 호출자 자신은 제외,
+-- 최대 20건. contact(연락처)는 discoverable=true로 옵트인한 계정에 한해서만 채워 반환한다
+-- (같은 회사라는 이유만으로 미동의 상태의 연락처까지 노출하지는 않음 — get_company_colleagues()가
+-- email/contact를 반환하지 않는 것과 동일한 제한 취지, patch_search_discoverable_profiles_same_company.sql
+-- 참고). contact 컬럼 자체는 옵트인 동의 범위 확장으로 앞서 추가됨(patch_profile_discoverable_search.sql,
 -- patch_search_discoverable_profiles_add_contact.sql 참고).
 -- RETURNS TABLE의 OUT 컬럼 개수가 바뀌므로(5→6, contact 추가) create or replace만으로는
 -- 반영되지 않는다(42P13 cannot change return type of existing function). 기존 DB에 이미
@@ -427,10 +443,14 @@ begin
   end if;
 
   return query
-    select p.id, p.name, p.email, p.team, p.role, p.contact
+    select p.id, p.name, p.email, p.team, p.role,
+      case when p.discoverable then p.contact else '' end
     from profiles p
-    where p.discoverable = true
-      and p.id <> auth.uid()
+    where p.id <> auth.uid()
+      and (
+        p.discoverable = true
+        or (my_company_id() is not null and p.company_id = my_company_id())
+      )
       and (
         p.name ilike '%' || btrim(p_query) || '%'
         or p.email ilike '%' || btrim(p_query) || '%'

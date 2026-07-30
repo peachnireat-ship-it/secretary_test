@@ -785,26 +785,6 @@ export async function deleteProject(id) {
   return getProjects();
 }
 
-// 회사 관리자 전용: updateProject/deleteProject와 달리 .eq('user_id', ...) 필터를 걸지 않는다
-// (본인 프로젝트가 아닌 다른 부서 직원의 프로젝트도 대상이어야 하므로). RLS의
-// projects_update_company_admin/projects_delete_company_admin 정책이 "같은 회사 + 관리자"만
-// 허용하므로 안전하다 — 일반 사용자가 호출해도 RLS가 차단한다.
-// client_ids 검증(assertClientIdsOwned)은 의도적으로 생략한다: 이 함수는 대상 프로젝트의 실제
-// 소유자(user_id)가 호출자 자신이 아니므로 "누구 기준으로" 검증해야 하는지 알려면 대상 행을 먼저
-// 조회해야 한다. DB 트리거(validate_client_ids_ownership, patch_client_ids_ownership.sql)가
-// new.user_id(그 프로젝트의 실제 소유자) 기준으로 이미 검증해 최종 방어선 역할을 하므로, 이 함수
-// 하나만으로도 안전하다 — 앱 레벨 중복 검증을 추가할 필요는 없다.
-export async function updateProjectAsCompanyAdmin(id, changes) {
-  const row = { ...toRow(changes, PROJECT_KEYMAP), updated_at: Date.now() };
-  const { error } = await supabase.from('projects').update(row).eq('id', id);
-  if (error) throw error;
-}
-
-export async function deleteProjectAsCompanyAdmin(id) {
-  const { error } = await supabase.from('projects').delete().eq('id', id);
-  if (error) throw error;
-}
-
 // 회사 관리자 전용: 같은 회사 소속 전체 부서의 프로젝트를 부서별로 그룹핑해서 반환한다.
 // get_company_projects() RPC(SECURITY DEFINER, patch_get_company_projects.sql)를 사용한다 —
 // 예전에는 projects.select('*, profiles!inner(...)')로 직접 임베드 조회를 했었지만, 다른 직원의
@@ -816,10 +796,11 @@ export async function getCompanyProjects() {
 
   const groups = new Map();
   for (const row of data) {
-    const { owner_name, owner_team, department_name, ...projectRow } = row;
+    const { owner_name, owner_team, department_name, related_people, ...projectRow } = row;
     const project = fromRow(projectRow, PROJECT_KEYMAP);
     project.ownerName = owner_name || '';
     project.ownerTeam = owner_team || '';
+    project.relatedPeople = related_people || [];
     const departmentName = department_name || '미배정';
     if (!groups.has(departmentName)) groups.set(departmentName, []);
     groups.get(departmentName).push(project);

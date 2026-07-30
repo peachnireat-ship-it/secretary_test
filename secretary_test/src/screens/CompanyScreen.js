@@ -30,7 +30,7 @@ export default function CompanyScreen() {
     <View style={s.root}>
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <View>
-          <Text style={s.headerTitle}>회사</Text>
+          <Text style={s.headerTitle}>회사관리</Text>
           <Text style={s.headerSub}>부서별 직원 {totalEmployeeCount}명</Text>
         </View>
       </View>
