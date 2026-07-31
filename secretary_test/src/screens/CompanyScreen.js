@@ -15,6 +15,10 @@ import {
 
 const ALL_KEY = '__all__';
 const DEPT_INDENT = 10;
+// 부서 사이드바 폭 범위. 가장 긴 부서명에 맞춰 이 범위 안에서 자동으로 늘어난다(SIDEBAR_MIN_WIDTH~SIDEBAR_MAX_WIDTH).
+const SIDEBAR_MIN_WIDTH = 90;
+const SIDEBAR_MAX_WIDTH = 160;
+const SIDEBAR_PADDING_H = 10;
 
 // flat departments(id, name, parentId) 배열을 부모→자식 트리로 조립. 이미 방문한 id는 스킵해 순환 참조를 방어한다.
 function buildDeptTree(departments, parentId = null, visited = new Set()) {
@@ -301,6 +305,11 @@ export default function CompanyScreen() {
   const visibleGroups = showAll
     ? showAllGroups
     : employeeGroups.filter((g) => g.departmentName === effectiveSelectedDept);
+  // 전체 보기에서는 부서 구분 없이 이름 가나다순으로 표시. 특정 부서 선택 시에는 기존 순서(가입 순) 유지.
+  const visibleEmployees = visibleGroups.flatMap((group) =>
+    group.employees.map((employee) => ({ employee, departmentName: group.departmentName }))
+  );
+  if (showAll) visibleEmployees.sort((a, b) => a.employee.name.localeCompare(b.employee.name, 'ko'));
 
   return (
     <View style={s.root}>
@@ -328,7 +337,7 @@ export default function CompanyScreen() {
                 onPress={() => setSelectedDept(dept.name)}
                 activeOpacity={0.6}
               >
-                <Text style={[s.sidebarItemText, active && s.sidebarItemTextActive]} numberOfLines={1}>
+                <Text style={[s.sidebarItemText, active && s.sidebarItemTextActive]} numberOfLines={2}>
                   {dept.depth > 0 && <Text style={s.treePrefix}>{'└ '}</Text>}
                   {dept.name}
                 </Text>
@@ -338,42 +347,26 @@ export default function CompanyScreen() {
         </ScrollView>
 
         <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
-          {!loading && visibleGroups.length === 0 ? (
+          {!loading && visibleEmployees.length === 0 ? (
             <View style={s.emptyWrap}>
               <Text style={s.emptyText}>{showAll ? '회사 직원이 없습니다' : '이 부서에 직원이 없습니다'}</Text>
             </View>
           ) : (
-            visibleGroups.map((group) => {
-              const groupDepth = group.depth ?? 0;
-              return (
-                <View key={group.departmentName} style={s.deptSection}>
-                  {showAll && (
-                    <View style={[s.deptHeaderRow, { marginLeft: groupDepth * DEPT_INDENT }]}>
-                      <Text style={s.deptName}>
-                        {groupDepth > 0 && <Text style={s.deptNamePrefix}>{'└ '}</Text>}
-                        {group.departmentName}
-                      </Text>
-                      <Text style={s.deptMeta}>{group.employees.length}명</Text>
+            visibleEmployees.map(({ employee, departmentName }) => (
+              <View key={employee.id} style={s.card}>
+                <View style={s.cardTop}>
+                  <View style={s.cardTitleRow}>
+                    <Text style={s.cardTitle} numberOfLines={1}>{employee.name}</Text>
+                    <Text style={s.employeeRole} numberOfLines={1}>{departmentName} · {employee.role || '직책 미등록'}</Text>
+                  </View>
+                  {employee.isCompanyAdmin && (
+                    <View style={s.adminBadge}>
+                      <Text style={s.adminBadgeText}>관리자</Text>
                     </View>
                   )}
-                  {group.employees.map((employee) => (
-                    <View key={employee.id} style={s.card}>
-                      <View style={s.cardTop}>
-                        <View style={s.cardTitleRow}>
-                          <Text style={s.cardTitle} numberOfLines={1}>{employee.name}</Text>
-                        </View>
-                        {employee.isCompanyAdmin && (
-                          <View style={s.adminBadge}>
-                            <Text style={s.adminBadgeText}>관리자</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={s.employeeRole} numberOfLines={1}>{employee.role || '직책 미등록'}</Text>
-                    </View>
-                  ))}
                 </View>
-              );
-            })
+              </View>
+            ))
           )}
         </ScrollView>
       </View>
@@ -527,32 +520,29 @@ const s = StyleSheet.create({
 
   body: { flex: 1, flexDirection: 'row' },
 
-  sidebar: { width: 30, borderRightWidth: 1, borderRightColor: C.border },
-  sidebarContent: { paddingHorizontal: 4, paddingTop: 12, paddingBottom: 100, gap: 8 },
+  // flexBasis:'auto' + minWidth/maxWidth로 가장 긴 부서명에 맞춰 그 범위 안에서 자동으로 늘어난다.
+  // 부서명 Text는 numberOfLines를 주지 않아 넘치면 줄바꿈되며(말줄임 없음), 한글은 글자 단위로 줄바꿈되므로
+  // 웹에서도 이 폭 이상으로 강제로 넓어지지 않는다.
+  sidebar: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', minWidth: SIDEBAR_MIN_WIDTH, maxWidth: SIDEBAR_MAX_WIDTH, borderRightWidth: 1, borderRightColor: C.border },
+  sidebarContent: { paddingHorizontal: SIDEBAR_PADDING_H, paddingTop: 12, paddingBottom: 100, gap: 8 },
   sidebarItem: { alignSelf: 'flex-start', maxWidth: '100%', paddingVertical: 6, paddingHorizontal: 4 },
   sidebarItemText: { color: C.textDim, fontSize: 12, fontWeight: '500' },
   sidebarItemTextActive: { color: C.companyIndigo, fontWeight: '600' },
   treePrefix: { color: C.textDim, fontWeight: '400' },
 
   list: { flex: 1 },
-  listContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100, gap: 20 },
+  listContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100, gap: 10 },
   emptyWrap: { paddingTop: 60, alignItems: 'center', gap: 8 },
   emptyText: { color: C.textDim, fontSize: 14 },
 
   adminBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: C.companyIndigo + '66', backgroundColor: C.companyIndigo + '18' },
   adminBadgeText: { color: C.companyIndigo, fontSize: 10, fontWeight: '600' },
-  employeeRole: { color: C.textSecondary, fontSize: 12 },
+  employeeRole: { color: C.textSecondary, fontSize: 12, flex: 1, marginLeft: 8, textAlign: 'right' },
 
-  deptSection: { gap: 10 },
-  deptHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2 },
-  deptName: { color: C.companyIndigo, fontSize: 15, fontWeight: '600' },
-  deptNamePrefix: { color: C.textDim, fontWeight: '400' },
-  deptMeta: { color: C.textDim, fontSize: 11 },
-
-  card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 16, gap: 10 },
+  card: { backgroundColor: C.surface, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
-  cardTitle: { color: C.textPrimary, fontSize: 14, fontWeight: '500', flex: 1 },
+  cardTitle: { color: C.textPrimary, fontSize: 14, fontWeight: '500', flexShrink: 0 },
 
   deptManageBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: C.companyIndigo + '66', backgroundColor: C.companyIndigo + '18' },
   deptManageBtnText: { color: C.companyIndigo, fontSize: 12, fontWeight: '600' },
