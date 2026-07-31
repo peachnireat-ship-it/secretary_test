@@ -837,18 +837,18 @@ export async function getCompanyEmployees() {
   return [...groups.entries()].map(([departmentName, employees]) => ({ departmentName, employees }));
 }
 
-// 회사 관리자 전용: 같은 회사 소속 부서 목록. 부서 관리 모달의 목록·재배치 chip에 사용된다.
+// 회사 관리자 전용: 같은 회사 소속 부서 목록(계층 구조). 부서 관리 모달의 목록·재배치 chip에 사용된다.
 export async function getCompanyDepartments() {
   const user = await getCurrentUser();
   if (!user?.companyId) return [];
-  const { data, error } = await supabase.from('departments').select('id, name').eq('company_id', user.companyId);
+  const { data, error } = await supabase.from('departments').select('id, name, parent_department_id').eq('company_id', user.companyId);
   if (error) throw error;
-  return (data || []).map((d) => ({ id: d.id, name: d.name }));
+  return (data || []).map((d) => ({ id: d.id, name: d.name, parentId: d.parent_department_id || null }));
 }
 
-// 회사 관리자 전용: 부서 추가. RPC 내부에서 my_is_company_admin() 체크 및 중복/미입력 검증(한국어 예외 메시지) 수행.
-export async function createDepartment(name) {
-  const { data, error } = await supabase.rpc('create_department', { p_name: name });
+// 회사 관리자 전용: 부서 추가. parentId는 상위 부서 id(null = 최상위). RPC 내부에서 my_is_company_admin() 체크 및 중복/미입력 검증(한국어 예외 메시지) 수행.
+export async function createDepartment(name, parentId) {
+  const { data, error } = await supabase.rpc('create_department', { p_name: name, p_parent_department_id: parentId || null });
   if (error) throw error;
   return data;
 }
@@ -859,7 +859,13 @@ export async function renameDepartment(id, name) {
   if (error) throw error;
 }
 
-// 회사 관리자 전용: 부서 삭제. 소속 직원은 자동으로 미배정 처리된다(FK on delete set null).
+// 회사 관리자 전용: 부서의 상위 부서 변경(트리 재배치). parentId가 null이면 최상위로 이동. 자기 자신 지정·순환 참조는 서버에서 예외를 던져 거부한다.
+export async function setDepartmentParent(id, parentId) {
+  const { error } = await supabase.rpc('set_department_parent', { p_department_id: id, p_parent_department_id: parentId || null });
+  if (error) throw error;
+}
+
+// 회사 관리자 전용: 부서 삭제. 하위 부서가 있으면 서버에서 예외를 던진다("하위 부서가 있는 부서는 삭제할 수 없습니다..."). 소속 직원은 자동으로 미배정 처리된다(FK on delete set null).
 export async function deleteDepartment(id) {
   const { error } = await supabase.rpc('delete_department', { p_department_id: id });
   if (error) throw error;
