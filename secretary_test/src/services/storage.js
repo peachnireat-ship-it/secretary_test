@@ -241,11 +241,13 @@ export async function getCompanyList() {
 // 로그인 전(anon) 상태에서 호출되므로 departments_select_public RLS 정책이 필요하다
 // (supabase/patch_departments_select_public.sql). 목록 조회 실패가 가입 자체를 막으면 안 되므로
 // 에러를 던지지 않고 빈 배열을 반환한다(이 경우 화면은 기존 TextInput 수기 입력으로 폴백한다).
+// parent_department_id도 함께 조회해 getCompanyDepartments()와 동일하게 parentId로 매핑한다 —
+// 화면(LoginScreen)에서 buildDeptTree/flattenDeptTree로 트리 구조를 표시하기 위함.
 export async function getDepartmentsForSignup(companyId) {
   if (!companyId) return [];
-  const { data, error } = await supabase.from('departments').select('id, name').eq('company_id', companyId).order('name');
+  const { data, error } = await supabase.from('departments').select('id, name, parent_department_id').eq('company_id', companyId).order('name');
   if (error) return [];
-  return data || [];
+  return (data || []).map((d) => ({ id: d.id, name: d.name, parentId: d.parent_department_id || null }));
 }
 
 // 회원가입 시 회사 등록 RPC(signup_create_company_as_admin/signup_join_company_as_employee)가

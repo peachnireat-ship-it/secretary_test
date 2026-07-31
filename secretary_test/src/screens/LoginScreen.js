@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Alert } from '../utils/alertCompat';
 import { C } from '../theme';
 import { login, signup, getCompanyList, getDepartmentsForSignup } from '../services/storage';
+import { buildDeptTree, flattenDeptTree, DEPT_INDENT } from '../utils/deptTree';
 
 // 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
 const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
@@ -160,6 +161,8 @@ export default function LoginScreen({ onLogin }) {
     !companySearchTrimmed || c.name.toLowerCase().includes(companySearchTrimmed.toLowerCase())
   );
   const companySearchHasExactMatch = companyList.some((c) => c.name.toLowerCase() === companySearchTrimmed.toLowerCase());
+  // 부서 선택 모달에서 조직 구조(들여쓰기 + └ 계층 표시)를 보여주기 위해 flat departmentList를 트리 → 평면 변환.
+  const flatDepartmentList = flattenDeptTree(buildDeptTree(departmentList));
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.root}>
@@ -182,14 +185,14 @@ export default function LoginScreen({ onLogin }) {
               <View style={s.accountTypeRow}>
                 <TouchableOpacity
                   style={[s.accountTypeBtn, accountType === 'admin' && s.accountTypeBtnActive]}
-                  onPress={() => { setAccountType('admin'); setError(''); }}
+                  onPress={() => { setAccountType('admin'); setTeam(''); setSelectedCompanyId(null); setDepartmentName(''); setError(''); }}
                   activeOpacity={0.8}
                 >
                   <Text style={[s.accountTypeText, accountType === 'admin' && s.accountTypeTextActive]}>회사관리자</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[s.accountTypeBtn, accountType === 'employee' && s.accountTypeBtnActive]}
-                  onPress={() => { setAccountType('employee'); setError(''); }}
+                  onPress={() => { setAccountType('employee'); setTeam(''); setSelectedCompanyId(null); setDepartmentName(''); setError(''); }}
                   activeOpacity={0.8}
                 >
                   <Text style={[s.accountTypeText, accountType === 'employee' && s.accountTypeTextActive]}>회사직원</Text>
@@ -427,20 +430,23 @@ export default function LoginScreen({ onLogin }) {
             </View>
 
             <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
-              {departmentList.length === 0 ? (
+              {flatDepartmentList.length === 0 ? (
                 <Text style={s.pickerEmptyText}>등록된 부서가 없습니다.</Text>
               ) : (
-                departmentList.map((d) => {
+                flatDepartmentList.map((d) => {
                   const selected = departmentName === d.name;
                   return (
                     <TouchableOpacity
                       key={d.id}
-                      style={[s.pickerRow, selected && s.pickerRowSelected]}
+                      style={[s.pickerRow, selected && s.pickerRowSelected, { marginLeft: d.depth * DEPT_INDENT }]}
                       onPress={() => selectDepartment(d)}
                       activeOpacity={0.7}
                     >
                       <View style={s.pickerNameWrap}>
-                        <Text style={[s.pickerName, selected && s.pickerNameSelected]}>{d.name}</Text>
+                        <Text style={[s.pickerName, selected && s.pickerNameSelected]}>
+                          {d.depth > 0 && <Text style={s.treePrefix}>{'└ '}</Text>}
+                          {d.name}
+                        </Text>
                       </View>
                       <View style={[s.pickerCheck, selected && s.pickerCheckSelected]}>
                         {selected && <Text style={s.pickerCheckMark}>✓</Text>}
@@ -502,6 +508,7 @@ const s = StyleSheet.create({
   pickerAddNewBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.accentBlue + '0A' },
   pickerAddNewText: { color: C.accentBlue, fontSize: 14, fontWeight: '500' },
   pickerEmptyText: { color: C.textDim, fontSize: 12, padding: 20, textAlign: 'center' },
+  treePrefix: { color: C.textDim, fontWeight: '400' },
   spacerH40: { height: 40 },
   error: { color: C.red, fontSize: 12, marginTop: 8 },
   info: { color: C.accentTeal, fontSize: 12, marginTop: 8 },

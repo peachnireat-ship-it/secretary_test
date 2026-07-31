@@ -12,33 +12,13 @@ import {
   getCompanyEmployees, getCompanyDepartments,
   createDepartment, renameDepartment, deleteDepartment, setDepartmentParent, assignEmployeeDepartment,
 } from '../services/storage';
+import { buildDeptTree, flattenDeptTree, DEPT_INDENT } from '../utils/deptTree';
 
 const ALL_KEY = '__all__';
-const DEPT_INDENT = 10;
 // 부서 사이드바 폭 범위. 가장 긴 부서명에 맞춰 이 범위 안에서 자동으로 늘어난다(SIDEBAR_MIN_WIDTH~SIDEBAR_MAX_WIDTH).
 const SIDEBAR_MIN_WIDTH = 90;
 const SIDEBAR_MAX_WIDTH = 160;
 const SIDEBAR_PADDING_H = 10;
-
-// flat departments(id, name, parentId) 배열을 부모→자식 트리로 조립. 이미 방문한 id는 스킵해 순환 참조를 방어한다.
-function buildDeptTree(departments, parentId = null, visited = new Set()) {
-  return departments
-    .filter((d) => (d.parentId || null) === parentId && !visited.has(d.id))
-    .map((d) => ({ ...d, children: buildDeptTree(departments, d.id, new Set(visited).add(d.id)) }));
-}
-
-// 트리를 depth(들여쓰기 단계) 포함 평면 배열로 변환(부모 다음에 자식이 오는 순서 유지). 목록 렌더링·들여쓰기 계산에 사용.
-// isLast는 사이드바에 ├─/└─ 가지 기호를 그릴 때 자기 형제 목록에서 마지막인지 표시하는 값.
-function flattenDeptTree(nodes, depth = 0) {
-  const out = [];
-  nodes.forEach((node, i) => {
-    const isLast = i === nodes.length - 1;
-    const { children, ...rest } = node;
-    out.push({ ...rest, depth, isLast });
-    out.push(...flattenDeptTree(children, depth + 1));
-  });
-  return out;
-}
 
 // 특정 부서 자신 + 모든 하위 부서의 id 집합. 상위 부서 선택 chip에서 자기 자신/자손을 제외할 때 사용.
 function collectSelfAndDescendantIds(departments, rootId) {
@@ -305,11 +285,19 @@ export default function CompanyScreen() {
   const visibleGroups = showAll
     ? showAllGroups
     : employeeGroups.filter((g) => g.departmentName === effectiveSelectedDept);
-  // 전체 보기에서는 부서 구분 없이 이름 가나다순으로 표시. 특정 부서 선택 시에는 기존 순서(가입 순) 유지.
+  // 전체 보기에서는 부서 구분 없이 이름 가나다순으로 표시. 특정 부서 선택 시에는 직책 가나다순(동률 시 이름 가나다순)으로 표시.
   const visibleEmployees = visibleGroups.flatMap((group) =>
     group.employees.map((employee) => ({ employee, departmentName: group.departmentName }))
   );
-  if (showAll) visibleEmployees.sort((a, b) => a.employee.name.localeCompare(b.employee.name, 'ko'));
+  if (showAll) {
+    visibleEmployees.sort((a, b) => a.employee.name.localeCompare(b.employee.name, 'ko'));
+  } else {
+    visibleEmployees.sort((a, b) => {
+      const roleCompare = (a.employee.role || '').localeCompare(b.employee.role || '', 'ko');
+      if (roleCompare !== 0) return roleCompare;
+      return a.employee.name.localeCompare(b.employee.name, 'ko');
+    });
+  }
 
   return (
     <View style={s.root}>
