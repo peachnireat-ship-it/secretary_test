@@ -34,7 +34,8 @@ export default function LoginScreen({ onLogin }) {
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // 회사직원 선택 시에만 기존 회사 목록을 조회해 칩으로 보여준다(목록에 없으면 직접 입력).
+  // 회사직원 선택 시에만 기존 회사 목록을 조회해 콤보박스로 보여준다. 회사직원은 신규 회사를
+  // 만들 수 없으므로(회사관리자 가입 경로에서만 가능) 목록에 없으면 가입 자체가 서버에서 거부된다.
   useEffect(() => {
     if (accountType !== 'employee') return;
     getCompanyList().then(setCompanyList);
@@ -160,7 +161,6 @@ export default function LoginScreen({ onLogin }) {
   const filteredCompanies = companyList.filter((c) =>
     !companySearchTrimmed || c.name.toLowerCase().includes(companySearchTrimmed.toLowerCase())
   );
-  const companySearchHasExactMatch = companyList.some((c) => c.name.toLowerCase() === companySearchTrimmed.toLowerCase());
   // 부서 선택 모달에서 조직 구조(들여쓰기 + └ 계층 표시)를 보여주기 위해 flat departmentList를 트리 → 평면 변환.
   const flatDepartmentList = flattenDeptTree(buildDeptTree(departmentList));
 
@@ -384,13 +384,8 @@ export default function LoginScreen({ onLogin }) {
             </View>
 
             <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
-              {!!companySearchTrimmed && !companySearchHasExactMatch && (
-                <TouchableOpacity style={s.pickerAddNewBtn} onPress={() => selectCompany({ id: null, name: companySearchTrimmed })}>
-                  <Text style={s.pickerAddNewText}>+ “{companySearchTrimmed}” 신규 회사로 등록</Text>
-                </TouchableOpacity>
-              )}
               {filteredCompanies.length === 0 ? (
-                companySearchTrimmed ? null : <Text style={s.pickerEmptyText}>등록된 회사가 없습니다. 회사명을 검색해 새로 등록해주세요.</Text>
+                <Text style={s.pickerEmptyText}>등록된 회사가 없습니다. 회사관리자가 먼저 가입해야 합니다.</Text>
               ) : (
                 filteredCompanies.map((c) => {
                   const selected = team === c.name;
@@ -505,8 +500,6 @@ const s = StyleSheet.create({
   pickerCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
   pickerCheckSelected: { backgroundColor: C.accentBlue, borderColor: C.accentBlue },
   pickerCheckMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  pickerAddNewBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.accentBlue + '0A' },
-  pickerAddNewText: { color: C.accentBlue, fontSize: 14, fontWeight: '500' },
   pickerEmptyText: { color: C.textDim, fontSize: 12, padding: 20, textAlign: 'center' },
   treePrefix: { color: C.textDim, fontWeight: '400' },
   spacerH40: { height: 40 },

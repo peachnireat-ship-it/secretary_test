@@ -798,6 +798,14 @@ end;
 $$;
 grant execute on function signup_create_company_as_admin(text) to authenticated;
 
+-- 정책 변경(패치: patch_signup_employee_no_company_create.sql): 회사직원 가입 경로에서 신규
+-- 회사를 자동 생성하던 기존 동작을 제거했다. signup_create_company_as_admin()은 보안상 이미
+-- 존재하는 회사명이면 무조건 거부하도록 설계돼 있는데(기존 회사 관리자로 셀프 승격 방지 목적),
+-- 회사직원이 이 경로로 목록에 없는 회사명을 자유 입력하면 관리자 없이(is_company_admin=false)
+-- 회사가 만들어져 버려서 나중에 진짜 관리자가 같은 이름으로 가입하려 해도 "이미 사용 중인
+-- 회사명"으로 거부당하고 그 회사가 영구히 관리자 없는 고아 상태로 남는 문제가 있었다. 이제
+-- 신규 회사 생성은 signup_create_company_as_admin() 경로에서만 가능하고, 회사직원은 이미
+-- 존재하는 회사에만 합류할 수 있다(목록에 없으면 즉시 명확한 에러로 거부).
 create or replace function signup_join_company_as_employee(p_company_name text, p_department_name text)
 returns void
 language plpgsql
@@ -808,7 +816,6 @@ declare
   v_company_id uuid;
   v_department_id uuid;
   v_dept text;
-  v_recent_company_count integer;
 begin
   if p_company_name is null or btrim(p_company_name) = '' then
     raise exception '회사명을 입력해주세요.';
@@ -817,17 +824,7 @@ begin
 
   select id into v_company_id from companies where name = btrim(p_company_name);
   if v_company_id is null then
-    -- 보안 재감사(_review/secretary_test-20260723/02_security.md 발견 #6) MEDIUM 취약점 수정.
-    -- 목록에 없는 회사명으로 반복 가입하면 companies/departments 행이 rate limit 없이 무제한
-    -- 자동 생성될 수 있었다(리소스 고갈, companies_select_public으로 노출되는 회사 목록 UI 오염).
-    -- 계정별 추적 컬럼이 없어 전역 카운터로 스코프를 좁힌다 — 신규 회사 "생성" 경로에만 건다.
-    -- 이미 존재하는 회사에 합류하는 정상 케이스(위 select 성공 분기)는 이 체크와 무관하게 항상 허용.
-    select count(*) into v_recent_company_count
-      from companies where created_at > now() - interval '1 hour';
-    if v_recent_company_count >= 20 then
-      raise exception '신규 회사 등록 요청이 일시적으로 많습니다. 잠시 후 다시 시도하거나, 이미 등록된 회사라면 이름을 다시 확인해주세요.';
-    end if;
-    insert into companies (name) values (btrim(p_company_name)) returning id into v_company_id;
+    raise exception '등록되지 않은 회사입니다. 회사관리자가 먼저 가입해야 합니다.';
   end if;
 
   select id into v_department_id from departments where company_id = v_company_id and name = v_dept;

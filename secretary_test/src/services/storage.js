@@ -269,7 +269,12 @@ export async function completeCompanySetup(companyName, departmentName) {
     ? await supabase.rpc('signup_create_company_as_admin', { p_company_name: trimmedName })
     : await supabase.rpc('signup_join_company_as_employee', { p_company_name: trimmedName, p_department_name: departmentName?.trim() || '' });
   if (rpcErr) {
-    if (rpcErr.message?.includes('이미 사용 중인 회사명입니다')) throw new Error(rpcErr.message);
+    // signup_create_company_as_admin/signup_join_company_as_employee가 raise exception으로 던지는
+    // 에러는 SQLSTATE를 지정하지 않아 항상 plpgsql 기본값 'P0001'이고, 메시지는 이미 한국어로
+    // 다듬어진 사용자 안내문(회사명 미입력/중복/미등록 등)이므로 그대로 통과시킨다. 그 외(유니크 제약
+    // 위반, 네트워크 오류 등 원인 불명 raw 에러)는 코드가 달라 이 조건에 걸리지 않으므로 기존처럼
+    // 일반 메시지로 감춘다.
+    if (rpcErr.code === 'P0001') throw new Error(rpcErr.message);
     throw new Error('회사 정보 등록에 실패했습니다. 잠시 후 다시 시도해주세요.');
   }
 
