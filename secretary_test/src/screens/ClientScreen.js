@@ -13,6 +13,7 @@ import { commonStyles } from '../styles/common';
 import { getClients, addClient, updateClient, deleteClient, saveClients, getHistories, getTopics, getMeetingRecords, getProjects, getClientFavorites, toggleClientFavorite, sendClientEmail, searchDiscoverableProfiles, getMutualClientHistory, getMutualClientTopics } from '../services/storage';
 import { askClaude, buildClientSystem, josa과와, normalizeAIDates, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
+import { useLiveDepartments } from '../hooks/useLiveDepartments';
 import { useUser } from '../context/UserContext';
 import { priorityColor as priorityColorClient, projectStatusColor } from '../utils/colors';
 import { formatDate, ONE_DAY_MS } from '../utils/dateUtils';
@@ -148,6 +149,14 @@ export default function ClientScreen({ navigation, route }) {
     });
     return () => { cancelled = true; };
   }, [selectedClient?.linkedProfileId]);
+
+  // 실제 가입 회원과 연결된 담당자(linked_profile_id)들의 소속 부서를 Supabase Realtime으로
+  // 실시간 반영 — 회사 관리자가 부서를 바꾸면 이 화면을 새로고침하지 않아도 즉시 갱신된다.
+  const linkedProfileIds = useMemo(
+    () => clients.map((c) => c.linkedProfileId).filter(Boolean),
+    [clients]
+  );
+  const { departmentByProfileId } = useLiveDepartments(linkedProfileIds);
 
   // clientId -> history[] (createdAt desc) 사전 인덱싱 — O(n×m) 목록 렌더링 방지
   const historiesByClient = useMemo(() => {
@@ -695,7 +704,10 @@ export default function ClientScreen({ navigation, route }) {
               <View style={s.clientBody}>
                 <View style={s.clientRow}>
                   <Text style={s.clientName}>{client.name}</Text>
-                  <Text style={s.clientCompany}>{client.company}</Text>
+                  <Text style={s.clientCompany}>
+                    {client.company}
+                    {client.linkedProfileId && departmentByProfileId[client.linkedProfileId] ? ` · ${departmentByProfileId[client.linkedProfileId]}` : ''}
+                  </Text>
                 </View>
                 <Text style={s.clientRole}>{client.role}</Text>
                 <View style={s.clientMeta}>
@@ -912,7 +924,13 @@ export default function ClientScreen({ navigation, route }) {
                     </Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={s.detailCompany}>{selectedClient?.company} · {selectedClient?.role}</Text>
+                <Text style={s.detailCompany}>
+                  {[
+                    selectedClient?.company,
+                    selectedClient?.linkedProfileId ? departmentByProfileId[selectedClient.linkedProfileId] : null,
+                    selectedClient?.role,
+                  ].filter(Boolean).join(' · ')}
+                </Text>
               </View>
               <View style={s.editCloseRow}>
                 <TouchableOpacity onPress={() => openEditClient(selectedClient)} style={s.editClientBtn}>
@@ -1360,7 +1378,11 @@ export default function ClientScreen({ navigation, route }) {
                             </View>
                             <View style={commonStyles.flex1}>
                               <Text style={s.clientName}>{c.name}</Text>
-                              {c.company ? <Text style={s.clientRole}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                              {c.company ? (
+                                <Text style={s.clientRole}>
+                                  {[c.company, c.linkedProfileId ? departmentByProfileId[c.linkedProfileId] : null, c.role].filter(Boolean).join(' · ')}
+                                </Text>
+                              ) : null}
                             </View>
                           </View>
                         ))}

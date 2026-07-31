@@ -818,10 +818,11 @@ export async function getCompanyProjects() {
     const project = fromRow(projectRow, PROJECT_KEYMAP);
     project.ownerName = owner_name || '';
     project.ownerTeam = owner_team || '';
+    project.departmentName = department_name || '';
     project.relatedPeople = related_people || [];
-    const departmentName = department_name || '미배정';
-    if (!groups.has(departmentName)) groups.set(departmentName, []);
-    groups.get(departmentName).push(project);
+    const groupName = department_name || '미배정';
+    if (!groups.has(groupName)) groups.set(groupName, []);
+    groups.get(groupName).push(project);
   }
   return [...groups.entries()].map(([departmentName, projects]) => ({ departmentName, projects }));
 }
@@ -893,6 +894,43 @@ export async function deleteDepartment(id) {
 export async function assignEmployeeDepartment(employeeId, departmentId) {
   const { error } = await supabase.rpc('assign_employee_department', { p_employee_id: employeeId, p_department_id: departmentId });
   if (error) throw error;
+}
+
+// 담당자 관리(ClientScreen.js)에서 linked_profile_id로 연결된 상대방의 소속 부서명을 조회한다.
+// profile_department_public/departments 둘 다 permissive select RLS(누구나 조회 가능)라
+// anon/authenticated 상관없이 호출 가능. 두 테이블은 각각 별개 RLS 정책이 걸린 별개 테이블이라
+// PostgREST 임베드 조인이 안 될 수 있어, 안전하게 두 번 조회한 뒤 메모리에서 매핑한다.
+// 반환: { [profileId]: departmentName | null } — department_id가 없거나 조회 실패면 그 profileId는
+// 결과에 없거나 null. 실패해도 화면을 막지 않도록 예외를 던지지 않고 빈 객체를 반환한다.
+export async function getProfileDepartments(profileIds) {
+  const ids = [...new Set((profileIds || []).filter(Boolean))];
+  if (ids.length === 0) return {};
+  try {
+    const { data: links, error: linkErr } = await supabase
+      .from('profile_department_public')
+      .select('profile_id, department_id')
+      .in('profile_id', ids);
+    if (linkErr) throw linkErr;
+
+    const deptIds = [...new Set((links || []).map((l) => l.department_id).filter(Boolean))];
+    let deptNameById = new Map();
+    if (deptIds.length > 0) {
+      const { data: depts, error: deptErr } = await supabase
+        .from('departments')
+        .select('id, name')
+        .in('id', deptIds);
+      if (deptErr) throw deptErr;
+      deptNameById = new Map((depts || []).map((d) => [d.id, d.name]));
+    }
+
+    const result = {};
+    for (const link of links || []) {
+      result[link.profile_id] = link.department_id ? (deptNameById.get(link.department_id) || null) : null;
+    }
+    return result;
+  } catch {
+    return {};
+  }
 }
 
 // ── Messages (교차 계정 배달: mailbox_owner_id로 조회, sender_id로 RLS 검증) ──

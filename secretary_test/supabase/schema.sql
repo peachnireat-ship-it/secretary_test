@@ -56,6 +56,20 @@ create table if not exists profiles (
   created_at timestamptz not null default now()
 );
 
+-- ── profile_department_public (profiles.department_id의 공개 조회용 미러) ──
+-- profiles 테이블은 RLS로 타인의 department_id를 볼 수 없어서, 담당자 관리 화면에서 상대방의
+-- 최신 부서를 실시간으로 알 수 있는 방법이 없었다. 이 표를 공개(permissive) RLS로 별도로 두고
+-- profiles.department_id 변경 시 트리거(sync_profile_department_public, 아래 assign_employee_department
+-- 근처에 정의)로 동기화하면, 이미 공개된 departments 테이블과 조합해 부서 배정 여부를
+-- privacy-safe하게 노출하면서 Supabase Realtime 구독 대상으로 쓸 수 있다.
+-- 부서명 자체는 중복 저장하지 않는다(이미 공개된 departments 테이블에서 별도 조회) — 부서명
+-- 변경 시 동기화 부담을 없애기 위함. company_id도 필요 없다(회사명은 clients.company 텍스트 그대로 사용).
+create table if not exists profile_department_public (
+  profile_id uuid primary key references profiles(id) on delete cascade,
+  department_id uuid references departments(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
 -- ── schedules ────────────────────────────────────────────
 create table if not exists schedules (
   id text primary key,
@@ -288,6 +302,7 @@ alter table projects enable row level security;
 alter table meeting_records enable row level security;
 alter table client_favorites enable row level security;
 alter table messages enable row level security;
+alter table profile_department_public enable row level security;
 
 -- ── RLS 무한 재귀 방지 헬퍼 함수 (SECURITY DEFINER) ────────
 -- profiles를 정책 내부에서 직접 서브쿼리하면 profiles 자신의 RLS와 재귀할 위험이 있어
@@ -326,6 +341,14 @@ create policy departments_select_same_company on departments
 -- permissive 정책이라 departments_select_same_company와는 OR로 합쳐져 충돌 없다.
 drop policy if exists departments_select_public on departments;
 create policy departments_select_public on departments
+  for select using (true);
+
+-- ── profile_department_public 정책: 전체 공개 조회 ─────────
+-- departments_select_public과 동일한 이유(부서 배정 여부는 비민감 정보, 이미 공개된 departments와
+-- 조합해야만 의미가 있는 데이터)로 permissive select-only 정책을 둔다. insert/update/delete는
+-- sync_profile_department_public() 트리거(SECURITY DEFINER)만 수행하므로 별도 정책이 필요 없다.
+drop policy if exists profile_department_public_select_public on profile_department_public;
+create policy profile_department_public_select_public on profile_department_public
   for select using (true);
 
 -- ── profiles 정책: 본인만 조회/수정 ───────────────────────
@@ -407,6 +430,16 @@ grant execute on function get_company_colleagues() to authenticated;
 -- (clients_all_own) 관리자가 다른 직원의 clients를 직접 조회할 수 없어서, 여기서도 SECURITY
 -- DEFINER로 그 프로젝트 소유자(c.user_id = p.user_id) 소유이면서 해당 프로젝트에 실제로 연결된
 -- id만 한정해 안전하게 노출한다(patch_company_project_related_people.sql 참고).
+-- 사본(origin_project_id is not null) 보정: sync_project_mirrors()(patch_project_mirror.sql)가
+-- "관련 인물로 태그된 회사 직원" 명의로 만들어주는 프로젝트 사본은 client_ids를 의도적으로 빈
+-- 배열로 저장한다(사본 소유자가 원본 소유자의 개인 담당자 목록을 열람할 권한이 없으므로). 이
+-- 함수가 사본 행 자신(p.user_id/p.client_ids)만 보고 등록자·관련 인물을 계산하면, 회사 관리자가
+-- "직원이 관련 인물로 지정된 프로젝트"를 조회할 때 등록자가 실제 등록자가 아니라 사본 소유자인
+-- 그 직원 자신으로 잘못 나오고, 관련 인물은 항상 빈 배열로 나온다. origin_project_id로 원본을
+-- left join해 원본이 있으면 원본의 소유자 프로필/부서/client_ids를 쓰고(coalesce), 없으면(사본이
+-- 아닌 일반 프로젝트) 기존처럼 자기 자신을 쓰도록 한다. sync_project_mirrors()가 "사본은 다시
+-- 동기화 대상이 되지 않는다"고 보장하므로 origin_project_id 체인은 항상 최대 1단계다(patch_
+-- company_projects_mirror_origin.sql 참고).
 create or replace function get_company_projects()
 returns table (
   id text, title text, deadline text, start_date text, status text, priority text, notes text,
@@ -419,17 +452,22 @@ set search_path = public
 as $$
   select p.id, p.title, p.deadline, p.start_date, p.status, p.priority, p.notes, p.progress,
     p.client_ids, p.owner_client_id, p.meeting_record_ids, p.origin_project_id, p.created_at, p.updated_at,
-    pr.name, pr.team, d.name,
+    coalesce(orig_pr.name, pr.name),
+    coalesce(orig_pr.team, pr.team),
+    coalesce(orig_d.name, d.name),
     coalesce(
       (select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'company', c.company, 'role', c.role))
        from clients c
-       where c.user_id = p.user_id
-         and c.id in (select jsonb_array_elements_text(coalesce(p.client_ids, '[]'::jsonb)))),
+       where c.user_id = coalesce(orig.user_id, p.user_id)
+         and c.id in (select jsonb_array_elements_text(coalesce(coalesce(orig.client_ids, p.client_ids), '[]'::jsonb)))),
       '[]'::jsonb
     )
   from projects p
   join profiles pr on pr.id = p.user_id
   left join departments d on d.id = pr.department_id
+  left join projects orig on orig.id = p.origin_project_id
+  left join profiles orig_pr on orig_pr.id = orig.user_id
+  left join departments orig_d on orig_d.id = orig_pr.department_id
   where my_is_company_admin() and pr.company_id = my_company_id()
   order by p.created_at desc
 $$;
@@ -598,6 +636,30 @@ begin
 end;
 $$;
 grant execute on function assign_employee_department(uuid, uuid) to authenticated;
+
+-- profiles.department_id가 바뀔 때마다 profile_department_public(위 profiles 테이블 정의 근처 참고)에
+-- 미러링하는 트리거. assign_employee_department()의 update뿐 아니라 회원가입 RPC의 최초 insert,
+-- delete_department()가 departments(id) on delete set null로 department_id를 null로 되돌리는
+-- 경우까지 전부 일반 insert/update로 처리되므로 이 트리거 하나로 모든 경로를 커버한다(별도 처리 불필요).
+create or replace function sync_profile_department_public() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into profile_department_public (profile_id, department_id, updated_at)
+  values (new.id, new.department_id, now())
+  on conflict (profile_id) do update set department_id = excluded.department_id, updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_sync_profile_department_public on profiles;
+create trigger trg_sync_profile_department_public
+after insert or update of department_id on profiles
+for each row execute function sync_profile_department_public();
+
+-- 기존 프로필 데이터 백필(신규 설치/최초 실행 시 1회성, 이미 있으면 무시).
+insert into profile_department_public (profile_id, department_id)
+  select id, department_id from profiles
+  on conflict (profile_id) do nothing;
 
 -- 설정 화면 "계정 전환" 목록을 ROSTER(하드코딩 테스트 계정)에서 DB의 모든 가입 계정으로
 -- 확장하기 위한 조회 함수. get_company_colleagues()와 동일한 이유(RLS는 행 단위 통제만
@@ -961,3 +1023,14 @@ drop trigger if exists trg_validate_project_client_ids on projects;
 create trigger trg_validate_project_client_ids
   before insert or update on projects
   for each row execute function validate_client_ids_ownership();
+
+-- ── Supabase Realtime publication ──────────────────────────
+-- 이 프로젝트는 지금까지 Supabase Realtime(웹소켓 push)을 전혀 쓴 적이 없다 — 첫 도입.
+-- Realtime으로 postgres_changes를 받으려면 테이블을 supabase_realtime publication에 명시적으로
+-- 추가해야 한다(RLS만 permissive여도 publication에 없으면 push가 오지 않는다). 담당자 관리
+-- 화면(ClientScreen.js)에서 상대방 부서 변경을 실시간으로 반영하기 위해 profile_department_public만
+-- 추가한다(useLiveDepartments 훅 참고).
+-- 주의: 위 SQL만으로 안 될 수 있다 — Supabase Dashboard > Database > Replication에서도 이 테이블에
+-- 대해 Realtime 토글이 켜져 있는지 별도로 확인해야 한다(대시보드 설정이 publication 멤버십과
+-- 별개로 취급되는 프로젝트가 있음).
+alter publication supabase_realtime add table profile_department_public;

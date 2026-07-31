@@ -1927,7 +1927,7 @@ export default function ProjectScreen({ navigation, route }) {
                   </View>
 
                   <Text style={s.inputLabel}>담당 부서 · 담당자</Text>
-                  <Text style={s.viewText}>{companyDetailProject.ownerTeam} · {companyDetailProject.ownerName}</Text>
+                  <Text style={s.viewText}>{companyDetailProject.ownerTeam} · {companyDetailProject.departmentName || '부서 미배정'} · {companyDetailProject.ownerName}</Text>
 
                   <View style={s.viewBadgeRow}>
                     <View style={[s.statusBadge, { borderColor: statusColor(companyDetailProject.status) + '66', backgroundColor: statusColor(companyDetailProject.status) + '18' }]}>
