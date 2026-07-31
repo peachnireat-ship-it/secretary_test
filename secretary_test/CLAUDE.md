@@ -377,6 +377,32 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ## 세션 작업 이력
 
+### 2026-07-31
+
+#### 부서 관리 모달에서 직원 소속 부서 변경이 적용되지 않는 버그 수정
+
+**증상**: 회사관리 화면 부서 관리 모달에서 관리자가 직원의 소속 부서를 변경해도 반영되지 않음.
+
+**진단**: 서비스 롤 키로 5개 부서 관리 RPC(`create_department`/`rename_department`/`set_department_parent`/`delete_department`/`assign_employee_department`)가 전부 라이브 DB에 정상 배포되어 있음을 먼저 확인(P0001 커스텀 예외가 반환되어 함수 자체는 존재함이 확인됨 — "함수 없음" 에러가 아니었음). 이후 실제 회사 관리자 계정(현대건설, 김설)의 세션을 매직링크(OTP)로 생성해(비밀번호 변경 없이) `assign_employee_department` RPC를 직접 호출·재현한 결과, RPC는 에러 없이 성공을 반환하지만 `profiles.department_id`가 실제로는 변경되지 않음을 확인.
+
+**근본 원인**: `profiles` 테이블의 BEFORE UPDATE 트리거 `trg_prevent_privileged_profile_self_update`(원래 "직원이 자기 프로필을 직접 update해서 부서/권한을 셀프 승격하는 것"을 막기 위한 트리거)가 **본인 행인지 검사하지 않고** `department_id`/`company_id`/`is_company_admin` 변경을 무조건 원래 값으로 되돌리는 구조였음. 회원가입 RPC(`signup_create_company_as_admin`/`signup_join_company_as_employee`)는 UPDATE 전에 `app.bypass_privilege_trigger` 세션 플래그를 켜서 이 트리거를 우회하지만, 나중에 추가된 `assign_employee_department()`(07-30 `54cb2f9`)에는 이 처리가 빠져 있어 관리자가 정당하게 호출해도 조용히 무시됨.
+
+**해결**: `assign_employee_department()`에도 UPDATE 직전 `perform set_config('app.bypass_privilege_trigger', 'true', true);` 추가 (`schema.sql` 수정 + `patch_assign_employee_department_bypass_trigger.sql` 신규 작성). 클라이언트 코드(`CompanyScreen.js`/`storage.js`)는 문제없어 변경 없음. 사용자가 Supabase SQL Editor에서 패치 실행 후 실기기로 직접 재현·정상 반영 확인 완료.
+
+**참고**: 조사 중 `my_is_company_admin()`/`my_company_id()`가 매칭되는 profiles 행이 없을 때 `false`가 아닌 `NULL`을 반환해, plpgsql `if not X then raise exception`에서 `NULL`이 `false`처럼 취급되어 권한 체크를 통과해버리는 별개의 잠재 이슈를 발견함(정상 로그인 사용자는 영향 없음, 서비스 롤/비정상 세션 호출 시에만 해당). 이번 버그와 무관해 미조치 — 추후 보안 리뷰 시 참고.
+
+#### 부서 관리 모달에서 직원 부서 변경 시 직원 목록 정렬 순서가 흔들리는 버그 수정
+
+**증상**: 부서 관리 모달에서 특정 직원의 소속 부서를 바꾸면, 그 직원뿐 아니라 건드리지 않은 다른 직원들까지 포함해 "직원별 소속 부서" 목록·전체 직원 목록의 표시 순서가 매번 바뀜.
+
+**진단**: 실제 관리자 세션(매직링크, 비밀번호 변경 없음)으로 `get_company_colleagues()`를 변경 전/후/원복 후 3번 호출해 반환 순서를 직접 비교. `department_id`를 원래 값으로 되돌려도(값 자체는 변화 없음) 순서는 원상복구되지 않아, "값이 바뀌어서"가 아니라 "그 행에 UPDATE가 발생해서" 순서가 흔들린다는 것을 확인.
+
+**근본 원인**: `get_company_colleagues()`(`schema.sql`)에 `ORDER BY`가 없었음. Postgres는 ORDER BY 없이는 반환 순서를 보장하지 않고 대체로 물리적 튜플 저장 순서를 따르는데, `assign_employee_department()`의 UPDATE가 실행되면 해당 행이 새 튜플로 다시 쓰이면서 이 물리적 순서가 바뀌어버림. 같은 파일의 `get_company_projects()`(`order by p.created_at desc`), `get_all_accounts_for_switch()`(`order by p.name`)는 이미 명시적 정렬이 있었는데 `get_company_colleagues()`만 빠져 있던 불일치였음.
+
+**해결**: `get_company_colleagues()`에 `order by p.created_at, p.id` 추가(`schema.sql` 수정 + `patch_company_colleagues_order.sql` 신규 작성, Supabase SQL Editor 실행 필요). 가입 순서 기준으로 고정해 부서 재배치 여부와 무관하게 항상 동일한 순서가 나오도록 함.
+
+---
+
 ### 2026-07-30
 
 #### 일정 관련 인물 세팅 확인창 추가, 담당자 즐겨찾기 정렬 (`092e0f4`)
