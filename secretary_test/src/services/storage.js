@@ -237,6 +237,17 @@ export async function getCompanyList() {
   return data || [];
 }
 
+// 회원가입(회사직원) 화면에서 선택한 회사에 이미 구성된 부서 목록을 콤보박스로 보여주기 위한 조회.
+// 로그인 전(anon) 상태에서 호출되므로 departments_select_public RLS 정책이 필요하다
+// (supabase/patch_departments_select_public.sql). 목록 조회 실패가 가입 자체를 막으면 안 되므로
+// 에러를 던지지 않고 빈 배열을 반환한다(이 경우 화면은 기존 TextInput 수기 입력으로 폴백한다).
+export async function getDepartmentsForSignup(companyId) {
+  if (!companyId) return [];
+  const { data, error } = await supabase.from('departments').select('id, name').eq('company_id', companyId).order('name');
+  if (error) return [];
+  return data || [];
+}
+
 // 회원가입 시 회사 등록 RPC(signup_create_company_as_admin/signup_join_company_as_employee)가
 // 실패해(대표적으로 회사명 중복) profiles.company_id가 비어있는 상태(user.companySetupPending)를
 // 설정 화면에서 재시도하기 위한 함수. 원래 가입 시 선택했던 accountType(관리자/직원)은

@@ -319,6 +319,15 @@ drop policy if exists departments_select_same_company on departments;
 create policy departments_select_same_company on departments
   for select using (company_id = my_company_id());
 
+-- 회원가입 화면(회사직원)에서 선택한 회사에 이미 구성된 부서 목록을 콤보박스로 보여줘야 하는데,
+-- 회원가입 시점은 미로그인(anon) 상태라 my_company_id()가 항상 null이라서 위 정책만으로는
+-- 조회가 불가능하다. companies_select_public과 완전히 동일한 패턴(부서명도 회사명과 같은 수준의
+-- 비민감 정보이며, 회사명 자체가 이미 전체 공개돼 있음)으로 공개 조회도 허용한다.
+-- permissive 정책이라 departments_select_same_company와는 OR로 합쳐져 충돌 없다.
+drop policy if exists departments_select_public on departments;
+create policy departments_select_public on departments
+  for select using (true);
+
 -- ── profiles 정책: 본인만 조회/수정 ───────────────────────
 drop policy if exists profiles_select_own on profiles;
 create policy profiles_select_own on profiles

@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Alert } from '../utils/alertCompat';
 import { C } from '../theme';
-import { login, signup, getCompanyList } from '../services/storage';
+import { login, signup, getCompanyList, getDepartmentsForSignup } from '../services/storage';
 
 // 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
 const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
@@ -26,6 +26,9 @@ export default function LoginScreen({ onLogin }) {
   const [companyList, setCompanyList] = useState([]);
   const [showCompanyPicker, setShowCompanyPicker] = useState(false);
   const [companySearch, setCompanySearch] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState(null);
+  const [departmentList, setDepartmentList] = useState([]);
+  const [showDepartmentPicker, setShowDepartmentPicker] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,6 +38,17 @@ export default function LoginScreen({ onLogin }) {
     if (accountType !== 'employee') return;
     getCompanyList().then(setCompanyList);
   }, [accountType]);
+
+  // 선택한 회사에 이미 구성된 부서 목록을 조회한다. 목록이 없으면(신규 회사이거나 관리자가 아직
+  // 부서관리를 안 한 경우) departmentList는 빈 배열로 남아 화면에서 TextInput 수기 입력으로 폴백한다.
+  useEffect(() => {
+    if (accountType !== 'employee' || !selectedCompanyId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDepartmentList([]);
+      return;
+    }
+    getDepartmentsForSignup(selectedCompanyId).then(setDepartmentList);
+  }, [accountType, selectedCompanyId]);
 
   function switchMode(next) {
     setMode(next);
@@ -50,6 +64,9 @@ export default function LoginScreen({ onLogin }) {
     setCompanyList([]);
     setShowCompanyPicker(false);
     setCompanySearch('');
+    setSelectedCompanyId(null);
+    setDepartmentList([]);
+    setShowDepartmentPicker(false);
   }
 
   function openCompanyPicker() {
@@ -57,10 +74,22 @@ export default function LoginScreen({ onLogin }) {
     setShowCompanyPicker(true);
   }
 
-  function selectCompany(name) {
-    setTeam(name);
+  function selectCompany(company) {
+    setTeam(company.name);
+    setSelectedCompanyId(company.id);
+    setDepartmentName(''); // 다른 회사의 부서명이 남아있으면 안 되므로 초기화
     setError('');
     setShowCompanyPicker(false);
+  }
+
+  function openDepartmentPicker() {
+    setShowDepartmentPicker(true);
+  }
+
+  function selectDepartment(dept) {
+    setDepartmentName(dept.name);
+    setError('');
+    setShowDepartmentPicker(false);
   }
 
   async function handleLogin() {
@@ -208,14 +237,22 @@ export default function LoginScreen({ onLogin }) {
               {accountType === 'employee' && (
                 <>
                   <Text style={s.label}>부서명</Text>
-                  <TextInput
-                    style={s.input}
-                    value={departmentName}
-                    onChangeText={(v) => { setDepartmentName(v); setError(''); }}
-                    placeholder="부서명"
-                    placeholderTextColor={C.textDim}
-                    autoCorrect={false}
-                  />
+                  {departmentList.length > 0 ? (
+                    <TouchableOpacity style={s.pickerTrigger} onPress={openDepartmentPicker} activeOpacity={0.8}>
+                      <Text style={[s.pickerTriggerText, departmentName && s.pickerTriggerTextActive]}>
+                        {departmentName || '부서 선택'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TextInput
+                      style={s.input}
+                      value={departmentName}
+                      onChangeText={(v) => { setDepartmentName(v); setError(''); }}
+                      placeholder="부서명"
+                      placeholderTextColor={C.textDim}
+                      autoCorrect={false}
+                    />
+                  )}
                 </>
               )}
 
@@ -345,7 +382,7 @@ export default function LoginScreen({ onLogin }) {
 
             <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
               {!!companySearchTrimmed && !companySearchHasExactMatch && (
-                <TouchableOpacity style={s.pickerAddNewBtn} onPress={() => selectCompany(companySearchTrimmed)}>
+                <TouchableOpacity style={s.pickerAddNewBtn} onPress={() => selectCompany({ id: null, name: companySearchTrimmed })}>
                   <Text style={s.pickerAddNewText}>+ “{companySearchTrimmed}” 신규 회사로 등록</Text>
                 </TouchableOpacity>
               )}
@@ -358,11 +395,52 @@ export default function LoginScreen({ onLogin }) {
                     <TouchableOpacity
                       key={c.id}
                       style={[s.pickerRow, selected && s.pickerRowSelected]}
-                      onPress={() => selectCompany(c.name)}
+                      onPress={() => selectCompany(c)}
                       activeOpacity={0.7}
                     >
                       <View style={s.pickerNameWrap}>
                         <Text style={[s.pickerName, selected && s.pickerNameSelected]}>{c.name}</Text>
+                      </View>
+                      <View style={[s.pickerCheck, selected && s.pickerCheckSelected]}>
+                        {selected && <Text style={s.pickerCheckMark}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+              <View style={s.spacerH40} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── 부서명 선택 (콤보박스, 검색 없이 목록만) ── */}
+      <Modal visible={showDepartmentPicker} animationType="slide" transparent onRequestClose={() => setShowDepartmentPicker(false)}>
+        <View style={s.modalOverlay}>
+          <View style={[s.sheetBase, s.pickerSheet]}>
+            <View style={s.pickerHeader}>
+              <TouchableOpacity onPress={() => setShowDepartmentPicker(false)} style={s.pickerHeaderBtn}>
+                <Text style={s.pickerCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={s.pickerTitle}>부서 선택</Text>
+              <View style={s.pickerHeaderBtn} />
+            </View>
+
+            <ScrollView style={s.pickerList} showsVerticalScrollIndicator={false}>
+              {departmentList.length === 0 ? (
+                <Text style={s.pickerEmptyText}>등록된 부서가 없습니다.</Text>
+              ) : (
+                departmentList.map((d) => {
+                  const selected = departmentName === d.name;
+                  return (
+                    <TouchableOpacity
+                      key={d.id}
+                      style={[s.pickerRow, selected && s.pickerRowSelected]}
+                      onPress={() => selectDepartment(d)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={s.pickerNameWrap}>
+                        <Text style={[s.pickerName, selected && s.pickerNameSelected]}>{d.name}</Text>
                       </View>
                       <View style={[s.pickerCheck, selected && s.pickerCheckSelected]}>
                         {selected && <Text style={s.pickerCheckMark}>✓</Text>}
