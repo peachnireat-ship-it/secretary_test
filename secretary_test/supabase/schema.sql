@@ -15,12 +15,18 @@ create table if not exists companies (
 );
 
 -- ── departments (회사 소속 부서) ───────────────────────────
+-- parent_department_id: 상위 부서(트리 구조, 깊이 제한 없음). on delete restrict로 하위 부서가
+-- 있는 부서는 삭제 자체가 DB 레벨에서 막힌다(delete_department() 함수도 더 친절한 한국어
+-- 에러 메시지를 위해 동일한 검증을 먼저 함). 자세한 배경은 patch_department_hierarchy.sql 참고.
 create table if not exists departments (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
   name text not null,
+  parent_department_id uuid references departments(id) on delete restrict,
   created_at timestamptz not null default now()
 );
+alter table departments add column if not exists parent_department_id uuid references departments(id) on delete restrict;
+create index if not exists departments_parent_idx on departments(parent_department_id);
 
 -- ── profiles ─────────────────────────────────────────────
 -- auth.users(Supabase Auth)에 없는 name/role/team 등 앱 전용 필드를 보관.
@@ -377,6 +383,7 @@ as $$
   select p.id, p.name, p.role, p.department_id, p.is_company_admin
   from profiles p
   where my_company_id() is not null and p.company_id = my_company_id()
+  order by p.created_at, p.id
 $$;
 grant execute on function get_company_colleagues() to authenticated;
 
@@ -419,12 +426,13 @@ as $$
 $$;
 grant execute on function get_company_projects() to authenticated;
 
--- 회사 관리자용 부서 관리(조직 구조 세팅): 부서 추가/이름변경/삭제, 직원 소속 부서 재배치.
--- departments 테이블은 조회(departments_select_same_company)만 RLS로 허용되어 있고 insert/
--- update/delete 정책이 없으므로(회원가입 시 signup_join_company_as_employee()가 SECURITY
--- DEFINER로만 생성), get_company_projects()와 동일한 패턴으로 관리자 전용 CRUD 함수를 제공한다.
--- 자세한 배경은 patch_department_management.sql 참고.
-create or replace function create_department(p_name text)
+-- 회사 관리자용 부서 관리(조직 구조 세팅): 부서 추가/이름변경/삭제/상위부서 변경, 직원 소속
+-- 부서 재배치. departments 테이블은 조회(departments_select_same_company)만 RLS로 허용되어
+-- 있고 insert/update/delete 정책이 없으므로(회원가입 시 signup_join_company_as_employee()가
+-- SECURITY DEFINER로만 생성), get_company_projects()와 동일한 패턴으로 관리자 전용 CRUD
+-- 함수를 제공한다. 자세한 배경은 patch_department_management.sql, 계층 구조(parent_department_id)
+-- 관련 배경은 patch_department_hierarchy.sql 참고.
+create or replace function create_department(p_name text, p_parent_department_id uuid default null)
 returns uuid
 language plpgsql security definer
 set search_path = public
@@ -447,11 +455,57 @@ begin
   if exists (select 1 from departments where company_id = v_company_id and name = v_name) then
     raise exception '이미 존재하는 부서명입니다.';
   end if;
-  insert into departments (company_id, name) values (v_company_id, v_name) returning id into v_id;
+  if p_parent_department_id is not null
+     and not exists (select 1 from departments where id = p_parent_department_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 상위 부서입니다.';
+  end if;
+  insert into departments (company_id, name, parent_department_id)
+    values (v_company_id, v_name, p_parent_department_id) returning id into v_id;
   return v_id;
 end;
 $$;
-grant execute on function create_department(text) to authenticated;
+grant execute on function create_department(text, uuid) to authenticated;
+
+-- 부서의 상위 부서를 변경(트리 재구성)한다. 자기 자신을 상위로 지정하거나, 자신의 하위
+-- 부서(직계·조상 포함)를 상위로 지정하면 순환 참조가 생기므로 재귀적으로 조상 체인을 타고
+-- 올라가며 p_department_id 자신이 나오면 거부한다.
+create or replace function set_department_parent(p_department_id uuid, p_parent_department_id uuid)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+  v_cursor uuid;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 부서 구조를 변경할 수 있습니다.';
+  end if;
+  v_company_id := my_company_id();
+  if not exists (select 1 from departments where id = p_department_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 부서입니다.';
+  end if;
+  if p_parent_department_id is not null then
+    if p_parent_department_id = p_department_id then
+      raise exception '부서를 자기 자신의 상위 부서로 지정할 수 없습니다.';
+    end if;
+    if not exists (select 1 from departments where id = p_parent_department_id and company_id = v_company_id) then
+      raise exception '존재하지 않거나 접근 권한이 없는 상위 부서입니다.';
+    end if;
+    -- 순환 참조 방지: 지정하려는 상위 부서의 조상 체인을 타고 올라가며 p_department_id가
+    -- 나오면(=p_department_id의 하위 부서를 상위로 지정하려는 것) 거부한다.
+    v_cursor := p_parent_department_id;
+    while v_cursor is not null loop
+      if v_cursor = p_department_id then
+        raise exception '하위 부서를 상위 부서로 지정할 수 없습니다(순환 참조).';
+      end if;
+      select parent_department_id into v_cursor from departments where id = v_cursor;
+    end loop;
+  end if;
+  update departments set parent_department_id = p_parent_department_id where id = p_department_id;
+end;
+$$;
+grant execute on function set_department_parent(uuid, uuid) to authenticated;
 
 create or replace function rename_department(p_department_id uuid, p_new_name text)
 returns void
@@ -495,6 +549,12 @@ begin
   if not exists (select 1 from departments where id = p_department_id and company_id = v_company_id) then
     raise exception '존재하지 않거나 접근 권한이 없는 부서입니다.';
   end if;
+  -- 하위 부서가 있으면 삭제를 막는다(parent_department_id의 on delete restrict와 동일한 제약을
+  -- 더 친절한 한국어 메시지로 먼저 검증). 하위 부서를 먼저 삭제하거나 다른 곳으로 옮긴 뒤
+  -- 다시 시도해야 한다.
+  if exists (select 1 from departments where parent_department_id = p_department_id) then
+    raise exception '하위 부서가 있는 부서는 삭제할 수 없습니다. 하위 부서를 먼저 삭제하거나 이동해주세요.';
+  end if;
   -- profiles.department_id는 on delete set null(위 profiles 테이블 정의)이라 소속 직원은
   -- 이 삭제만으로 자동으로 미배정 처리된다.
   delete from departments where id = p_department_id;
@@ -520,6 +580,11 @@ begin
   if p_department_id is not null and not exists (select 1 from departments where id = p_department_id and company_id = v_company_id) then
     raise exception '존재하지 않거나 접근 권한이 없는 부서입니다.';
   end if;
+  -- prevent_privileged_profile_self_update 트리거(profiles의 department_id 등 특권 컬럼 변경을
+  -- BEFORE UPDATE에서 원상복구하는 셀프 승격 방지 트리거)가 이 관리자발 UPDATE에도 무조건 적용되어
+  -- department_id를 조용히 원래 값으로 되돌리는 문제가 있었다. signup 계열 RPC와 동일하게
+  -- app.bypass_privilege_trigger를 켜서 이 함수 내부의 정당한 UPDATE만 트리거를 통과시킨다.
+  perform set_config('app.bypass_privilege_trigger', 'true', true);
   update profiles set department_id = p_department_id where id = p_employee_id;
 end;
 $$;
