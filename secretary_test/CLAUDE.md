@@ -377,6 +377,32 @@ Pyannote 서버 URL은 설정 탭에서 입력. `pyannote-server/` 폴더에 서
 
 ## 세션 작업 이력
 
+### 2026-08-04
+
+#### 부서 순서변경, 직책 관리, 프로젝트 사본 보안 강화 커밋·배포 (`c90298c`, `1344d5c`)
+
+이전 세션(07-31~08-03)에서 로컬에 작성만 되어 있고 git에 커밋되지 않은 채 워킹트리에 남아있던 기능들을 이번 세션에서 커밋·푸시함. 코드 자체는 새로 작성한 것이 아니라 기존 세션 작업물을 정리·기록한 것.
+
+- **부서 순서변경(▲▼)**: `departments.sort_order` 컬럼 + `move_department()` RPC(같은 상위 부서를 가진 형제 그룹 내에서만 이동) — `patch_department_sort_order.sql`
+- **직책 관리**: `positions` 테이블(추가/이름변경/삭제/순서변경), 직원별 직책 배정 — `patch_position_management.sql`. 구버전 자유 텍스트 기반 `set_employee_role()`은 더 이상 호출하지 않지만 무해해 유지(`patch_set_employee_role.sql`)
+- **직책별 "하위 프로젝트 조회 허용" 권한**: `positions.can_view_subordinate_projects` 플래그 — 켜진 직책의 직원은 프로젝트 메뉴 "회사 전체"에서 본인 직급 이하 동료 프로젝트 조회 가능(기존엔 회사 관리자만 가능했음) — `patch_position_project_visibility.sql`
+- **프로젝트 사본(mirror) 소유자용 원본 정보 조회**: `get_project_mirror_info()` RPC로 사본 소유자가 원본 등록자 이름/팀/부서, 관련 인물을 조회 가능 — `patch_project_mirror_readonly_info.sql`. `ProjectScreen.js`에 조회 전용 "조회 전용" 칩 및 상세 모달 추가
+- **보안 수정**: `addProject`/`updateProject`에서 `originProjectId` 필드를 화이트리스트 제외(특히 필드 화이트리스트가 없는 AI `update_project` 액션 경로 대응)
+- **ROSTER 테스트 계정 버그 수정**: 회사관리 화면에서 관리자가 ROSTER 계정에 부서/직책을 배정해도 로그인 시 그 배정이 무시되던 불일치 수정(`hydrateUserFromSession`)
+- 프로젝트 상세(회사 전체 조회 전용)에 시작일 표시, 설정 화면 "내 정보 수정"에 이름 필드 추가
+
+#### 프로젝트 사본 `origin_project_id` 위조 방지 트리거 라이브 미배포 발견 및 긴급 패치 (`adfe517`)
+
+**배경**: 위 커밋에 포함된 `trg_prevent_client_origin_project_id_write` 트리거(schema.sql)의 라이브 배포 여부를 확인하던 중, 08-03 세션 메모리에는 "사용자가 배포 완료로 보고"라고 기록돼 있었으나 실제로는 배포되지 않은 상태임을 발견.
+
+**검증 방법**: REST API로 `positions`/`profiles.position_id` 등 컬럼 존재, 각 RPC(`move_department`/`create_position`/`move_position`/`assign_employee_position`/`set_position_project_visibility`/`get_project_mirror_info`/`set_employee_role`) 존재 여부를 커스텀 예외 응답으로 확인(함수 없음 에러가 아니라 정상적인 한국어 예외가 반환되면 배포된 것). 트리거는 트리거 함수라 RPC로 직접 조회가 안 되므로, 테스트 계정(`test@secretary.app`)으로 로그인해 임시 프로젝트 행을 만들고 `origin_project_id`를 자기 자신 id로 위조 UPDATE 시도 → 정상 반영되면(값이 되돌려지지 않으면) 트리거 미배포로 판정하는 방식 사용. 테스트 행은 매번 즉시 삭제해 정리.
+
+**결과**: 트리거 미배포 확인됨 — `get_project_mirror_info()`는 이미 배포되어 있었으므로, 이 트리거 없이는 임의 사용자가 자기 프로젝트의 `origin_project_id`를 타인 프로젝트 id로 위조해 그 사람 이름/팀/부서/관련 인물을 열람할 수 있는 Critical 취약점이 실제로 열려 있는 상태였음.
+
+**조치**: schema.sql 451~476행과 동일한 내용을 독립 실행 가능하게 추출한 `patch_prevent_origin_project_id_forgery.sql` 작성, 사용자가 Supabase SQL Editor에서 실행 완료. 동일한 위조 시도로 재검증한 결과 값이 `null`로 정상 되돌려지는 것을 확인해 취약점 해소를 검증.
+
+**교훈**: 배포 상태에 대한 자체보고(사용자 기억 기반)와 실측이 어긋날 수 있음 — 특히 이번 건은 트리거 생성 코드 자체가 실측 당일 커밋에서야 git에 반영된 상태였어서, 이전 세션의 "배포 완료" 보고가 로컬 미커밋 파일 기준 착오였을 가능성이 있음. Critical 보안 항목은 자체보고만으로 안심하지 말고 실측(REST API 컬럼/RPC 확인 + 필요 시 실제 위조 시도)으로 재검증할 것.
+
 ### 2026-07-31
 
 #### 부서 관리 모달에서 직원 소속 부서 변경이 적용되지 않는 버그 수정
