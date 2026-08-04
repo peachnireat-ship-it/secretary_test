@@ -1986,6 +1986,13 @@ export default function ProjectScreen({ navigation, route }) {
                   </View>
                   <Text style={[s.progressLabel, s.progressLabelSpacing]}>{companyDetailProject.progress}% 완료</Text>
 
+                  {companyDetailProject.startDate ? (
+                    <>
+                      <Text style={s.inputLabel}>시작일</Text>
+                      <Text style={s.viewText}>{companyDetailProject.startDate}</Text>
+                    </>
+                  ) : null}
+
                   <Text style={s.inputLabel}>마감일</Text>
                   <Text style={[s.viewText, days < 0 && !isCompleted && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
                     {companyDetailProject.deadline}{isCompleted && days < 0 ? '' : `  ·  ${daysLabel(days)}`}
