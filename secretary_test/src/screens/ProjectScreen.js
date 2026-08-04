@@ -12,7 +12,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
 import { useUser } from '../context/UserContext';
-import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules, getTopics, addTopic, getCompanyProjects } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules, getTopics, addTopic, getCompanyProjects, getProjectMirrorInfo } from '../services/storage';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
 import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectForm';
@@ -213,10 +213,14 @@ export default function ProjectScreen({ navigation, route }) {
     if (!openProjectId || projects.length === 0) return;
     const target = projects.find((p) => p.id === openProjectId);
     if (target) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setViewProject(target);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowProjectView(true);
+      if (target.originProjectId) {
+        openMirrorDetail(target);
+      } else {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setViewProject(target);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setShowProjectView(true);
+      }
       navigation.setParams({ openProjectId: undefined });
     }
   }, [route?.params?.openProjectId, projects]);
@@ -270,21 +274,48 @@ export default function ProjectScreen({ navigation, route }) {
     }
   }
 
+  const canViewCompanyProjects = currentUser?.isCompanyAdmin || currentUser?.canViewCompanyProjects;
+
   useFocusEffect(useCallback(() => {
-    if (currentUser?.isCompanyAdmin && viewMode === 'company') loadCompanyProjects();
-  }, [viewMode, currentUser?.isCompanyAdmin]));
+    if (canViewCompanyProjects && viewMode === 'company') loadCompanyProjects();
+  }, [viewMode, canViewCompanyProjects]));
 
   function openCompanyDetail(project) {
     // 회사 전체 목록에는 관리자 본인의 프로젝트도 포함된다(같은 회사 소속 전체를 보여주므로).
     // 본인 소유(= "내 프로젝트" 목록에도 있는 항목)는 조회 전용이 아니라 평소처럼 수정 가능한
-    // 상세 모달로 열어야 한다 — 다른 직원의 프로젝트만 조회 전용으로 제한.
+    // 상세 모달로 열어야 한다 — 다른 직원의 프로젝트만 조회 전용으로 제한. 단, 본인 소유라도
+    // 그게 관리자 자신의 프로젝트 사본(originProjectId 있음)이면 원본 등록자가 따로 있는 것이므로
+    // 수정 모달로 보내지 않고 조회 전용(openMirrorDetail)으로 열어야 한다.
     const own = projects.find((p) => p.id === project.id);
-    if (own) {
+    if (own && !own.originProjectId) {
       openDetail(own);
+      return;
+    }
+    if (own && own.originProjectId) {
+      openMirrorDetail(own);
       return;
     }
     setCompanyDetailProject(project);
     setShowCompanyDetail(true);
+  }
+
+  // 프로젝트 사본(mirror) 조회 전용 상세: 원본 등록자 이름/팀/부서, 원본의 관련 인물을
+  // get_project_mirror_info() RPC로 가져와 item과 합친 뒤, 기존 회사뷰 조회 전용 모달
+  // (showCompanyDetail/companyDetailProject)을 그대로 재사용한다.
+  async function openMirrorDetail(item) {
+    try {
+      const info = await getProjectMirrorInfo(item.id);
+      setCompanyDetailProject({
+        ...item,
+        ownerName: info?.ownerName || '',
+        ownerTeam: info?.ownerTeam || '',
+        departmentName: info?.departmentName || '',
+        relatedPeople: info?.relatedPeople || [],
+      });
+      setShowCompanyDetail(true);
+    } catch {
+      Alert.alert('오류', '프로젝트 정보를 불러오지 못했습니다.');
+    }
   }
 
   const companyProjectCount = companyGroups.reduce((sum, g) => sum + g.projects.length, 0);
@@ -572,8 +603,8 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
       </View>
 
-      {/* ── 회사 관리자 전용: 내 프로젝트 / 회사 전체 보기 전환 ── */}
-      {currentUser?.isCompanyAdmin && (
+      {/* ── 회사 관리자, 또는 "본인 이하 직급 프로젝트 조회"가 허용된 직책의 직원: 내 프로젝트 / 회사 전체 보기 전환 ── */}
+      {canViewCompanyProjects && (
         <View style={s.viewModeRow}>
           <TouchableOpacity
             style={[s.viewModeBtn, viewMode === 'mine' && s.viewModeBtnActive]}
@@ -678,12 +709,15 @@ export default function ProjectScreen({ navigation, route }) {
             const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
             const allRelatedClientIds = [...new Set([...(item.clientIds || []), ...meetingClientIds])];
             const allRelatedPeople = allRelatedClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+            // 프로젝트 사본(관련 인물로 태그되어 자동 생성된 다른 사람 프로젝트의 사본)은 조회
+            // 전용이다 — 수정 모달로 보내지 않고, 롱프레스 삭제도 걸지 않는다.
+            const isMirror = !!item.originProjectId;
             return (
               <View key={item.id} style={[s.card, risk && s.cardRisk]}>
                 <TouchableOpacity
                   activeOpacity={0.75}
-                  onPress={() => openDetail(item)}
-                  onLongPress={() => handleDelete(item.id, item.title)}
+                  onPress={() => (isMirror ? openMirrorDetail(item) : openDetail(item))}
+                  onLongPress={isMirror ? undefined : () => handleDelete(item.id, item.title)}
                 >
                   {/* 타이틀 행 */}
                   <View style={s.cardTop}>
@@ -695,9 +729,15 @@ export default function ProjectScreen({ navigation, route }) {
                       <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
                         <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
                       </View>
-                      <TouchableOpacity style={s.editProgressChip} onPress={() => openDetail(item)}>
-                        <Text style={s.editProgress}>수정</Text>
-                      </TouchableOpacity>
+                      {isMirror ? (
+                        <View style={s.readOnlyChip}>
+                          <Text style={s.readOnlyChipText}>조회 전용</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity style={s.editProgressChip} onPress={() => openDetail(item)}>
+                          <Text style={s.editProgress}>수정</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </View>
 
@@ -803,6 +843,7 @@ export default function ProjectScreen({ navigation, route }) {
                     <Text style={s.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
+                {currentUser?.name ? <Text style={s.registrantText}>등록자: {currentUser.name}</Text> : null}
 
                 {/* 상태 */}
                 <Text style={s.inputLabel}>상태</Text>
@@ -1847,6 +1888,7 @@ export default function ProjectScreen({ navigation, route }) {
                       <Text style={s.closeBtn}>✕</Text>
                     </TouchableOpacity>
                   </View>
+                  {currentUser?.name ? <Text style={s.registrantText}>등록자: {currentUser.name}</Text> : null}
 
                   <View style={s.viewBadgeRow}>
                     <View style={[s.statusBadge, { borderColor: statusColor(viewProject.status) + '66', backgroundColor: statusColor(viewProject.status) + '18' }]}>
@@ -2043,8 +2085,11 @@ const s = StyleSheet.create({
   progressLabel: { color: C.textDim, fontSize: 11 },
   viewText: { color: C.textSecondary, fontSize: 14, paddingHorizontal: 4, marginBottom: 12, lineHeight: 20 },
   viewBadgeRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 4, marginBottom: 16 },
+  registrantText: { color: C.textDim, fontSize: 12, paddingHorizontal: 4, marginBottom: 8 },
   editProgressChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#2E7D5E99', backgroundColor: '#2E7D5E22', alignItems: 'center', justifyContent: 'center' },
   editProgress: { color: '#2E7D5E', fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  readOnlyChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: C.textSecondary + '55', backgroundColor: C.textSecondary + '18', alignItems: 'center', justifyContent: 'center' },
+  readOnlyChipText: { color: C.textSecondary, fontSize: 10, fontWeight: '600', textAlign: 'center' },
 
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
   priorityBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },

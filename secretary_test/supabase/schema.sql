@@ -23,10 +23,35 @@ create table if not exists departments (
   company_id uuid not null references companies(id) on delete cascade,
   name text not null,
   parent_department_id uuid references departments(id) on delete restrict,
+  sort_order int not null default 0,
   created_at timestamptz not null default now()
 );
 alter table departments add column if not exists parent_department_id uuid references departments(id) on delete restrict;
 create index if not exists departments_parent_idx on departments(parent_department_id);
+-- sort_order: 같은 상위 부서를 가진 부서들("형제" 그룹, company_id+parent_department_id 단위)
+-- 사이의 표시 순서. move_department() 참고. 기존 설치본에는 alter로 컬럼을 추가하되, 기존 데이터
+-- 백필(1회성 UPDATE)은 스키마 정의가 아니므로 patch_department_sort_order.sql에만 둔다.
+alter table departments add column if not exists sort_order int not null default 0;
+create index if not exists departments_company_parent_sort_idx on departments(company_id, parent_department_id, sort_order);
+
+-- ── positions (회사 소속 직책) ──────────────────────────────
+-- 부서(departments)와 달리 트리 구조가 아니라 sort_order 하나로만 상하 순서를 표현하는 순위형
+-- 목록이다(예: 대표 0, 이사 1, 부장 2, ... 값이 작을수록 상위 직급). 자세한 배경은
+-- patch_position_management.sql 참고.
+create table if not exists positions (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies(id) on delete cascade,
+  name text not null,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists positions_company_sort_idx on positions(company_id, sort_order);
+
+-- 이 직책으로 배정된 직원이 프로젝트 메뉴 "회사 전체" 보기에서 같은 회사 소속 중 본인 직급
+-- 이하(sort_order가 같거나 큰 직책)의 프로젝트를 조회할 수 있는지 여부. 기본값 false(기존 동작
+-- 유지 — 회사 관리자만 회사 전체 조회 가능). get_company_projects()/set_position_project_visibility()
+-- 참고(patch_position_project_visibility.sql에도 동일한 alter가 있음).
+alter table positions add column if not exists can_view_subordinate_projects boolean not null default false;
 
 -- ── profiles ─────────────────────────────────────────────
 -- auth.users(Supabase Auth)에 없는 name/role/team 등 앱 전용 필드를 보관.
@@ -55,6 +80,9 @@ create table if not exists profiles (
   share_mutual_history boolean not null default false,
   created_at timestamptz not null default now()
 );
+-- 직책(positions) 배정. department_id와 동일한 패턴(on delete set null) — 직책이 삭제되면
+-- 배정돼 있던 직원은 자동으로 미배정 처리된다.
+alter table profiles add column if not exists position_id uuid references positions(id) on delete set null;
 
 -- ── profile_department_public (profiles.department_id의 공개 조회용 미러) ──
 -- profiles 테이블은 RLS로 타인의 department_id를 볼 수 없어서, 담당자 관리 화면에서 상대방의
@@ -293,6 +321,7 @@ create index if not exists messages_mailbox_idx on messages(mailbox_owner_id);
 -- ── RLS 활성화 ────────────────────────────────────────────
 alter table companies enable row level security;
 alter table departments enable row level security;
+alter table positions enable row level security;
 alter table profiles enable row level security;
 alter table schedules enable row level security;
 alter table clients enable row level security;
@@ -343,6 +372,12 @@ drop policy if exists departments_select_public on departments;
 create policy departments_select_public on departments
   for select using (true);
 
+-- positions는 부서와 달리 회원가입 시점에 필요하지 않으므로(직책은 회원가입 화면에서 자유
+-- 텍스트로 입력) 공개 조회 정책 없이 같은 회사 소속만 조회 가능하다.
+drop policy if exists positions_select_same_company on positions;
+create policy positions_select_same_company on positions
+  for select using (company_id = my_company_id());
+
 -- ── profile_department_public 정책: 전체 공개 조회 ─────────
 -- departments_select_public과 동일한 이유(부서 배정 여부는 비민감 정보, 이미 공개된 departments와
 -- 조합해야만 의미가 있는 데이터)로 permissive select-only 정책을 둔다. insert/update/delete는
@@ -363,10 +398,12 @@ create policy profiles_insert_own on profiles
   for insert with check (id = auth.uid());
 
 -- profiles_update_own은 row 단위 정책이라 컬럼 단위 제한이 불가능하다. 일반 사용자가
--- is_company_admin/company_id/department_id를 직접 update()로 바꿔 셀프 승격하는 것을
--- BEFORE UPDATE 트리거로 막는다(자세한 배경은 patch_company_department.sql 참고).
+-- is_company_admin/company_id/department_id/position_id를 직접 update()로 바꿔 셀프 승격하는 것을
+-- BEFORE UPDATE 트리거로 막는다(자세한 배경은 patch_company_department.sql, position_id는
+-- patch_position_management.sql 참고).
 -- app.bypass_privilege_trigger 예외는 회원가입 RPC(signup_create_company_as_admin /
--- signup_join_company_as_employee) 내부에서만 통제된 경로로 켜진다(patch_signup_company_role.sql 참고).
+-- signup_join_company_as_employee) 내부와 assign_employee_department()/assign_employee_position()
+-- 같은 관리자 전용 RPC 내부에서만 통제된 경로로 켜진다(patch_signup_company_role.sql 참고).
 create or replace function prevent_privileged_profile_self_update()
 returns trigger
 language plpgsql
@@ -380,10 +417,12 @@ begin
   end if;
   if new.is_company_admin is distinct from old.is_company_admin
      or new.company_id is distinct from old.company_id
-     or new.department_id is distinct from old.department_id then
+     or new.department_id is distinct from old.department_id
+     or new.position_id is distinct from old.position_id then
     new.is_company_admin := old.is_company_admin;
     new.company_id := old.company_id;
     new.department_id := old.department_id;
+    new.position_id := old.position_id;
   end if;
   return new;
 end;
@@ -394,6 +433,48 @@ create trigger trg_prevent_privileged_profile_self_update
 before update on profiles
 for each row execute function prevent_privileged_profile_self_update();
 
+-- projects.origin_project_id를 일반 사용자가 클라이언트 경로(addProject/updateProject, 특히
+-- update_project AI 액션처럼 필드 화이트리스트 없이 changes를 그대로 넘기는 경로)로 직접 조작하지
+-- 못하도록 막는다. origin_project_id는 "이 프로젝트가 다른 사용자 프로젝트의 사본(mirror)인지,
+-- 사본이면 원본이 무엇인지"를 나타내는데, get_project_mirror_info()(patch_project_mirror_readonly_info.sql)가
+-- SECURITY DEFINER로 RLS를 우회하며 mirror.user_id = auth.uid()만 검사하고 그 사본이 정말
+-- sync_project_mirrors()가 만든 것인지는 검증하지 않는다. 따라서 자기 소유 프로젝트의
+-- origin_project_id를 임의의 다른 사용자 프로젝트 id로 위조하면(값 열거는 id가 Date.now() 기반이라
+-- 쉬움) 그 프로젝트 소유자의 이름/팀/부서, 관련 인물(이름/회사/직책)을 그대로 조회할 수 있는
+-- Critical 취약점으로 이어진다.
+--
+-- prevent_privileged_profile_self_update()(바로 위)와 정확히 동일한 패턴이다:
+-- INSERT 시에는 항상 null로 강제(일반 사용자가 만드는 프로젝트는 사본일 수 없다 — 사본은 오직
+-- sync_project_mirrors()가 만든다), UPDATE 시에는 값이 바뀌었으면 기존 값으로 되돌린다.
+-- app.bypass_privilege_trigger 세션 플래그로 신뢰된 서버 경로(sync_project_mirrors() 내부)만
+-- 우회한다 — 트리거를 켜는 쪽 수정은 patch_project_mirror.sql(sync_project_mirrors() 본문) 참고.
+create or replace function prevent_client_origin_project_id_write()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.role() = 'service_role'
+     or current_setting('app.bypass_privilege_trigger', true) = 'true' then
+    return new;
+  end if;
+  if TG_OP = 'INSERT' then
+    new.origin_project_id := null;
+    return new;
+  end if;
+  if new.origin_project_id is distinct from old.origin_project_id then
+    new.origin_project_id := old.origin_project_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_prevent_client_origin_project_id_write on projects;
+create trigger trg_prevent_client_origin_project_id_write
+before insert or update on projects
+for each row execute function prevent_client_origin_project_id_write();
+
 -- 보안 재감사(_review/secretary_test-20260723/02_security.md, 발견 #3) MEDIUM 취약점 수정.
 -- 과거에는 profiles_select_same_company RLS(행 단위 정책)로 같은 회사 소속이면 동료 프로필을
 -- 직접 select할 수 있게 했었다. RLS는 행 단위 통제만 가능해 email/contact/notes/work_topics 등
@@ -401,27 +482,38 @@ for each row execute function prevent_privileged_profile_self_update();
 -- 제한일 뿐 DB 레벨 통제가 아니었음). 컬럼 단위 제한을 위해 SECURITY DEFINER 함수로 감싸
 -- 안전한 컬럼만 반환하고, 전체 컬럼을 노출하던 정책은 제거한다(my_company_id()/my_is_company_admin()과
 -- 동일한 이 프로젝트의 기존 컨벤션). 자세한 배경은 patch_profiles_colleagues_columns.sql 참고.
+-- RETURNS TABLE의 OUT 컬럼이 늘어나므로(position_id 추가) create or replace만으로는 반영되지
+-- 않는다(42P13 cannot change return type of existing function, search_discoverable_profiles()가
+-- 이미 겪은 것과 동일한 문제). 먼저 명시적으로 drop한다.
+drop function if exists get_company_colleagues();
+
 create or replace function get_company_colleagues()
 returns table (
   id uuid,
   name text,
   role text,
   department_id uuid,
+  position_id uuid,
   is_company_admin boolean
 )
 language sql security definer stable
 set search_path = public
 as $$
-  select p.id, p.name, p.role, p.department_id, p.is_company_admin
+  select p.id, p.name, p.role, p.department_id, p.position_id, p.is_company_admin
   from profiles p
   where my_company_id() is not null and p.company_id = my_company_id()
   order by p.created_at, p.id
 $$;
 grant execute on function get_company_colleagues() to authenticated;
 
--- get_company_projects(): 회사 관리자가 같은 회사 소속 전체 부서의 프로젝트를 소유자 이름/부서명과
--- 함께 조회하기 위한 함수. projects_select_company_admin RLS(위 참고)는 projects 테이블 행 단위
--- 접근만 허용할 뿐, PostgREST의 profiles!inner(...) 임베드 조회는 profiles 자체의 SELECT RLS가
+-- get_company_projects(): 회사 관리자, 그리고 "본인 이하 직급 프로젝트 조회"가 허용된 직책의
+-- 직원이 같은 회사 소속 프로젝트를 소유자 이름/부서명과 함께 조회하기 위한 함수. 관리자는 부서
+-- 무관 전체를, 허용된 직책의 직원은 본인 직책보다 sort_order가 같거나 큰(= 본인 직급 이하)
+-- 직책으로 배정된 직원의 프로젝트만 조회한다(positions.can_view_subordinate_projects,
+-- set_position_project_visibility(), patch_position_project_visibility.sql 참고). 직책이 없거나
+-- (미배정) 이 플래그가 꺼진 직책의 직원은 기존과 동일하게 회사 전체 조회가 불가능하다.
+-- projects_select_company_admin RLS(위 참고)는 projects 테이블 행 단위 접근만 허용할 뿐,
+-- PostgREST의 profiles!inner(...) 임베드 조회는 profiles 자체의 SELECT RLS가
 -- 본인 행만 허용하므로(profiles_select_own, get_company_colleagues() 도입 배경과 동일 이유)
 -- 다른 직원의 profiles 행을 끌어오지 못해 !inner 조인에 걸려 결과가 통째로 사라진다. 컬럼 단위로
 -- 필요한 값(name, team, department name)만 SECURITY DEFINER로 안전하게 노출해 이 문제를 피한다.
@@ -450,6 +542,12 @@ returns table (
 language sql security definer stable
 set search_path = public
 as $$
+  with my_pos as (
+    select pos.sort_order, pos.can_view_subordinate_projects
+    from profiles me
+    join positions pos on pos.id = me.position_id
+    where me.id = auth.uid()
+  )
   select p.id, p.title, p.deadline, p.start_date, p.status, p.priority, p.notes, p.progress,
     p.client_ids, p.owner_client_id, p.meeting_record_ids, p.origin_project_id, p.created_at, p.updated_at,
     coalesce(orig_pr.name, pr.name),
@@ -468,10 +566,52 @@ as $$
   left join projects orig on orig.id = p.origin_project_id
   left join profiles orig_pr on orig_pr.id = orig.user_id
   left join departments orig_d on orig_d.id = orig_pr.department_id
-  where my_is_company_admin() and pr.company_id = my_company_id()
+  left join positions target_pos on target_pos.id = pr.position_id
+  where pr.company_id = my_company_id()
+    and (
+      my_is_company_admin()
+      or exists (
+        select 1 from my_pos
+        where my_pos.can_view_subordinate_projects
+          and target_pos.sort_order >= my_pos.sort_order
+      )
+    )
   order by p.created_at desc
 $$;
 grant execute on function get_company_projects() to authenticated;
+
+-- get_project_mirror_info(): 프로젝트 사본(mirror) 소유자 본인이 자신의 사본 하나에 대해 원본 등록자
+-- 이름/팀/부서, 원본의 관련 인물 목록을 조회하기 위한 함수(patch_project_mirror_readonly_info.sql
+-- 참고). 사본은 client_ids/owner_client_id/meeting_record_ids를 항상 빈 값으로 저장하므로(원본
+-- 소유자의 개인 담당자를 사본 소유자가 열람할 권한이 없어서), 사본 소유자 자신은 자기 사본만 봐서는
+-- 등록자·관련 인물을 알 수 없다. get_company_projects()의 owner_name/owner_team/department_name/
+-- related_people 계산 로직과 동일하되, 회사 관리자 권한이 아니라 "호출자가 그 사본의 소유자
+-- 본인인지"(mirror.user_id = auth.uid())만 검사한다. 다른 사람의 사본이거나 사본이 아닌 프로젝트
+-- id로 호출하면 0 rows를 반환한다.
+create or replace function get_project_mirror_info(p_project_id text)
+returns table (
+  owner_name text, owner_team text, department_name text, related_people jsonb
+)
+language sql security definer stable
+set search_path = public
+as $$
+  select pr.name, pr.team, d.name,
+    coalesce(
+      (select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'company', c.company, 'role', c.role))
+       from clients c
+       where c.user_id = orig.user_id
+         and c.id in (select jsonb_array_elements_text(coalesce(orig.client_ids, '[]'::jsonb)))),
+      '[]'::jsonb
+    )
+  from projects mirror
+  join projects orig on orig.id = mirror.origin_project_id
+  join profiles pr on pr.id = orig.user_id
+  left join departments d on d.id = pr.department_id
+  where mirror.id = p_project_id
+    and mirror.user_id = auth.uid()
+    and mirror.origin_project_id is not null
+$$;
+grant execute on function get_project_mirror_info(text) to authenticated;
 
 -- 회사 관리자용 부서 관리(조직 구조 세팅): 부서 추가/이름변경/삭제/상위부서 변경, 직원 소속
 -- 부서 재배치. departments 테이블은 조회(departments_select_same_company)만 RLS로 허용되어
@@ -488,6 +628,7 @@ declare
   v_company_id uuid;
   v_name text := btrim(coalesce(p_name, ''));
   v_id uuid;
+  v_next_order int;
 begin
   if not my_is_company_admin() then
     raise exception '회사 관리자만 부서를 추가할 수 있습니다.';
@@ -506,8 +647,12 @@ begin
      and not exists (select 1 from departments where id = p_parent_department_id and company_id = v_company_id) then
     raise exception '존재하지 않거나 접근 권한이 없는 상위 부서입니다.';
   end if;
-  insert into departments (company_id, name, parent_department_id)
-    values (v_company_id, v_name, p_parent_department_id) returning id into v_id;
+  -- 새 부서는 같은 형제 그룹(company_id + parent_department_id) 맨 뒤에 추가된다(create_position() 패턴).
+  select coalesce(max(sort_order), -1) + 1 into v_next_order
+    from departments
+    where company_id = v_company_id and parent_department_id is not distinct from p_parent_department_id;
+  insert into departments (company_id, name, parent_department_id, sort_order)
+    values (v_company_id, v_name, p_parent_department_id, v_next_order) returning id into v_id;
   return v_id;
 end;
 $$;
@@ -524,6 +669,7 @@ as $$
 declare
   v_company_id uuid;
   v_cursor uuid;
+  v_next_order int;
 begin
   if not my_is_company_admin() then
     raise exception '회사 관리자만 부서 구조를 변경할 수 있습니다.';
@@ -549,7 +695,12 @@ begin
       select parent_department_id into v_cursor from departments where id = v_cursor;
     end loop;
   end if;
-  update departments set parent_department_id = p_parent_department_id where id = p_department_id;
+  -- 상위 부서를 옮기면 새로 속하는 형제 그룹의 맨 뒤에 배치한다(옛 sort_order를 그대로 두면
+  -- 새 그룹의 기존 형제들과 값이 충돌해 순서가 뒤섞일 수 있다).
+  select coalesce(max(sort_order), -1) + 1 into v_next_order
+    from departments
+    where company_id = v_company_id and parent_department_id is not distinct from p_parent_department_id;
+  update departments set parent_department_id = p_parent_department_id, sort_order = v_next_order where id = p_department_id;
 end;
 $$;
 grant execute on function set_department_parent(uuid, uuid) to authenticated;
@@ -636,6 +787,235 @@ begin
 end;
 $$;
 grant execute on function assign_employee_department(uuid, uuid) to authenticated;
+
+-- 회사 관리자용 직책 관리(순위형 목록 세팅): 직책 추가/이름변경/삭제/순서변경, 직원 직책 배정.
+-- positions 테이블은 조회(positions_select_same_company)만 RLS로 허용되어 있고 insert/update/
+-- delete 정책이 없으므로, 부서 관리(create_department 등)와 동일한 패턴으로 관리자 전용 CRUD
+-- 함수를 제공한다. 자세한 배경은 patch_position_management.sql 참고.
+create or replace function create_position(p_name text)
+returns uuid
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+  v_name text := btrim(coalesce(p_name, ''));
+  v_id uuid;
+  v_next_order int;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 직책을 추가할 수 있습니다.';
+  end if;
+  if v_name = '' then
+    raise exception '직책명을 입력해주세요.';
+  end if;
+  v_company_id := my_company_id();
+  if v_company_id is null then
+    raise exception '소속된 회사가 없습니다.';
+  end if;
+  if exists (select 1 from positions where company_id = v_company_id and name = v_name) then
+    raise exception '이미 존재하는 직책명입니다.';
+  end if;
+  select coalesce(max(sort_order), -1) + 1 into v_next_order from positions where company_id = v_company_id;
+  insert into positions (company_id, name, sort_order)
+    values (v_company_id, v_name, v_next_order) returning id into v_id;
+  return v_id;
+end;
+$$;
+grant execute on function create_position(text) to authenticated;
+
+create or replace function rename_position(p_position_id uuid, p_new_name text)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+  v_name text := btrim(coalesce(p_new_name, ''));
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 직책명을 수정할 수 있습니다.';
+  end if;
+  if v_name = '' then
+    raise exception '직책명을 입력해주세요.';
+  end if;
+  v_company_id := my_company_id();
+  if not exists (select 1 from positions where id = p_position_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 직책입니다.';
+  end if;
+  if exists (select 1 from positions where company_id = v_company_id and name = v_name and id <> p_position_id) then
+    raise exception '이미 존재하는 직책명입니다.';
+  end if;
+  update positions set name = v_name where id = p_position_id;
+end;
+$$;
+grant execute on function rename_position(uuid, text) to authenticated;
+
+create or replace function delete_position(p_position_id uuid)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 직책을 삭제할 수 있습니다.';
+  end if;
+  v_company_id := my_company_id();
+  if not exists (select 1 from positions where id = p_position_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 직책입니다.';
+  end if;
+  -- profiles.position_id는 on delete set null(위 profiles 테이블 정의)이라 이 직책으로 배정돼
+  -- 있던 직원은 이 삭제만으로 자동으로 미배정 처리된다.
+  delete from positions where id = p_position_id;
+end;
+$$;
+grant execute on function delete_position(uuid) to authenticated;
+
+-- 직책의 상하 순서를 한 칸 이동(부서처럼 트리가 아니라 하나의 순서만 있으므로 인접한 직책과
+-- sort_order를 맞바꾸는 방식으로 충분하다). p_direction은 'up'(상위로) | 'down'(하위로).
+create or replace function move_position(p_position_id uuid, p_direction text)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+  v_sort_order int;
+  v_neighbor_id uuid;
+  v_neighbor_order int;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 직책 순서를 변경할 수 있습니다.';
+  end if;
+  if p_direction not in ('up', 'down') then
+    raise exception '방향 값이 올바르지 않습니다.';
+  end if;
+  v_company_id := my_company_id();
+  select sort_order into v_sort_order from positions where id = p_position_id and company_id = v_company_id;
+  if v_sort_order is null then
+    raise exception '존재하지 않거나 접근 권한이 없는 직책입니다.';
+  end if;
+  if p_direction = 'up' then
+    select id, sort_order into v_neighbor_id, v_neighbor_order
+      from positions where company_id = v_company_id and sort_order < v_sort_order
+      order by sort_order desc limit 1;
+  else
+    select id, sort_order into v_neighbor_id, v_neighbor_order
+      from positions where company_id = v_company_id and sort_order > v_sort_order
+      order by sort_order asc limit 1;
+  end if;
+  if v_neighbor_id is null then
+    return; -- 이미 맨 위/맨 아래
+  end if;
+  update positions set sort_order = v_neighbor_order where id = p_position_id;
+  update positions set sort_order = v_sort_order where id = v_neighbor_id;
+end;
+$$;
+grant execute on function move_position(uuid, text) to authenticated;
+
+-- 부서의 상하 순서를 한 칸 이동. move_position()과 동일한 인접 항목 swap 로직이되, 부서는
+-- parent_department_id로 트리 구조이므로 "형제" 그룹이 회사 전체가 아니라
+-- company_id + parent_department_id 단위로 좁혀진다(같은 상위 부서를 가진 부서들끼리만 이동).
+-- p_direction은 'up'(위로) | 'down'(아래로). 배경은 patch_department_sort_order.sql 참고.
+create or replace function move_department(p_department_id uuid, p_direction text)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+  v_parent_id uuid;
+  v_sort_order int;
+  v_neighbor_id uuid;
+  v_neighbor_order int;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 부서 순서를 변경할 수 있습니다.';
+  end if;
+  if p_direction not in ('up', 'down') then
+    raise exception '방향 값이 올바르지 않습니다.';
+  end if;
+  v_company_id := my_company_id();
+  select parent_department_id, sort_order into v_parent_id, v_sort_order
+    from departments where id = p_department_id and company_id = v_company_id;
+  if v_sort_order is null then
+    raise exception '존재하지 않거나 접근 권한이 없는 부서입니다.';
+  end if;
+  if p_direction = 'up' then
+    select id, sort_order into v_neighbor_id, v_neighbor_order
+      from departments
+      where company_id = v_company_id and parent_department_id is not distinct from v_parent_id and sort_order < v_sort_order
+      order by sort_order desc limit 1;
+  else
+    select id, sort_order into v_neighbor_id, v_neighbor_order
+      from departments
+      where company_id = v_company_id and parent_department_id is not distinct from v_parent_id and sort_order > v_sort_order
+      order by sort_order asc limit 1;
+  end if;
+  if v_neighbor_id is null then
+    return; -- 이미 맨 위/맨 아래
+  end if;
+  update departments set sort_order = v_neighbor_order where id = p_department_id;
+  update departments set sort_order = v_sort_order where id = v_neighbor_id;
+end;
+$$;
+grant execute on function move_department(uuid, text) to authenticated;
+
+-- 회사 관리자 전용: 직원의 직책 배정. profiles_update_own RLS는 본인 행만 update를 허용하므로
+-- (assign_employee_department()와 동일한 이유) 다른 직원의 position_id를 관리자가 바꾸려면
+-- SECURITY DEFINER 함수가 필요하다. position_id는 prevent_privileged_profile_self_update
+-- 트리거가 보호하는 특권 컬럼이므로 assign_employee_department()와 동일하게
+-- app.bypass_privilege_trigger 우회 처리가 필요하다.
+create or replace function assign_employee_position(p_employee_id uuid, p_position_id uuid)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 직원의 직책을 변경할 수 있습니다.';
+  end if;
+  v_company_id := my_company_id();
+  if not exists (select 1 from profiles where id = p_employee_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 같은 회사 소속이 아닌 직원입니다.';
+  end if;
+  if p_position_id is not null and not exists (select 1 from positions where id = p_position_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 직책입니다.';
+  end if;
+  perform set_config('app.bypass_privilege_trigger', 'true', true);
+  update profiles set position_id = p_position_id where id = p_employee_id;
+end;
+$$;
+grant execute on function assign_employee_position(uuid, uuid) to authenticated;
+
+-- 회사 관리자 전용: 특정 직책에 "본인 이하 직급 프로젝트 조회" 권한을 켜고 끈다. 켜면 그 직책으로
+-- 배정된 직원은 프로젝트 메뉴 "회사 전체" 보기에서 본인 직책보다 sort_order가 같거나 큰(= 본인
+-- 직급 이하) 직책의 동료 프로젝트를 조회할 수 있다(get_company_projects() 참고). positions는
+-- 조회(positions_select_same_company)만 RLS로 허용되어 있으므로 다른 직책 CRUD 함수와 동일한
+-- 패턴으로 관리자 전용 함수를 제공한다.
+create or replace function set_position_project_visibility(p_position_id uuid, p_enabled boolean)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_company_id uuid;
+begin
+  if not my_is_company_admin() then
+    raise exception '회사 관리자만 직책의 프로젝트 조회 권한을 변경할 수 있습니다.';
+  end if;
+  v_company_id := my_company_id();
+  if not exists (select 1 from positions where id = p_position_id and company_id = v_company_id) then
+    raise exception '존재하지 않거나 접근 권한이 없는 직책입니다.';
+  end if;
+  update positions set can_view_subordinate_projects = coalesce(p_enabled, false) where id = p_position_id;
+end;
+$$;
+grant execute on function set_position_project_visibility(uuid, boolean) to authenticated;
 
 -- profiles.department_id가 바뀔 때마다 profile_department_public(위 profiles 테이블 정의 근처 참고)에
 -- 미러링하는 트리거. assign_employee_department()의 update뿐 아니라 회원가입 RPC의 최초 insert,

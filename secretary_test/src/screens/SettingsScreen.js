@@ -51,6 +51,7 @@ export default function SettingsScreen() {
 
   const [profile, setProfile] = useState(null);
   const [showProfileEdit, setShowProfileEdit] = useState(false);
+  const [editName, setEditName] = useState('');
   const [editContact, setEditContact] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -477,6 +478,7 @@ export default function SettingsScreen() {
                 <TouchableOpacity
                   style={s.profileEditBtn}
                   onPress={() => {
+                    setEditName(user?.name || '');
                     setEditContact(profile?.contact || '');
                     setEditNotes(profile?.notes || '');
                     setEditEmail(profile?.email || '');
@@ -633,7 +635,16 @@ export default function SettingsScreen() {
             <Text style={s.modalTitle}>내 정보 수정</Text>
             <Text style={s.modalSubTitle}>{user?.name} · {user?.team}</Text>
 
-            <Text style={s.inputLabel}>연락처 (전화번호)</Text>
+            <Text style={s.inputLabel}>이름</Text>
+            <TextInput
+              style={s.profileInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="이름"
+              placeholderTextColor={C.textDim}
+            />
+
+            <Text style={[s.inputLabel, s.mt16]}>연락처 (전화번호)</Text>
             <TextInput
               style={s.profileInput}
               value={editContact}
@@ -681,13 +692,19 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={s.modalConfirm}
                 onPress={async () => {
+                  const trimmedName = editName.trim();
+                  if (!trimmedName) {
+                    Alert.alert('이름 오류', '이름을 입력해주세요.');
+                    return;
+                  }
                   if (editEmail.trim() && !editEmail.trim().includes('@')) {
                     Alert.alert('이메일 형식 오류', '올바른 이메일 형식이 아닙니다.');
                     return;
                   }
-                  await saveUserProfile({ contact: editContact.trim(), notes: editNotes.trim(), email: editEmail.trim(), sns: editSns.trim() });
+                  await saveUserProfile({ name: trimmedName, contact: editContact.trim(), notes: editNotes.trim(), email: editEmail.trim(), sns: editSns.trim() });
                   const p = await getUserProfile();
                   setProfile(p);
+                  setUser((u) => (u ? { ...u, name: trimmedName } : u));
                   setShowProfileEdit(false);
                 }}
               >

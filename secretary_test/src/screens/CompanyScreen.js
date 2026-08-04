@@ -1,6 +1,6 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
-  Modal, TextInput, KeyboardAvoidingView, Platform, Animated,
+  Modal, TextInput, KeyboardAvoidingView, Platform, Animated, Switch,
 } from 'react-native';
 import { Alert } from '../utils/alertCompat';
 import { useState, useCallback } from 'react';
@@ -9,8 +9,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import {
-  getCompanyEmployees, getCompanyDepartments,
-  createDepartment, renameDepartment, deleteDepartment, setDepartmentParent, assignEmployeeDepartment,
+  getCompanyEmployees, getCompanyDepartments, getCompanyPositions,
+  createDepartment, renameDepartment, deleteDepartment, setDepartmentParent, moveDepartment, assignEmployeeDepartment,
+  createPosition, renamePosition, deletePosition, movePosition, assignEmployeePosition, setPositionProjectVisibility,
 } from '../services/storage';
 import { buildDeptTree, flattenDeptTree, DEPT_INDENT } from '../utils/deptTree';
 
@@ -37,7 +38,7 @@ function collectSelfAndDescendantIds(departments, rootId) {
 }
 
 // 검색 + 목록 형태의 부서 선택 콤보박스. 상위 부서 선택, 직원 소속 부서 배정에서 공용으로 사용.
-function DeptPickerModal({ visible, onClose, title, search, onSearchChange, items, selectedId, onSelect, noneLabel }) {
+function DeptPickerModal({ visible, onClose, title, search, onSearchChange, items, selectedId, onSelect, noneLabel, searchPlaceholder = '부서명 검색' }) {
   const q = search.trim().toLowerCase();
   const filtered = items.filter((d) => !q || d.name.toLowerCase().includes(q));
   return (
@@ -57,7 +58,7 @@ function DeptPickerModal({ visible, onClose, title, search, onSearchChange, item
               style={s.pickerSearchInput}
               value={search}
               onChangeText={onSearchChange}
-              placeholder="부서명 검색"
+              placeholder={searchPlaceholder}
               placeholderTextColor={C.textDim}
               autoCorrect={false}
               autoFocus
@@ -123,10 +124,23 @@ export default function CompanyScreen() {
   const [editingDeptName, setEditingDeptName] = useState('');
   const [parentPickerFor, setParentPickerFor] = useState(null); // null | 'new' | 기존 부서 id
   const [parentSearch, setParentSearch] = useState('');
-  const [employeeDeptPickerFor, setEmployeeDeptPickerFor] = useState(null); // 직원 id
-  const [employeeDeptSearch, setEmployeeDeptSearch] = useState('');
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [positions, setPositions] = useState([]);
+  const [newPositionName, setNewPositionName] = useState('');
+  const [editingPositionId, setEditingPositionId] = useState(null);
+  const [editingPositionName, setEditingPositionName] = useState('');
+
+  // 회사관리 메인 목록에서 직원(관리자 본인 포함)을 탭했을 때 여는 부서/직책 수정 모달.
+  const [employeeEditFor, setEmployeeEditFor] = useState(null); // { id, name, departmentId, positionId } — departmentId/positionId는 원래 값(변경 여부 비교용)
+  const [employeeEditDeptId, setEmployeeEditDeptId] = useState(null);
+  const [employeeEditPositionId, setEmployeeEditPositionId] = useState(null);
+  const [employeeEditDeptPickerOpen, setEmployeeEditDeptPickerOpen] = useState(false);
+  const [employeeEditPositionPickerOpen, setEmployeeEditPositionPickerOpen] = useState(false);
+  const [employeeEditPickerSearch, setEmployeeEditPickerSearch] = useState('');
+  const [savingEmployeeEdit, setSavingEmployeeEdit] = useState(false);
 
   const swipeDeptModal = useSwipeClose(() => setShowDeptModal(false), showDeptModal);
+  const swipeRoleModal = useSwipeClose(() => setShowRoleModal(false), showRoleModal);
 
   async function load() {
     setLoading(true);
@@ -147,8 +161,16 @@ export default function CompanyScreen() {
     }
   }
 
+  async function loadPositions() {
+    try {
+      setPositions(await getCompanyPositions());
+    } catch {
+      Alert.alert('오류', '직책 목록을 불러오지 못했습니다.');
+    }
+  }
+
   async function refreshAll() {
-    await Promise.all([load(), loadDepartments()]);
+    await Promise.all([load(), loadDepartments(), loadPositions()]);
   }
 
   // 사이드바 트리 들여쓰기 계산에 departments(parentId 포함)가 필요하므로 화면 진입 시 부서 목록도 함께 로드한다.
@@ -161,8 +183,6 @@ export default function CompanyScreen() {
     setNewDeptParentId(null);
     setParentPickerFor(null);
     setParentSearch('');
-    setEmployeeDeptPickerFor(null);
-    setEmployeeDeptSearch('');
     setShowDeptModal(true);
     loadDepartments();
   }
@@ -183,11 +203,6 @@ export default function CompanyScreen() {
   function openParentPicker(target) {
     setParentPickerFor(target);
     setParentSearch('');
-  }
-
-  function openEmployeeDeptPicker(employeeId) {
-    setEmployeeDeptPickerFor(employeeId);
-    setEmployeeDeptSearch('');
   }
 
   async function handleSetParent(deptId, parentId) {
@@ -222,6 +237,15 @@ export default function CompanyScreen() {
     }
   }
 
+  async function handleMoveDepartment(deptId, direction) {
+    try {
+      await moveDepartment(deptId, direction);
+      await loadDepartments();
+    } catch (error) {
+      Alert.alert('오류', error.message);
+    }
+  }
+
   function handleDeleteDepartment(dept) {
     Alert.alert(
       '부서 삭제',
@@ -244,22 +268,119 @@ export default function CompanyScreen() {
     );
   }
 
-  async function handleAssignEmployee(employeeId, departmentId) {
+  function openRoleModal() {
+    setEditingPositionId(null);
+    setEditingPositionName('');
+    setNewPositionName('');
+    setShowRoleModal(true);
+    loadPositions();
+  }
+
+  async function handleAddPosition() {
+    const name = newPositionName.trim();
+    if (!name) return;
     try {
-      await assignEmployeeDepartment(employeeId, departmentId);
-      await refreshAll();
+      await createPosition(name);
+      setNewPositionName('');
+      await loadPositions();
     } catch (error) {
       Alert.alert('오류', error.message);
     }
   }
 
-  function chooseEmployeeDept(departmentId) {
-    handleAssignEmployee(employeeDeptPickerFor, departmentId);
-    setEmployeeDeptPickerFor(null);
+  function startEditPosition(pos) {
+    setEditingPositionId(pos.id);
+    setEditingPositionName(pos.name);
+  }
+
+  function cancelEditPosition() {
+    setEditingPositionId(null);
+    setEditingPositionName('');
+  }
+
+  async function confirmEditPosition() {
+    const name = editingPositionName.trim();
+    if (!name) return;
+    try {
+      await renamePosition(editingPositionId, name);
+      cancelEditPosition();
+      await loadPositions();
+    } catch (error) {
+      Alert.alert('오류', error.message);
+    }
+  }
+
+  function handleDeletePosition(pos) {
+    Alert.alert(
+      '직책 삭제',
+      `"${pos.name}" 직책을 삭제하시겠습니까?\n삭제하면 이 직책으로 지정된 직원은 미배정으로 바뀝니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deletePosition(pos.id);
+              await refreshAll();
+            } catch (error) {
+              Alert.alert('오류', error.message);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleMovePosition(positionId, direction) {
+    try {
+      await movePosition(positionId, direction);
+      await loadPositions();
+    } catch (error) {
+      Alert.alert('오류', error.message);
+    }
+  }
+
+  // 켜면 이 직책으로 배정된 직원이 프로젝트 메뉴 "회사 전체" 보기에서 본인 직급 이하(직책 목록에서
+  // 같거나 아래에 있는) 동료의 프로젝트를 조회할 수 있게 된다.
+  async function handleTogglePositionVisibility(positionId, enabled) {
+    try {
+      await setPositionProjectVisibility(positionId, enabled);
+      await loadPositions();
+    } catch (error) {
+      Alert.alert('오류', error.message);
+    }
+  }
+
+  // 회사관리 메인 목록의 직원 카드를 탭하면 연다(관리자 본인 카드도 예외 없이 동일하게 동작).
+  function openEmployeeEdit(employee) {
+    setEmployeeEditFor({ id: employee.id, name: employee.name, departmentId: employee.departmentId ?? null, positionId: employee.positionId ?? null });
+    setEmployeeEditDeptId(employee.departmentId ?? null);
+    setEmployeeEditPositionId(employee.positionId ?? null);
+    setEmployeeEditPickerSearch('');
+  }
+
+  async function handleSaveEmployeeEdit() {
+    setSavingEmployeeEdit(true);
+    try {
+      const tasks = [];
+      if (employeeEditDeptId !== employeeEditFor.departmentId) {
+        tasks.push(assignEmployeeDepartment(employeeEditFor.id, employeeEditDeptId));
+      }
+      if (employeeEditPositionId !== employeeEditFor.positionId) {
+        tasks.push(assignEmployeePosition(employeeEditFor.id, employeeEditPositionId));
+      }
+      await Promise.all(tasks);
+      setEmployeeEditFor(null);
+      await refreshAll();
+    } catch (error) {
+      Alert.alert('오류', error.message);
+    } finally {
+      setSavingEmployeeEdit(false);
+    }
   }
 
   const totalEmployeeCount = employeeGroups.reduce((sum, g) => sum + g.employees.length, 0);
-  const allEmployees = employeeGroups.flatMap((g) => g.employees);
 
   const deptTree = buildDeptTree(departments);
   const flatDeptTree = flattenDeptTree(deptTree);
@@ -285,16 +406,40 @@ export default function CompanyScreen() {
   const visibleGroups = showAll
     ? showAllGroups
     : employeeGroups.filter((g) => g.departmentName === effectiveSelectedDept);
-  // 전체 보기에서는 부서 구분 없이 이름 가나다순으로 표시. 특정 부서 선택 시에는 직책 가나다순(동률 시 이름 가나다순)으로 표시.
+  const positionNameById = new Map(positions.map((p) => [p.id, p.name]));
+  const positionOrderById = new Map(positions.map((p, idx) => [p.id, idx]));
+  const positionOrderOf = (employee) =>
+    employee.positionId != null && positionOrderById.has(employee.positionId) ? positionOrderById.get(employee.positionId) : Infinity;
+
+  // 부서 관리 모달의 ▲▼ 버튼 활성/비활성 판정용: 부서는 전체 목록이 아니라 "같은 형제 그룹(같은
+  // 상위 부서를 가진 부서들)" 내에서 처음/마지막인지로 판별해야 한다. departments는 서버에서
+  // 이미 sort_order로 정렬되어 반환되므로, parentId별로 그룹핑한 뒤 그 안에서의 인덱스만 구하면 된다.
+  const deptSiblingsByParent = new Map();
+  for (const dept of departments) {
+    const key = dept.parentId ?? '__root__';
+    if (!deptSiblingsByParent.has(key)) deptSiblingsByParent.set(key, []);
+    deptSiblingsByParent.get(key).push(dept.id);
+  }
+  const deptSiblingIndexById = new Map();
+  for (const siblingIds of deptSiblingsByParent.values()) {
+    siblingIds.forEach((id, idx) => deptSiblingIndexById.set(id, { idx, count: siblingIds.length }));
+  }
+
+  // 전체 보기에서는 부서 구분 없이 이름 가나다순으로 표시. 특정 부서 선택 시에는 직책 순위(직책 관리에서
+  // 설정한 상위→하위 순서, 동률 시 이름 가나다순)로 표시.
   const visibleEmployees = visibleGroups.flatMap((group) =>
     group.employees.map((employee) => ({ employee, departmentName: group.departmentName }))
   );
   if (showAll) {
-    visibleEmployees.sort((a, b) => a.employee.name.localeCompare(b.employee.name, 'ko'));
+    visibleEmployees.sort((a, b) => {
+      const adminCompare = (b.employee.isCompanyAdmin ? 1 : 0) - (a.employee.isCompanyAdmin ? 1 : 0);
+      if (adminCompare !== 0) return adminCompare;
+      return a.employee.name.localeCompare(b.employee.name, 'ko');
+    });
   } else {
     visibleEmployees.sort((a, b) => {
-      const roleCompare = (a.employee.role || '').localeCompare(b.employee.role || '', 'ko');
-      if (roleCompare !== 0) return roleCompare;
+      const orderCompare = positionOrderOf(a.employee) - positionOrderOf(b.employee);
+      if (orderCompare !== 0) return orderCompare;
       return a.employee.name.localeCompare(b.employee.name, 'ko');
     });
   }
@@ -306,9 +451,14 @@ export default function CompanyScreen() {
           <Text style={s.headerTitle}>회사관리</Text>
           <Text style={s.headerSub}>부서별 직원 {totalEmployeeCount}명</Text>
         </View>
-        <TouchableOpacity style={s.deptManageBtn} onPress={openDeptModal} activeOpacity={0.75}>
-          <Text style={s.deptManageBtnText}>부서 관리</Text>
-        </TouchableOpacity>
+        <View style={s.headerBtnRow}>
+          <TouchableOpacity style={s.deptManageBtn} onPress={openDeptModal} activeOpacity={0.75}>
+            <Text style={s.deptManageBtnText}>부서 관리</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.deptManageBtn} onPress={openRoleModal} activeOpacity={0.75}>
+            <Text style={s.deptManageBtnText}>직책 관리</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={s.body}>
@@ -340,12 +490,15 @@ export default function CompanyScreen() {
               <Text style={s.emptyText}>{showAll ? '회사 직원이 없습니다' : '이 부서에 직원이 없습니다'}</Text>
             </View>
           ) : (
-            visibleEmployees.map(({ employee, departmentName }) => (
-              <View key={employee.id} style={s.card}>
+            visibleEmployees.map(({ employee, departmentName }) => {
+              // 관리자는 직책 체계 밖의 역할이라 직책이 없는 게 정상이므로, 미배정이어도 "직책 미배정"을 표시하지 않는다.
+              const positionLabel = positionNameById.get(employee.positionId) || (employee.isCompanyAdmin ? '' : '직책 미배정');
+              return (
+              <TouchableOpacity key={employee.id} style={s.card} onPress={() => openEmployeeEdit(employee)} activeOpacity={0.75}>
                 <View style={s.cardTop}>
                   <View style={s.cardTitleRow}>
                     <Text style={s.cardTitle} numberOfLines={1}>{employee.name}</Text>
-                    <Text style={s.employeeRole} numberOfLines={1}>{departmentName} · {employee.role || '직책 미등록'}</Text>
+                    <Text style={s.employeeRole} numberOfLines={1}>{departmentName}{positionLabel ? ` · ${positionLabel}` : ''}</Text>
                   </View>
                   {employee.isCompanyAdmin && (
                     <View style={s.adminBadge}>
@@ -353,8 +506,9 @@ export default function CompanyScreen() {
                     </View>
                   )}
                 </View>
-              </View>
-            ))
+              </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
       </View>
@@ -373,7 +527,11 @@ export default function CompanyScreen() {
               {flatDeptTree.length === 0 ? (
                 <Text style={s.emptyText}>등록된 부서가 없습니다</Text>
               ) : (
-                flatDeptTree.map((dept) => (
+                flatDeptTree.map((dept) => {
+                  const siblingInfo = deptSiblingIndexById.get(dept.id);
+                  const isFirstSibling = !siblingInfo || siblingInfo.idx === 0;
+                  const isLastSibling = !siblingInfo || siblingInfo.idx === siblingInfo.count - 1;
+                  return (
                   <View key={dept.id} style={{ marginLeft: dept.depth * DEPT_INDENT }}>
                     <View style={s.deptRow}>
                       {editingDeptId === dept.id ? (
@@ -399,6 +557,12 @@ export default function CompanyScreen() {
                           <TouchableOpacity style={s.deptRowNameWrap} onPress={() => startEditDept(dept)} activeOpacity={0.7}>
                             <Text style={s.deptRowName} numberOfLines={1}>{dept.name}</Text>
                           </TouchableOpacity>
+                          <TouchableOpacity style={s.deptRowBtn} onPress={() => handleMoveDepartment(dept.id, 'up')} disabled={isFirstSibling}>
+                            <Text style={[s.deptRowBtnTextParent, isFirstSibling && s.deptRowBtnDisabled]}>▲</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={s.deptRowBtn} onPress={() => handleMoveDepartment(dept.id, 'down')} disabled={isLastSibling}>
+                            <Text style={[s.deptRowBtnTextParent, isLastSibling && s.deptRowBtnDisabled]}>▼</Text>
+                          </TouchableOpacity>
                           <TouchableOpacity style={s.deptRowBtn} onPress={() => openParentPicker(dept.id)}>
                             <Text style={s.deptRowBtnTextParent}>상위 부서 변경</Text>
                           </TouchableOpacity>
@@ -409,7 +573,8 @@ export default function CompanyScreen() {
                       )}
                     </View>
                   </View>
-                ))
+                  );
+                })
               )}
 
               <Text style={s.sectionLabel}>상위 부서 (선택)</Text>
@@ -433,23 +598,6 @@ export default function CompanyScreen() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={[s.sectionLabel, s.employeeSectionLabel]}>직원별 소속 부서</Text>
-              {allEmployees.length === 0 ? (
-                <Text style={s.emptyText}>회사 직원이 없습니다</Text>
-              ) : (
-                allEmployees.map((employee) => (
-                  <View key={employee.id} style={s.employeeAssignRow}>
-                    <View style={s.employeeAssignHeader}>
-                      <Text style={s.employeeAssignName} numberOfLines={1}>{employee.name}</Text>
-                    </View>
-                    <TouchableOpacity style={s.pickerTrigger} onPress={() => openEmployeeDeptPicker(employee.id)} activeOpacity={0.8}>
-                      <Text style={[s.pickerTriggerText, employee.departmentId && s.pickerTriggerTextActive]} numberOfLines={1}>
-                        {departments.find((d) => d.id === employee.departmentId)?.name || '미배정'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
-              )}
             </ScrollView>
           </Animated.View>
         </KeyboardAvoidingView>
@@ -485,16 +633,153 @@ export default function CompanyScreen() {
         );
       })()}
 
+      {/* ── 직책 관리 모달(관리자 전용) — 직책의 상하 순서를 관리한다(직원 배정은 직원 카드를 탭해서 연다) ── */}
+      <Modal visible={showRoleModal} animationType="slide" transparent onRequestClose={() => setShowRoleModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <Animated.View style={[s.sheetBase, s.modalSheet, s.deptModalMaxH, swipeRoleModal.animStyle]}>
+            <View style={s.modalHandleWrap} {...swipeRoleModal.panHandlers}>
+              <View style={s.modalHandle} />
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={s.modalTitle}>직책 관리</Text>
+
+              <Text style={s.sectionLabel}>직책 목록 (상위 → 하위 순)</Text>
+              {positions.length === 0 ? (
+                <Text style={s.emptyText}>등록된 직책이 없습니다</Text>
+              ) : (
+                positions.map((pos, idx) => (
+                  <View key={pos.id} style={s.positionRow}>
+                    {editingPositionId === pos.id ? (
+                      <View style={s.positionRowLine1}>
+                        <TextInput
+                          style={[s.input, s.deptEditInput]}
+                          value={editingPositionName}
+                          onChangeText={setEditingPositionName}
+                          placeholder="직책명"
+                          placeholderTextColor={C.textDim}
+                          autoFocus
+                          onSubmitEditing={confirmEditPosition}
+                        />
+                        <TouchableOpacity style={s.deptRowBtn} onPress={confirmEditPosition}>
+                          <Text style={s.deptRowBtnTextConfirm}>확인</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.deptRowBtn} onPress={cancelEditPosition}>
+                          <Text style={s.deptRowBtnText}>취소</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <>
+                        <View style={s.positionRowLine1}>
+                          <TouchableOpacity style={[s.deptRowNameWrap, s.positionRowNameWrap]} onPress={() => startEditPosition(pos)} activeOpacity={0.7}>
+                            <Text style={s.deptRowName} numberOfLines={1}>{pos.name}</Text>
+                          </TouchableOpacity>
+                          <View style={s.positionRowBtnGroup}>
+                            <TouchableOpacity style={s.deptRowBtn} onPress={() => handleMovePosition(pos.id, 'up')} disabled={idx === 0}>
+                              <Text style={[s.deptRowBtnTextParent, idx === 0 && s.deptRowBtnDisabled]}>▲</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={s.deptRowBtn} onPress={() => handleMovePosition(pos.id, 'down')} disabled={idx === positions.length - 1}>
+                              <Text style={[s.deptRowBtnTextParent, idx === positions.length - 1 && s.deptRowBtnDisabled]}>▼</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={s.deptRowBtn} onPress={() => handleDeletePosition(pos)}>
+                              <Text style={s.deptRowBtnTextDelete}>삭제</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        {/* 본인 이하 직급 프로젝트 조회 허용 — 켜면 이 직책 직원이 프로젝트 메뉴 "회사 전체"에서 동료 프로젝트를 볼 수 있다.
+                            라벨 문구가 길어 이름/버튼 줄과 한 줄에 두면 좁은 화면에서 잘리므로 별도 줄로 분리한다. */}
+                        <View style={s.positionRowLine2}>
+                          <Text style={s.positionVisibilityInlineLabel} numberOfLines={1}>하위 프로젝트 조회 허용</Text>
+                          <Switch
+                            value={!!pos.canViewSubordinateProjects}
+                            onValueChange={(v) => handleTogglePositionVisibility(pos.id, v)}
+                            trackColor={{ false: C.border, true: C.red + '88' }}
+                            thumbColor={pos.canViewSubordinateProjects ? C.red : C.textDim}
+                          />
+                        </View>
+                      </>
+                    )}
+                  </View>
+                ))
+              )}
+
+              <View style={s.deptAddRow}>
+                <TextInput
+                  style={[s.input, s.flex1]}
+                  value={newPositionName}
+                  onChangeText={setNewPositionName}
+                  placeholder="새 직책명"
+                  placeholderTextColor={C.textDim}
+                  onSubmitEditing={handleAddPosition}
+                />
+                <TouchableOpacity style={s.deptAddBtn} onPress={handleAddPosition}>
+                  <Text style={s.deptAddBtnText}>추가</Text>
+                </TouchableOpacity>
+              </View>
+
+            </ScrollView>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 직원 정보 수정 모달(관리자 전용) — 회사관리 목록에서 직원(관리자 본인 포함)을 탭하면 열린다 ── */}
+      <Modal visible={!!employeeEditFor} animationType="slide" transparent onRequestClose={() => setEmployeeEditFor(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <View style={[s.sheetBase, s.modalSheet]}>
+            <View style={s.modalHandleWrap}>
+              <View style={s.modalHandle} />
+            </View>
+            <Text style={s.modalTitle}>직원 정보 수정</Text>
+            <Text style={s.employeeEditSubTitle}>{employeeEditFor?.name}</Text>
+
+            <Text style={s.sectionLabel}>소속 부서</Text>
+            <TouchableOpacity style={s.pickerTrigger} onPress={() => { setEmployeeEditPickerSearch(''); setEmployeeEditDeptPickerOpen(true); }} activeOpacity={0.8}>
+              <Text style={[s.pickerTriggerText, employeeEditDeptId && s.pickerTriggerTextActive]} numberOfLines={1}>
+                {departments.find((d) => d.id === employeeEditDeptId)?.name || '미배정'}
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={[s.sectionLabel, s.employeeSectionLabel]}>직책</Text>
+            <TouchableOpacity style={s.pickerTrigger} onPress={() => { setEmployeeEditPickerSearch(''); setEmployeeEditPositionPickerOpen(true); }} activeOpacity={0.8}>
+              <Text style={[s.pickerTriggerText, employeeEditPositionId && s.pickerTriggerTextActive]} numberOfLines={1}>
+                {positionNameById.get(employeeEditPositionId) || '미배정'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={s.employeeEditBtns}>
+              <TouchableOpacity style={s.deptRowBtn} onPress={() => setEmployeeEditFor(null)}>
+                <Text style={s.deptRowBtnText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.deptAddBtn} onPress={handleSaveEmployeeEdit} disabled={savingEmployeeEdit}>
+                <Text style={s.deptAddBtnText}>{savingEmployeeEdit ? '저장 중…' : '저장'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <DeptPickerModal
-        visible={!!employeeDeptPickerFor}
-        onClose={() => setEmployeeDeptPickerFor(null)}
+        visible={employeeEditDeptPickerOpen}
+        onClose={() => setEmployeeEditDeptPickerOpen(false)}
         title="소속 부서 선택"
-        search={employeeDeptSearch}
-        onSearchChange={setEmployeeDeptSearch}
+        search={employeeEditPickerSearch}
+        onSearchChange={setEmployeeEditPickerSearch}
         items={departments}
-        selectedId={allEmployees.find((e) => e.id === employeeDeptPickerFor)?.departmentId ?? null}
-        onSelect={chooseEmployeeDept}
+        selectedId={employeeEditDeptId}
+        onSelect={(id) => { setEmployeeEditDeptId(id); setEmployeeEditDeptPickerOpen(false); }}
         noneLabel="미배정"
+      />
+
+      <DeptPickerModal
+        visible={employeeEditPositionPickerOpen}
+        onClose={() => setEmployeeEditPositionPickerOpen(false)}
+        title="직책 선택"
+        search={employeeEditPickerSearch}
+        onSearchChange={setEmployeeEditPickerSearch}
+        items={positions}
+        selectedId={employeeEditPositionId}
+        onSelect={(id) => { setEmployeeEditPositionId(id); setEmployeeEditPositionPickerOpen(false); }}
+        noneLabel="미배정"
+        searchPlaceholder="직책명 검색"
       />
     </View>
   );
@@ -532,6 +817,7 @@ const s = StyleSheet.create({
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },
   cardTitle: { color: C.textPrimary, fontSize: 14, fontWeight: '500', flexShrink: 0 },
 
+  headerBtnRow: { flexDirection: 'row', gap: 8 },
   deptManageBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: C.companyIndigo + '66', backgroundColor: C.companyIndigo + '18' },
   deptManageBtnText: { color: C.companyIndigo, fontSize: 12, fontWeight: '600' },
 
@@ -578,7 +864,21 @@ const s = StyleSheet.create({
   flex1: { flex: 1 },
 
   deptRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  // 직책 행은 부서 행(deptRow)과 달리 2줄 구조다 — "하위 프로젝트 조회 허용" 라벨이 길어서
+  // 이름+버튼까지 한 줄에 넣으면 좁은 화면에서 라벨이 잘리거나 Switch가 밀릴 수 있어 분리한다.
+  positionRow: { flexDirection: 'column', marginBottom: 10 },
+  positionRowLine1: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // ▲/▼/삭제 버튼끼리는 이름-버튼그룹 간격(gap:8)보다 좁게 붙인다.
+  positionRowBtnGroup: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  positionRowLine2: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 6 },
   deptRowNameWrap: { flex: 1, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  // deptRowNameWrap의 flex:1을 이 너비 고정 오버라이드로 덮어써야 하는데, `flex` 축약 속성은
+  // RN/Yoga에서 flexBasis까지 함께 재설정하는 합성 속성이라 width와 섞어 쓰면 레이아웃이 0으로
+  // 찌그러져 텍스트가 안 보이는 경우가 있다(탭은 되므로 편집 모드 진입 시 TextInput에는 값이
+  // 정상 표시됨 — 그래서 "편집할 때만 보인다"는 증상으로 나타남). flex 대신 개별 속성(flexGrow/
+  // flexShrink)만 써서 이 문제를 피한다.
+  positionRowNameWrap: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: 120, paddingHorizontal: 10 },
+  positionVisibilityInlineLabel: { color: C.textDim, fontSize: 10, flexShrink: 1 },
   deptRowName: { color: C.textPrimary, fontSize: 14 },
   deptEditInput: { flex: 1 },
   deptRowBtn: { paddingHorizontal: 10, paddingVertical: 8 },
@@ -586,12 +886,12 @@ const s = StyleSheet.create({
   deptRowBtnTextConfirm: { color: C.companyIndigo, fontSize: 13, fontWeight: '600' },
   deptRowBtnTextParent: { color: C.companyIndigo, fontSize: 12 },
   deptRowBtnTextDelete: { color: C.red, fontSize: 13 },
+  deptRowBtnDisabled: { color: C.textDim, opacity: 0.4 },
 
   deptAddRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 8 },
   deptAddBtn: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, backgroundColor: C.companyIndigo },
   deptAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 
-  employeeAssignRow: { marginBottom: 16, gap: 8 },
-  employeeAssignHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  employeeAssignName: { color: C.textPrimary, fontSize: 14, fontWeight: '500', flex: 1, marginRight: 10 },
+  employeeEditSubTitle: { color: C.textSecondary, fontSize: 13, marginBottom: 16 },
+  employeeEditBtns: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 20 },
 });

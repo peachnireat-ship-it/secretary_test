@@ -73,22 +73,54 @@ function rosterToUser({ id, email, name, role, team }) {
 
 let _cachedUser = null;
 
+// 회사 관리자이거나, 본인 직책에 can_view_subordinate_projects 플래그가 켜져 있으면 true — 프로젝트
+// 메뉴 "회사 전체" 보기 노출 여부에 쓰인다(getCompanyProjects()는 이와 별개로 서버에서도 항상
+// 동일한 조건을 재검증한다). _cachedUser에 담겨 로그인 시 1회만 계산되므로, 관리자가 직책 권한을
+// 바꿔도 재로그인 전까지는 반영되지 않는다(isCompanyAdmin 등 다른 프로필 필드와 동일한 기존 캐시 정책).
+async function loadCanViewCompanyProjects(isCompanyAdmin, positionId) {
+  if (isCompanyAdmin) return true;
+  if (!positionId) return false;
+  const { data } = await supabase.from('positions').select('can_view_subordinate_projects').eq('id', positionId).maybeSingle();
+  return !!data?.can_view_subordinate_projects;
+}
+
 async function hydrateUserFromSession(session) {
   if (!session?.user) return null;
   const entry = findRoster({ id: session.user.id });
-  if (entry) return rosterToUser(entry);
+  if (entry) {
+    const rosterUser = rosterToUser(entry);
+    // ROSTER 계정은 원래 "회사 계정 시나리오 밖"이 기본값이지만, 회사관리 화면에서 관리자가
+    // 이 계정을 실제 회사 소속으로 배정한 경우(예: 회사 직급 계층 기능을 테스트하려고 기존
+    // ROSTER 테스트 계정에 부서/직책을 부여)에는 그 배정을 무시하면 안 된다. 그대로 두면
+    // profiles에는 company_id/직책이 정상 저장돼 있는데도 로그인 시 항상 false/null로 덮어써져
+    // "회사 전체" 탭 등 회사 기능이 전부 숨겨지는 불일치가 생긴다(get_company_projects() 등
+    // 서버 RPC는 auth.uid() 기준으로 정상 동작하므로 이 문제는 클라이언트 표시 조건에만 있었다).
+    const { data: rosterProfile } = await supabase.from('profiles').select('is_company_admin, company_id, position_id').eq('id', entry.id).maybeSingle();
+    if (rosterProfile?.company_id) {
+      const isCompanyAdmin = !!rosterProfile.is_company_admin;
+      return {
+        ...rosterUser,
+        isCompanyAdmin,
+        companyId: rosterProfile.company_id,
+        canViewCompanyProjects: await loadCanViewCompanyProjects(isCompanyAdmin, rosterProfile.position_id),
+      };
+    }
+    return rosterUser;
+  }
   // ROSTER에 없는 계정(회원가입으로 새로 생성된 계정, 회사 계정 시나리오 계정 포함)은
   // profiles 테이블에서 직접 조회한다.
-  const { data, error } = await supabase.from('profiles').select('id, email, name, role, team, contact, is_company_admin, company_id').eq('id', session.user.id).single();
+  const { data, error } = await supabase.from('profiles').select('id, email, name, role, team, contact, is_company_admin, company_id, position_id').eq('id', session.user.id).single();
   if (data) {
     // 과거에 회사 등록 RPC가 실패해(예: 회사명 중복) profiles 행은 있지만 company_id가 비어있는
     // 계정을 재로그인 시점에도 계속 감지한다 — 이 플래그가 없으면 최초 실패 이후에는 아무 안내도
     // 없이 회사 미소속 상태로 영구히 남는다(설정 화면에서 재시도 유도용, completeCompanySetup 참고).
     const accountType = session.user.user_metadata?.accountType;
     const companySetupPending = (accountType === 'admin' || accountType === 'employee') && !data.company_id;
+    const isCompanyAdmin = !!data.is_company_admin;
     return {
       id: data.id, email: data.email, name: data.name, role: data.role, team: data.team, contact: data.contact,
-      isCompanyAdmin: !!data.is_company_admin, companyId: data.company_id || null,
+      isCompanyAdmin, companyId: data.company_id || null,
+      canViewCompanyProjects: await loadCanViewCompanyProjects(isCompanyAdmin, data.position_id),
       companySetupPending, pendingAccountType: companySetupPending ? accountType : undefined,
     };
   }
@@ -136,9 +168,12 @@ async function hydrateUserFromSession(session) {
       }
     }
 
+    // 방금 생성된 profiles 행은 position_id가 항상 null(직책 배정은 회사관리 화면에서 나중에
+    // 이루어짐)이므로 canViewCompanyProjects는 회사 관리자 여부와 항상 동일하다.
+    const isCompanyAdmin = accountType === 'admin' && !companySetupPending;
     return {
       id: inserted.id, email: inserted.email, name: inserted.name, role: inserted.role, team: inserted.team, contact: inserted.contact,
-      isCompanyAdmin: accountType === 'admin' && !companySetupPending, companyId,
+      isCompanyAdmin, canViewCompanyProjects: isCompanyAdmin, companyId,
       companySetupPending, pendingAccountType: companySetupPending ? accountType : undefined,
     };
   }
@@ -284,7 +319,9 @@ export async function completeCompanySetup(companyName, departmentName) {
   _cachedUser = refreshed
     ? {
         id: refreshed.id, email: refreshed.email, name: refreshed.name, role: refreshed.role, team: refreshed.team, contact: refreshed.contact,
-        isCompanyAdmin: !!refreshed.is_company_admin, companyId: refreshed.company_id || null,
+        // 이 시점에는 아직 직책 배정 전(position_id는 항상 null)이므로 canViewCompanyProjects는
+        // 회사 관리자 여부와 동일하다(loadCanViewCompanyProjects 참고).
+        isCompanyAdmin: !!refreshed.is_company_admin, canViewCompanyProjects: !!refreshed.is_company_admin, companyId: refreshed.company_id || null,
         companySetupPending: false, pendingAccountType: undefined,
       }
     : { ..._cachedUser, companySetupPending: false, pendingAccountType: undefined };
@@ -510,7 +547,7 @@ const SCHEDULE_KEYMAP = { date: 'date', time: 'time', title: 'title', tag: 'tag'
 const CLIENT_KEYMAP = { name: 'name', company: 'company', role: 'role', contact: 'contact', workContact: 'work_contact', email: 'email', sns: 'sns', notes: 'notes', aiSummary: 'ai_summary', linkedProfileId: 'linked_profile_id', createdAt: 'created_at' };
 const HISTORY_KEYMAP = { clientId: 'client_id', date: 'date', type: 'type', title: 'title', content: 'content', result: 'result', sharedWithMutual: 'shared_with_mutual', topicId: 'topic_id', createdAt: 'created_at' };
 const TOPIC_KEYMAP = { clientId: 'client_id', projectId: 'project_id', name: 'name', shared: 'shared', createdAt: 'created_at' };
-const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', ownerClientId: 'owner_client_id', meetingRecordIds: 'meeting_record_ids', notifyEmail: 'notify_email', createdAt: 'created_at', updatedAt: 'updated_at' };
+const PROJECT_KEYMAP = { title: 'title', deadline: 'deadline', startDate: 'start_date', status: 'status', priority: 'priority', notes: 'notes', progress: 'progress', clientIds: 'client_ids', ownerClientId: 'owner_client_id', meetingRecordIds: 'meeting_record_ids', notifyEmail: 'notify_email', originProjectId: 'origin_project_id', createdAt: 'created_at', updatedAt: 'updated_at' };
 const MEETING_KEYMAP = { title: 'title', transcript: 'transcript', summary: 'summary', source: 'source', clientIds: 'client_ids', projectId: 'project_id', tasks: 'tasks', diarizeSource: 'diarize_source', createdAt: 'created_at' };
 const MESSAGE_KEYMAP = { direction: 'direction', sender: 'sender', company: 'company', subject: 'subject', content: 'content', priority: 'priority', status: 'status', fromId: 'sender_id', toId: 'to_id', linkedReceivedId: 'linked_received_id', editHistory: 'edit_history', createdAt: 'created_at', updatedAt: 'updated_at' };
 
@@ -778,8 +815,13 @@ async function syncProjectMirrors(projectId) {
 
 export async function addProject(project) {
   const user = await getCurrentUser();
-  await assertClientIdsOwned(user.id, project.clientIds);
-  const row = { id: project.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(project, PROJECT_KEYMAP) };
+  // originProjectId는 sync_project_mirrors()만 설정할 수 있는 필드다(자신의 프로젝트를 타인
+  // 프로젝트의 사본으로 위조해 get_project_mirror_info()로 그 사람 정보를 열람하는 것을 막기
+  // 위함 — DB 트리거 trg_prevent_client_origin_project_id_write가 최종 방어선이고, 여기서는
+  // 저장 시도 전에 먼저 걸러 명확한 에러 없이 조용히 무시한다).
+  const { originProjectId, ...safeProject } = project;
+  await assertClientIdsOwned(user.id, safeProject.clientIds);
+  const row = { id: safeProject.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(safeProject, PROJECT_KEYMAP) };
   const { error } = await supabase.from('projects').insert(row);
   if (error) throw error;
   await syncProjectMirrors(row.id);
@@ -788,8 +830,11 @@ export async function addProject(project) {
 
 export async function updateProject(id, changes) {
   const user = await getCurrentUser();
-  if (changes.clientIds !== undefined) await assertClientIdsOwned(user.id, changes.clientIds);
-  const row = { ...toRow(changes, PROJECT_KEYMAP), updated_at: Date.now() };
+  // addProject와 동일한 이유로 originProjectId 변경은 무시한다(AI update_project 액션처럼
+  // 필드 화이트리스트 없이 changes를 그대로 넘기는 경로가 실제로 존재하므로 특히 중요).
+  const { originProjectId, ...safeChanges } = changes;
+  if (safeChanges.clientIds !== undefined) await assertClientIdsOwned(user.id, safeChanges.clientIds);
+  const row = { ...toRow(safeChanges, PROJECT_KEYMAP), updated_at: Date.now() };
   const { error } = await supabase.from('projects').update(row).eq('id', id).eq('user_id', user.id);
   if (error) throw error;
   await syncProjectMirrors(id);
@@ -827,11 +872,29 @@ export async function getCompanyProjects() {
   return [...groups.entries()].map(([departmentName, projects]) => ({ departmentName, projects }));
 }
 
+// 프로젝트 사본(mirror) 소유자 본인 전용: 자신의 사본 하나에 대해 원본 등록자 이름/팀/부서, 원본의
+// 관련 인물을 조회한다. get_project_mirror_info() RPC(SECURITY DEFINER,
+// patch_project_mirror_readonly_info.sql)를 사용한다 — 사본 자체에는 client_ids 등이 항상 빈 값으로
+// 저장돼 있어 클라이언트에서 직접 계산할 수 없다. 다른 사람의 사본이거나 사본이 아닌 프로젝트 id를
+// 넘기면 RPC가 0 rows를 반환하므로 이때는 null을 반환한다.
+export async function getProjectMirrorInfo(projectId) {
+  const { data, error } = await supabase.rpc('get_project_mirror_info', { p_project_id: projectId });
+  if (error) throw error;
+  const row = data?.[0];
+  if (!row) return null;
+  return {
+    ownerName: row.owner_name || '',
+    ownerTeam: row.owner_team || '',
+    departmentName: row.department_name || '',
+    relatedPeople: row.related_people || [],
+  };
+}
+
 // 회사 관리자 전용: 같은 회사 소속 전체 부서의 직원(profiles) 목록을 부서별로 그룹핑해서 반환한다.
 // 보안 재감사(_review/secretary_test-20260723/02_security.md 발견 #3)에서 profiles_select_same_company
 // RLS가 email/contact/notes/work_topics까지 전체 컬럼을 노출한다는 MEDIUM 이슈가 지적돼, 그 정책은
 // drop되고 SECURITY DEFINER 함수 get_company_colleagues()로 대체됐다(patch_profiles_colleagues_columns.sql
-// 참고). 이 함수는 id/name/role/department_id/is_company_admin만 반환하므로 email/contact 등
+// 참고). 이 함수는 id/name/role/department_id/position_id/is_company_admin만 반환하므로 email/contact 등
 // 민감 컬럼은 DB 레벨에서부터 조회 자체가 불가능하다.
 export async function getCompanyEmployees() {
   const user = await getCurrentUser();
@@ -849,20 +912,77 @@ export async function getCompanyEmployees() {
   const groups = new Map();
   for (const row of profilesData || []) {
     const departmentName = deptNameById.get(row.department_id) || '미배정';
-    const employee = { id: row.id, name: row.name || '', role: row.role || '', isCompanyAdmin: !!row.is_company_admin, departmentId: row.department_id || null };
+    const employee = { id: row.id, name: row.name || '', isCompanyAdmin: !!row.is_company_admin, departmentId: row.department_id || null, positionId: row.position_id || null };
     if (!groups.has(departmentName)) groups.set(departmentName, []);
     groups.get(departmentName).push(employee);
   }
   return [...groups.entries()].map(([departmentName, employees]) => ({ departmentName, employees }));
 }
 
+// 회사 관리자 전용: 같은 회사 소속 직책 목록(순위형 — 상위→하위 순으로 정렬됨). 직책 관리 모달의
+// 목록·직원 배정 피커, 회사관리 메인 목록의 직책순 정렬에 사용된다.
+export async function getCompanyPositions() {
+  const user = await getCurrentUser();
+  if (!user?.companyId) return [];
+  const { data, error } = await supabase.from('positions').select('id, name, sort_order, can_view_subordinate_projects').eq('company_id', user.companyId).order('sort_order');
+  if (error) throw error;
+  return (data || []).map((p) => ({ id: p.id, name: p.name, sortOrder: p.sort_order, canViewSubordinateProjects: !!p.can_view_subordinate_projects }));
+}
+
+// 회사 관리자 전용: 직책 추가(목록 맨 아래에 추가됨). RPC 내부에서 my_is_company_admin() 체크 및 중복/미입력 검증(한국어 예외 메시지) 수행.
+export async function createPosition(name) {
+  const { data, error } = await supabase.rpc('create_position', { p_name: name });
+  if (error) throw error;
+  return data;
+}
+
+// 회사 관리자 전용: 직책명 변경.
+export async function renamePosition(id, name) {
+  const { error } = await supabase.rpc('rename_position', { p_position_id: id, p_new_name: name });
+  if (error) throw error;
+}
+
+// 회사 관리자 전용: 직책 삭제. 이 직책으로 배정된 직원은 자동으로 미배정 처리된다(FK on delete set null).
+export async function deletePosition(id) {
+  const { error } = await supabase.rpc('delete_position', { p_position_id: id });
+  if (error) throw error;
+}
+
+// 회사 관리자 전용: 직책의 상하 순서를 한 칸 이동. direction은 'up' | 'down'.
+export async function movePosition(id, direction) {
+  const { error } = await supabase.rpc('move_position', { p_position_id: id, p_direction: direction });
+  if (error) throw error;
+}
+
+// 회사 관리자 전용: 부서의 상하 순서를 한 칸 이동(같은 상위 부서를 가진 형제 부서들 사이에서만
+// 이동한다). direction은 'up' | 'down'.
+export async function moveDepartment(id, direction) {
+  const { error } = await supabase.rpc('move_department', { p_department_id: id, p_direction: direction });
+  if (error) throw error;
+}
+
+// 회사 관리자 전용: 직원의 직책 배정. positionId에 null을 넘기면 "미배정"으로 변경된다.
+export async function assignEmployeePosition(employeeId, positionId) {
+  const { error } = await supabase.rpc('assign_employee_position', { p_employee_id: employeeId, p_position_id: positionId });
+  if (error) throw error;
+}
+
+// 회사 관리자 전용: 직책의 "본인 이하 직급 프로젝트 조회" 권한 토글. 켜면 이 직책으로 배정된
+// 직원이 프로젝트 메뉴 "회사 전체" 보기에서 본인 직급 이하 동료의 프로젝트를 조회할 수 있다
+// (get_company_projects() 참고).
+export async function setPositionProjectVisibility(positionId, enabled) {
+  const { error } = await supabase.rpc('set_position_project_visibility', { p_position_id: positionId, p_enabled: !!enabled });
+  if (error) throw error;
+}
+
 // 회사 관리자 전용: 같은 회사 소속 부서 목록(계층 구조). 부서 관리 모달의 목록·재배치 chip에 사용된다.
+// sort_order로 정렬해 반환하므로, 같은 상위 부서를 가진 형제 부서들 사이의 표시 순서가 그대로 유지된다.
 export async function getCompanyDepartments() {
   const user = await getCurrentUser();
   if (!user?.companyId) return [];
-  const { data, error } = await supabase.from('departments').select('id, name, parent_department_id').eq('company_id', user.companyId);
+  const { data, error } = await supabase.from('departments').select('id, name, parent_department_id, sort_order').eq('company_id', user.companyId).order('sort_order');
   if (error) throw error;
-  return (data || []).map((d) => ({ id: d.id, name: d.name, parentId: d.parent_department_id || null }));
+  return (data || []).map((d) => ({ id: d.id, name: d.name, parentId: d.parent_department_id || null, sortOrder: d.sort_order }));
 }
 
 // 회사 관리자 전용: 부서 추가. parentId는 상위 부서 id(null = 최상위). RPC 내부에서 my_is_company_admin() 체크 및 중복/미입력 검증(한국어 예외 메시지) 수행.

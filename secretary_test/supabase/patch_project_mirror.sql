@@ -12,6 +12,12 @@
 -- 대상이 되지 않는다(무한 루프 방지).
 --
 -- 실행: Supabase Dashboard > SQL Editor에서 이 파일 전체를 실행한다.
+--
+-- 보안 주의: 이 파일만 실행하고 schema.sql의 trg_prevent_client_origin_project_id_write 트리거
+-- (prevent_client_origin_project_id_write())를 배포하지 않으면, 일반 사용자가 addProject/updateProject
+-- 경로(특히 update_project AI 액션처럼 필드 화이트리스트가 없는 경로)로 origin_project_id를 임의의
+-- 다른 사용자 프로젝트 id로 위조해 get_project_mirror_info()를 통해 그 사용자 정보를 열람할 수 있는
+-- Critical 취약점이 그대로 남는다. 반드시 schema.sql의 해당 트리거도 함께 배포할 것.
 
 alter table projects add column if not exists origin_project_id text references projects(id) on delete cascade;
 create index if not exists projects_origin_idx on projects(origin_project_id);
@@ -50,6 +56,11 @@ begin
   loop
     v_target_user_id := v_client.linked_profile_id;
     v_keep_user_ids := array_append(v_keep_user_ids, v_target_user_id);
+
+    -- trg_prevent_client_origin_project_id_write(schema.sql)가 일반 사용자의 origin_project_id
+    -- 직접 조작을 막는데, 이 upsert는 신뢰된 서버 경로(사본 동기화 자체)이므로 회원가입 RPC들과
+    -- 동일한 패턴으로 세션 플래그를 켜서 그 트리거를 우회한다.
+    perform set_config('app.bypass_privilege_trigger', 'true', true);
 
     insert into projects (
       id, user_id, title, deadline, start_date, status, priority, notes, progress,
