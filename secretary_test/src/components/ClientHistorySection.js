@@ -71,9 +71,9 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
 
   // 토픽별 보기 — 본인 항목은 topicId로 clientTopics에서 이름을 찾고, 상대방 공유 항목은 RPC가
   // 이미 이름(topicName)을 채워 보내준다(상대방의 topics 행에는 직접 접근 권한이 없으므로).
-  // 토픽이 없거나 찾을 수 없으면(삭제됨 등) "미분류"로 묶는다. 그룹 정렬은 그룹 내 최신 항목
-  // (createdAt) 기준 내림차순 — combinedHistories가 이미 desc 정렬이라 각 그룹의 첫 항목이 곧
-  // 최신 항목이다.
+  // 토픽이 없거나 찾을 수 없으면(삭제됨 등) "미분류"로 묶는다. 그룹 정렬은 "미분류"를 항상
+  // 최상단에 고정하고, 나머지는 그룹 내 최신 항목(createdAt) 기준 내림차순 — combinedHistories가
+  // 이미 desc 정렬이라 각 그룹의 첫 항목이 곧 최신 항목이다.
   const topicMap = new Map();
   for (const h of combinedHistories) {
     const topic = selectableTopics.find((t) => t.id === h.topicId);
@@ -92,6 +92,9 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
   const topicGroups = [...topicMap.entries()]
     .map(([, group]) => group)
     .sort((a, b) => {
+      // 미분류(topicId === null) 그룹은 항상 최상단 고정, 나머지 상대 순서는 유지한다.
+      if (a.topicId === null && b.topicId !== null) return -1;
+      if (a.topicId !== null && b.topicId === null) return 1;
       const aKey = a.items[0]?.createdAt ?? selectableTopics.find((t) => t.id === a.topicId)?.createdAt ?? 0;
       const bKey = b.items[0]?.createdAt ?? selectableTopics.find((t) => t.id === b.topicId)?.createdAt ?? 0;
       return bKey - aKey;
@@ -478,8 +481,15 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
           <View style={s.modalSheet}>
             <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>토픽 관리</Text>
-            <Text style={s.modalSubTitle}>{client?.company} — {client?.name}</Text>
+            <View style={s.topicMgrHeaderRow}>
+              <View style={s.flex1}>
+                <Text style={s.modalTitle}>토픽 관리</Text>
+                <Text style={s.modalSubTitle}>{client?.company} — {client?.name}</Text>
+              </View>
+              <TouchableOpacity style={s.topicMgrCloseBtn} onPress={() => setShowTopicManager(false)}>
+                <Text style={s.topicMgrCloseBtnText}>닫기</Text>
+              </TouchableOpacity>
+            </View>
 
             <ScrollView style={s.topicMgrList}>
               {clientTopics.length === 0 && mutualTopicGroups.length === 0 ? (
@@ -524,12 +534,6 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
               <TextInput style={[s.input, s.flex1]} value={mgrNewTopicName} onChangeText={setMgrNewTopicName} placeholder="새 토픽 이름" placeholderTextColor={C.textDim} />
               <TouchableOpacity style={s.topicCreateBtn} onPress={handleManagerCreateTopic}>
                 <Text style={s.topicCreateBtnText}>추가</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalConfirm} onPress={() => setShowTopicManager(false)}>
-                <Text style={s.modalConfirmText}>닫기</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -653,6 +657,9 @@ const s = StyleSheet.create({
   topicCreateRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   topicCreateBtn: { paddingHorizontal: 16, borderRadius: 10, backgroundColor: C.accentTeal, alignItems: 'center', justifyContent: 'center' },
   topicCreateBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  topicMgrHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  topicMgrCloseBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  topicMgrCloseBtnText: { color: C.accentTeal, fontSize: 11, fontWeight: '600' },
   topicMgrList: { maxHeight: 280, marginBottom: 8 },
   topicMgrRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
   topicMgrName: { color: C.textPrimary, fontSize: 14, flex: 1 },

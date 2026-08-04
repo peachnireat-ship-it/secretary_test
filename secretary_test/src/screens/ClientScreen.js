@@ -51,6 +51,13 @@ export default function ClientScreen({ navigation, route }) {
   const [activeTab, setActiveTab] = useState('all');
   const [favorites, setFavorites] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
+  // 담당자 상세 모달의 연락처 섹션 — "직장" 연락처를 아랫줄 "이메일" 텍스트 폭에 맞춰 절대 위치로
+  // 정렬하기 위한 실측값. 컨테이너 폭·"직장" 박스 자체 폭까지 함께 실측해 화면 밖으로 넘치지
+  // 않도록 clamp한다(긴 이메일 주소 대응). 담당자가 바뀌면(값이 전부 달라지므로) 반드시
+  // 재측정해야 하므로 null로 리셋한다.
+  const [emailRowWidth, setEmailRowWidth] = useState(null);
+  const [contactPairWidth, setContactPairWidth] = useState(null);
+  const [workRowWidth, setWorkRowWidth] = useState(null);
   const [sortOrder, setSortOrder] = useState('asc');
   const [selectedProject, setSelectedProject] = useState(null);
   // 상호 등록된 담당자(selectedClient.linkedProfileId 존재 시)의 히스토리 — 상대방이 상호 히스토리
@@ -121,6 +128,17 @@ export default function ClientScreen({ navigation, route }) {
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
+
+  // 연락처 섹션 "직장" 정렬용 실측값(emailRowWidth/contactPairWidth/workRowWidth)은 담당자마다
+  // 이메일 길이·레이아웃이 달라지므로, 다른 담당자를 열 때마다 반드시 다시 측정해야 한다.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEmailRowWidth(null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setContactPairWidth(null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setWorkRowWidth(null);
+  }, [selectedClient?.id]);
 
   // 상세 모달이 열릴 때(selectedClient가 상호 등록된 담당자일 때)만 상대방 히스토리를 조회한다.
   // 모달이 닫히거나(selectedClient === null) linkedProfileId가 없으면 즉시 빈 배열로 리셋해,
@@ -963,38 +981,63 @@ export default function ClientScreen({ navigation, route }) {
             {/* 연락처 */}
             {(selectedClient?.contact || selectedClient?.workContact || selectedClient?.email || selectedClient?.sns) && (
               <View style={s.contactSection}>
-                {selectedClient.contact ? (
-                  <View style={s.contactRow}>
-                    <Text style={s.contactLabel}>개인</Text>
-                    <TouchableOpacity onPress={() => Alert.alert(
-                      '전화 걸기',
-                      `${selectedClient.name}(${selectedClient.contact})에게 전화하시겠습니까?`,
-                      [
-                        { text: '취소', style: 'cancel' },
-                        { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.contact.replace(/[^0-9+]/g, '')}`) },
-                      ]
-                    )}>
-                      <Text style={s.contactNumber}>{selectedClient.contact}</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-                {selectedClient.workContact ? (
-                  <View style={s.contactRow}>
-                    <Text style={s.contactLabel}>직장</Text>
-                    <TouchableOpacity onPress={() => Alert.alert(
-                      '전화 걸기',
-                      `${selectedClient.name} 직장(${selectedClient.workContact})에 전화하시겠습니까?`,
-                      [
-                        { text: '취소', style: 'cancel' },
-                        { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.workContact.replace(/[^0-9+]/g, '')}`) },
-                      ]
-                    )}>
-                      <Text style={s.contactNumber}>{selectedClient.workContact}</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
+                {(() => {
+                  // "직장" 연락처는 개인 연락처와 이메일이 모두 함께 있을 때만, 아랫줄 이메일
+                  // 텍스트가 끝나는 x좌표에 맞춰 절대 위치로 정렬한다(실측 기반). 조건이 안 맞으면
+                  // 기존처럼 개인 연락처 옆에 자연스럽게 흐른다.
+                  const alignWorkToEmail = !!(selectedClient.contact && selectedClient.workContact && selectedClient.email);
+                  // 이메일 폭·컨테이너 폭·"직장" 박스 자체 폭을 모두 실측한 뒤에만 위치를 확정한다.
+                  // 그 전까지는 opacity 0으로 숨겨 잘못된 위치가 잠깐 보이는 것을 막는다.
+                  const measured = emailRowWidth != null && contactPairWidth != null && workRowWidth != null;
+                  const workLeft = measured ? Math.max(0, Math.min(emailRowWidth, contactPairWidth - workRowWidth)) : 0;
+                  return (selectedClient.contact || selectedClient.workContact) ? (
+                    <View style={s.contactPairRow} onLayout={(e) => setContactPairWidth(e.nativeEvent.layout.width)}>
+                      {selectedClient.contact ? (
+                        <View style={s.contactRow}>
+                          <Text style={s.contactLabel}>개인</Text>
+                          <TouchableOpacity onPress={() => Alert.alert(
+                            '전화 걸기',
+                            `${selectedClient.name}(${selectedClient.contact})에게 전화하시겠습니까?`,
+                            [
+                              { text: '취소', style: 'cancel' },
+                              { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.contact.replace(/[^0-9+]/g, '')}`) },
+                            ]
+                          )}>
+                            <Text style={s.contactNumber}>{selectedClient.contact}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                      {selectedClient.workContact ? (
+                        <View
+                          onLayout={(e) => setWorkRowWidth(e.nativeEvent.layout.width)}
+                          style={[
+                            s.contactRow,
+                            alignWorkToEmail && {
+                              position: 'absolute',
+                              top: 0,
+                              left: workLeft,
+                              opacity: measured ? 1 : 0,
+                            },
+                          ]}
+                        >
+                          <Text style={s.contactLabel}>직장</Text>
+                          <TouchableOpacity onPress={() => Alert.alert(
+                            '전화 걸기',
+                            `${selectedClient.name} 직장(${selectedClient.workContact})에 전화하시겠습니까?`,
+                            [
+                              { text: '취소', style: 'cancel' },
+                              { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.workContact.replace(/[^0-9+]/g, '')}`) },
+                            ]
+                          )}>
+                            <Text style={s.contactNumber}>{selectedClient.workContact}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null;
+                })()}
                 {selectedClient.email ? (
-                  <View style={s.contactRow}>
+                  <View style={s.contactRow} onLayout={(e) => setEmailRowWidth(e.nativeEvent.layout.width)}>
                     <Text style={s.contactLabel}>이메일</Text>
                     <TouchableOpacity onPress={() => Alert.alert(
                       '메일 보내기',
@@ -1611,7 +1654,8 @@ const s = StyleSheet.create({
   detailAvatarText: { color: C.accentTeal, fontSize: 22, fontWeight: '400' },
   detailName: { color: C.textPrimary, fontSize: 18, fontWeight: '400' },
   detailCompany: { color: C.textSecondary, fontSize: 12, marginTop: 2 },
-  contactSection: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 14 },
+  contactSection: { flexDirection: 'column', gap: 10, marginBottom: 14 },
+  contactPairRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, position: 'relative' },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   contactLabel: { color: C.textPrimary, fontSize: 12, fontWeight: '500' },
   contactNumber: { color: C.accentBlue, fontSize: 15, fontWeight: '400', textDecorationLine: 'underline' },
