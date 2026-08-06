@@ -652,7 +652,7 @@ export default function CompanyScreen() {
                     {editingPositionId === pos.id ? (
                       <View style={s.positionRowLine1}>
                         <TextInput
-                          style={[s.input, s.deptEditInput]}
+                          style={[s.input, s.deptEditInput, s.positionEditInput]}
                           value={editingPositionName}
                           onChangeText={setEditingPositionName}
                           placeholder="직책명"
@@ -669,6 +669,8 @@ export default function CompanyScreen() {
                       </View>
                     ) : (
                       <>
+                        {/* 이름/▲▼삭제/하위 프로젝트 조회 허용을 모두 한 줄(같은 y축)에 배치한다.
+                            라벨은 flexShrink로 좁은 화면에서 줄어들되 numberOfLines={1}로 잘리지 않게 유지한다. */}
                         <View style={s.positionRowLine1}>
                           <TouchableOpacity style={[s.deptRowNameWrap, s.positionRowNameWrap]} onPress={() => startEditPosition(pos)} activeOpacity={0.7}>
                             <Text style={s.deptRowName} numberOfLines={1}>{pos.name}</Text>
@@ -684,10 +686,6 @@ export default function CompanyScreen() {
                               <Text style={s.deptRowBtnTextDelete}>삭제</Text>
                             </TouchableOpacity>
                           </View>
-                        </View>
-                        {/* 본인 이하 직급 프로젝트 조회 허용 — 켜면 이 직책 직원이 프로젝트 메뉴 "회사 전체"에서 동료 프로젝트를 볼 수 있다.
-                            라벨 문구가 길어 이름/버튼 줄과 한 줄에 두면 좁은 화면에서 잘리므로 별도 줄로 분리한다. */}
-                        <View style={s.positionRowLine2}>
                           <Text style={s.positionVisibilityInlineLabel} numberOfLines={1}>하위 프로젝트 조회 허용</Text>
                           <Switch
                             value={!!pos.canViewSubordinateProjects}
@@ -702,9 +700,11 @@ export default function CompanyScreen() {
                 ))
               )}
 
+              {/* 입력칸을 flex:1 대신 이름 칸(positionRowNameWrap)과 같은 폭(120)으로 고정해
+                  "추가" 버튼이 위 목록의 ▲▼삭제/확인·취소 버튼과 같은 x축 위치에 오도록 맞춘다. */}
               <View style={s.deptAddRow}>
                 <TextInput
-                  style={[s.input, s.flex1]}
+                  style={[s.input, s.positionEditInput]}
                   value={newPositionName}
                   onChangeText={setNewPositionName}
                   placeholder="새 직책명"
@@ -864,23 +864,25 @@ const s = StyleSheet.create({
   flex1: { flex: 1 },
 
   deptRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  // 직책 행은 부서 행(deptRow)과 달리 2줄 구조다 — "하위 프로젝트 조회 허용" 라벨이 길어서
-  // 이름+버튼까지 한 줄에 넣으면 좁은 화면에서 라벨이 잘리거나 Switch가 밀릴 수 있어 분리한다.
+  // 이름/▲▼삭제/하위 프로젝트 조회 허용을 전부 한 줄(같은 y축)에 둔다 — 버튼 그룹까지는 고정폭이라
+  // 안 줄어들고, 라벨(positionVisibilityInlineLabel)만 flexShrink로 좁은 화면에서 줄어든다.
   positionRow: { flexDirection: 'column', marginBottom: 10 },
-  positionRowLine1: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  // ▲/▼/삭제 버튼끼리는 이름-버튼그룹 간격(gap:8)보다 좁게 붙인다.
+  positionRowLine1: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // ▲/▼/삭제 버튼끼리는 이름-버튼그룹 간격(gap:6)보다 좁게 붙인다.
   positionRowBtnGroup: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  positionRowLine2: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 6 },
   deptRowNameWrap: { flex: 1, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   // deptRowNameWrap의 flex:1을 이 너비 고정 오버라이드로 덮어써야 하는데, `flex` 축약 속성은
   // RN/Yoga에서 flexBasis까지 함께 재설정하는 합성 속성이라 width와 섞어 쓰면 레이아웃이 0으로
   // 찌그러져 텍스트가 안 보이는 경우가 있다(탭은 되므로 편집 모드 진입 시 TextInput에는 값이
   // 정상 표시됨 — 그래서 "편집할 때만 보인다"는 증상으로 나타남). flex 대신 개별 속성(flexGrow/
   // flexShrink)만 써서 이 문제를 피한다.
-  positionRowNameWrap: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: 120, paddingHorizontal: 10 },
-  positionVisibilityInlineLabel: { color: C.textDim, fontSize: 10, flexShrink: 1 },
+  positionRowNameWrap: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: 146, paddingHorizontal: 10 },
+  positionVisibilityInlineLabel: { color: C.textDim, fontSize: 10, flexShrink: 1, flexGrow: 1, textAlign: 'right' },
   deptRowName: { color: C.textPrimary, fontSize: 14 },
   deptEditInput: { flex: 1 },
+  // 직책 이름변경 입력칸은 flex:1로 늘어나면 확인/취소 버튼이 표시모드의 ▲▼삭제 버튼과
+  // 다른 위치로 밀려나 수평이 안 맞아 보인다 — 이름 칸(positionRowNameWrap)과 같은 폭(146)으로 고정.
+  positionEditInput: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: 146 },
   deptRowBtn: { paddingHorizontal: 10, paddingVertical: 8 },
   deptRowBtnText: { color: C.textSecondary, fontSize: 13 },
   deptRowBtnTextConfirm: { color: C.companyIndigo, fontSize: 13, fontWeight: '600' },
