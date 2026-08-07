@@ -16,6 +16,7 @@ import { useAudioRecording, formatTime } from '../hooks/useAudioRecording';
 import { useDiarization, applyNames, parseTranscriptSegments, mergeConsecutiveSegments } from '../hooks/useDiarization';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { formatDate } from '../utils/dateUtils';
+import { IS_PC } from '../utils/deviceType';
 
 function formatDateTime(ms) {
   const d = new Date(ms);
@@ -1577,7 +1578,7 @@ function priorityColor(priority) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: C.bg, paddingLeft: IS_PC ? 24 : 0 },
   // 상단 탭
   topTab: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: C.border },
   topTabBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },

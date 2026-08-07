@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { getApiKey, setApiKey, getGrokApiKey, setGrokApiKey, getAiProvider, setAiProvider, getPyannoteUrl, setPyannoteUrl, logout, getAllAccounts, switchAccount, getUserProfile, saveUserProfile, hasLegacyLocalData, migrateLocalDataToCloud, completeCompanySetup } from '../services/storage';
 import { useUser } from '../context/UserContext';
+import { IS_PC } from '../utils/deviceType';
 
 // API 키 마스킹 표시 (앞 6자 + ••• + 뒤 4자), 9자 이하 또는 masked=false면 원문 그대로
 function maskApiKey(key, masked) {
@@ -719,7 +720,7 @@ export default function SettingsScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: C.bg, paddingLeft: IS_PC ? 24 : 0 },
   scroll: { paddingTop: 60, paddingHorizontal: 24 },
   header: { marginBottom: 32 },
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },

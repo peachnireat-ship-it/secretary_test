@@ -10,6 +10,7 @@ import { watchLocation } from '../services/location';
 import { statusColor, tagColor } from '../utils/colors';
 import { todayStr } from '../utils/dateUtils';
 import { useUser } from '../context/UserContext';
+import { IS_PC } from '../utils/deviceType';
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
@@ -346,7 +347,7 @@ export default function HomeScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: C.bg, paddingLeft: IS_PC ? 24 : 0 },
   scroll: { paddingTop: 60, paddingHorizontal: 24 },
   header: { marginBottom: 32 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 },

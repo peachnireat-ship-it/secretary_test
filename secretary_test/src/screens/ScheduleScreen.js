@@ -14,6 +14,7 @@ import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects,
 import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
+import { IS_PC } from '../utils/deviceType';
 import { priorityColor, tagColor, statusColor } from '../utils/colors';
 import { daysUntil, daysLabel, findOverlappingItems, formatOverlapMessage, isValidOptionalDateStr } from '../utils/dateUtils';
 
@@ -578,16 +579,36 @@ export default function ScheduleScreen({ navigation, route }) {
     }
   }
 
+  // 모바일 FAB와 PC actionColumn 추가 버튼이 공유하는 핸들러(중복 정의 방지)
+  function openAddSheet() {
+    const defaultDate = selectedDate || (calYear === today.getFullYear() && calMonth === today.getMonth() + 1
+      ? TODAY_STR
+      : `${calYear}-${String(calMonth).padStart(2, '0')}-01`);
+    setNewStartDate(defaultDate); setNewEndDate(''); setShowAdd(true);
+  }
+
   return (
     <View style={s.root}>
-      {/* ── 헤더 ── */}
+      {/* ── 헤더: PC는 AI/추가 버튼이 우측 프로젝트 패널 옆(actionColumn)으로 옮겨가므로
+          여기서는 숨긴다(중복 방지). 모바일은 기존 그대로 헤더에 남는다 ── */}
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <Text style={s.headerTitle}>일정 관리</Text>
-        <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
-          <Text style={s.aiBtnText}>✦ AI</Text>
-        </TouchableOpacity>
+        {!IS_PC && (
+          <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+            <Text style={s.aiBtnText}>✦ AI</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
+      {/* ── 달력 + 프로젝트 패널(PC 전용): PC는 넓은 화면을 활용해 캘린더 좌측 + 등록된 프로젝트를
+          우측에 가로로 나란히 배치한다. 모바일은 프로젝트 패널을 렌더링하지 않아 기존과 동일하게
+          세로 스택으로만 보인다. 바깥(calendarRowOuter)이 alignItems:'center'로 화면 가로 중앙을
+          잡고, 안쪽(calendarRow)은 maxWidth로 폭만 제한 — App.js의 outer/inner 중앙정렬 패턴과 동일 ── */}
+      <View style={s.calendarRowOuter}>
+      <View style={s.calendarRow}>
+      {/* ── 달력(월 네비게이션+요일 헤더+그리드): PC는 넓은 화면에 그리드 칸이 과도하게 커지지 않도록
+          모바일 기준 너비로 줄여서 가운데 정렬한다 ── */}
+      <View style={s.calendarWrap}>
       {/* ── 월 네비게이션 ── */}
       <View style={s.monthNav}>
         <TouchableOpacity onPress={() => moveMonth(-1)} style={s.monthArrow}>
@@ -694,14 +715,103 @@ export default function ScheduleScreen({ navigation, route }) {
         })}
         </Animated.View>
       </View>
+      </View>
 
-      {/* ── 선택 날짜 ── */}
+      {/* ── 등록된 일정/프로젝트 패널(PC 전용): dayProjects·daySchedules를 그대로 재사용, 카드 클릭 시
+          아래 일정 목록과 동일한 상세 모달을 띄운다(아래쪽 목록과의 중복 표시는 의도된 동작).
+          AI/추가 버튼은 별도 칼럼이 아니라 이 패널 안에 alignSelf:'flex-end'로 넣어, 패널과 정확히
+          같은 폭(projectPanel의 실제 렌더 폭) 기준으로 우측 끝이 맞도록 한다 ── */}
+      {IS_PC && (
+        <View style={s.projectPanel}>
+          <TouchableOpacity style={[s.aiBtn, s.pcPanelAiBtn]} onPress={() => setShowAI(true)}>
+            <Text style={s.aiBtnText}>✦ AI</Text>
+          </TouchableOpacity>
+          <Text style={s.projectPanelTitle}>등록된 일정 · 프로젝트</Text>
+          {dayProjects.length === 0 && daySchedules.length === 0 ? (
+            <Text style={s.projectPanelEmpty}>등록된 일정·프로젝트가 없습니다</Text>
+          ) : (
+            <ScrollView style={s.projectPanelList} contentContainerStyle={s.projectPanelListContent} showsVerticalScrollIndicator={false}>
+              {/* eslint-disable-next-line react-hooks/refs -- urgencyAnim은 최초 렌더에서 한 번만 생성되는 Animated.Value ref */}
+              {dayProjects.map((proj) => {
+                const urgency = getUrgency(proj.deadline, proj.status);
+                const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
+                return (
+                  <View key={`p-${proj.id}`}>
+                    <TouchableOpacity style={s.itemCard} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
+                      <Text style={[s.projectDeadlineLabel, s.projectLabelTeal]}>프로젝트</Text>
+                      <View style={s.scheduleDivider} />
+                      <View style={s.scheduleBody}>
+                        <View style={s.scheduleTitleRow}>
+                          <Text style={s.scheduleTitle}>{proj.title}</Text>
+                          <View style={[s.tagBadge, { backgroundColor: statusColor(proj.status) + '22', borderColor: statusColor(proj.status) + '55' }]}>
+                            <Text style={[s.tagText, { color: statusColor(proj.status) }]}>{proj.status}</Text>
+                          </View>
+                        </View>
+                        {proj.startDate && (
+                          <Text style={s.scheduleNotes}>{proj.startDate} ~ {proj.deadline}</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                    {urgency > 0 && (
+                      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
+                    )}
+                  </View>
+                );
+              })}
+              {/* eslint-disable-next-line react-hooks/refs -- urgencyAnim은 최초 렌더에서 한 번만 생성되는 Animated.Value ref */}
+              {daySchedules.map((item) => {
+                const urgency = getUrgency(item.endDate || item.date);
+                const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
+                return (
+                  <View key={`s-${item.id}`}>
+                    <TouchableOpacity
+                      style={s.itemCard}
+                      activeOpacity={0.7}
+                      onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
+                      onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
+                        { text: '취소', style: 'cancel' },
+                        { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
+                      ])}
+                    >
+                      <Text style={[s.projectDeadlineLabel, s.projectLabelBlue]}>일정</Text>
+                      <View style={s.scheduleDivider} />
+                      <View style={s.scheduleBody}>
+                        <View style={s.scheduleTitleRow}>
+                          <Text style={s.scheduleTitle}>{item.title}</Text>
+                          <View style={[s.tagBadge, { backgroundColor: tagColor(item.tag) + '22', borderColor: tagColor(item.tag) + '55' }]}>
+                            <Text style={[s.tagText, { color: tagColor(item.tag) }]}>{item.tag}</Text>
+                          </View>
+                        </View>
+                        {scheduleDateRange(item) ? <Text style={s.scheduleNotes}>{scheduleDateRange(item)}</Text> : null}
+                        {item.notes ? <Text style={s.scheduleNotes}>{item.notes}</Text> : null}
+                      </View>
+                    </TouchableOpacity>
+                    {urgency > 0 && (
+                      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+          <TouchableOpacity style={[s.pcAddBtn, s.pcPanelAddBtn]} onPress={openAddSheet}>
+            <Text style={s.fabText}>+</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      </View>
+      </View>
+
+      {/* ── 선택 날짜 + 일정 목록: PC는 우측 프로젝트 패널(dayProjects/daySchedules)과 내용이
+          그대로 겹치므로 숨긴다. 모바일은 우측 패널이 아예 렌더링되지 않아 이 목록이 유일한
+          표시 수단이라 기존과 동일하게 유지한다 ── */}
+      {!IS_PC && (
+      <>
       <View style={s.dateHeader}>
         <Text style={s.dateLabel}>{selectedDate ? formatDateKo(selectedDate) : `${calYear}년 ${calMonth}월 전체`}</Text>
         <Text style={s.dateCount}>{daySchedules.length + dayProjects.length}건</Text>
       </View>
 
-      {/* ── 일정 목록 ── */}
       <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
         {daySchedules.length === 0 && dayProjects.length === 0 ? (
           <View style={s.emptyWrap}>
@@ -840,16 +950,15 @@ export default function ScheduleScreen({ navigation, route }) {
             })
         )}
       </ScrollView>
+      </>
+      )}
 
-      {/* ── 추가 버튼 ── */}
-      <TouchableOpacity style={s.fab} onPress={() => {
-        const defaultDate = selectedDate || (calYear === today.getFullYear() && calMonth === today.getMonth() + 1
-          ? TODAY_STR
-          : `${calYear}-${String(calMonth).padStart(2, '0')}-01`);
-        setNewStartDate(defaultDate); setNewEndDate(''); setShowAdd(true);
-      }}>
-        <Text style={s.fabText}>+</Text>
-      </TouchableOpacity>
+      {/* ── 추가 버튼(모바일 전용): PC는 actionColumn의 인라인 추가 버튼이 대신한다 ── */}
+      {!IS_PC && (
+        <TouchableOpacity style={s.fab} onPress={openAddSheet}>
+          <Text style={s.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
 
       {/* ── 일정 추가 모달 ── */}
       <Modal visible={showAdd} animationType="slide" transparent>
@@ -1673,6 +1782,37 @@ function scheduleDateRange(item) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16 },
+  // App.js의 authWebStyles/mainWebStyles와 동일한 outer(가운데 정렬)/inner(폭 제한) 2단 구성 —
+  // outer가 alignItems:'center'로 화면 가로 중앙을 잡아야 inner의 maxWidth 상한이 실제로
+  // "화면 중앙에 떠 있는 고정폭 박스"로 보인다(inner 혼자 alignSelf:'center'만 쓰면 outer 쪽
+  // 정렬 기준이 없어 왼쪽으로 붙어 보일 수 있음).
+  // flex:1로 header 아래 남는 세로 공간을 전부 차지한 뒤 justifyContent:'center'로 그 공간
+  // 안에서 세로 중앙에 놓는다 — 이게 없으면 calendarRow는 자기 콘텐츠 높이만큼만 차지해 화면
+  // 상단(header 바로 아래)에 붙어 보인다.
+  calendarRowOuter: IS_PC ? { flex: 1, alignItems: 'center', justifyContent: 'center' } : {},
+  // PC는 캘린더(고정 480px)와 프로젝트 패널을 가로로 나란히 배치, 초광폭 모니터에서 지나치게
+  // 늘어지지 않도록 maxWidth로 상한을 둔다. 모바일은 프로젝트 패널이 아예 렌더링되지 않으므로
+  // flexDirection이 의미가 없어 기존과 동일한 세로 스택으로 보인다.
+  calendarRow: IS_PC
+    ? { flexDirection: 'row', width: '100%', maxWidth: 960, gap: 24 }
+    : { flexDirection: 'column' },
+  // PC는 넓은 화면에서도 그리드 칸이 과도하게 커지지 않도록 앱 전역 모바일 기준 폭(480px, App.js
+  // webStyles와 동일)으로 줄여서 가운데 정렬한다. 모바일은 기존처럼 화면 폭 그대로 채운다.
+  calendarWrap: { width: IS_PC ? 480 : '100%', alignSelf: IS_PC ? 'center' : 'stretch' },
+  // calendarRow가 row일 때 align-items 기본값(stretch)으로 캘린더와 높이가 맞춰져, 내부
+  // ScrollView(flex:1)가 유효한 높이를 가지고 스크롤할 수 있게 된다.
+  projectPanel: { flex: 1 },
+  projectPanelTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '600', letterSpacing: 0.5, marginBottom: 12 },
+  projectPanelList: { flex: 1 },
+  projectPanelListContent: { gap: 10, paddingBottom: 24 },
+  projectPanelEmpty: { color: C.textDim, fontSize: 12 },
+  // AI 버튼: projectPanel(flex:1) 안에서 alignSelf:'flex-end'로 우측 끝을 패널 폭 기준에 정확히
+  // 맞추고, "등록된 일정 · 프로젝트" 텍스트 위에 오도록 아래쪽에 여백을 둔다.
+  pcPanelAiBtn: { alignSelf: 'flex-end', marginBottom: 12 },
+  pcAddBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentBlue, alignItems: 'center', justifyContent: 'center' },
+  // 추가 버튼: 마찬가지로 패널 우측 끝에 맞추되, 목록(ScrollView/빈 상태 텍스트) 아래에 오도록
+  // 위쪽에 여백을 둔다.
+  pcPanelAddBtn: { alignSelf: 'flex-end', marginTop: 12 },
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   aiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 20 },
   aiBtnText: { color: C.accentBlue, fontSize: 12, fontWeight: '600', letterSpacing: 1 },

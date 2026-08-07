@@ -7,19 +7,11 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { C } from './src/theme';
 import LoginScreen from './src/screens/LoginScreen';
 import { UserProvider, useUser } from './src/context/UserContext';
+import { ICONS, tabColor } from './src/navConfig';
+import { IS_PC } from './src/utils/deviceType';
+import PCSidebar, { PC_SIDEBAR_WIDTH } from './src/components/PCSidebar';
 
 const Tab = createBottomTabNavigator();
-
-const ICONS = {
-  홈: { active: '⬡', inactive: '⬡' },
-  일정: { active: '◈', inactive: '◈' },
-  거래처: { active: '◉', inactive: '◉' },
-  프로젝트: { active: '◧', inactive: '◧' },
-  메세지: { active: '◫', inactive: '◫' },
-  회의록: { active: '◍', inactive: '◍' },
-  설정: { active: '◎', inactive: '◎' },
-  회사관리: { active: '◆', inactive: '◆' },
-};
 
 function TabNavigator({ isCompanyAdmin }) {
   const insets = useSafeAreaInsets();
@@ -52,7 +44,16 @@ function TabNavigator({ isCompanyAdmin }) {
         tabBarIcon: ({ focused, color }) => (
           <Text style={{ fontSize: 18, color }}>{ICONS[route.name]?.[focused ? 'active' : 'inactive']}</Text>
         ),
+        // @react-navigation/bottom-tabs v7부터 화면 컨테이너 여백은 Navigator prop인
+        // sceneContainerStyle(v6 API, 이 버전엔 없음 — 조용히 무시됨)이 아니라 screenOptions의
+        // sceneStyle로 지정해야 한다. PCSidebar는 position:'absolute'라 일반 흐름 밖에서 그려지고,
+        // 화면(Screen)도 StyleSheet.absoluteFill로 left:0부터 꽉 채워지므로 이 marginLeft가 없으면
+        // 모든 탭 화면의 좌측 PC_SIDEBAR_WIDTH만큼이 사이드바 아래 레이어에 그대로 가려진다.
+        sceneStyle: IS_PC ? { marginLeft: PC_SIDEBAR_WIDTH } : undefined,
       })}
+      // PC는 하단 탭바 대신 좌측 사이드바로 시각적 크롬만 교체한다. 라우팅(navigation.navigate/route.params)은
+      // 동일한 Tab.Navigator가 그대로 처리하므로 화면 쪽 코드는 변경할 필요가 없다.
+      tabBar={IS_PC ? (props) => <PCSidebar {...props} /> : undefined}
     >
       {/* getComponent/require()로 실제 탭 방문 시점까지 화면 모듈 로딩을 미룬다 (eager import 시 앱 시작 시 8개 화면 전부 즉시 실행됨) */}
       <Tab.Screen name="홈" getComponent={() => require('./src/screens/HomeScreen').default} />
@@ -73,32 +74,46 @@ function TabNavigator({ isCompanyAdmin }) {
 function AppContent() {
   const { user, setUser } = useUser();
 
+  // 로딩/로그인 화면은 PC 여부와 무관하게 기존 그대로(모바일 폭 480px 고정) 유지한다.
   if (user === undefined) {
     return (
-      <SafeAreaProvider>
-        <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={C.accentBlue} />
+      <View style={authWebStyles.outer}>
+        <View style={authWebStyles.inner}>
+          <SafeAreaProvider>
+            <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color={C.accentBlue} />
+            </View>
+          </SafeAreaProvider>
         </View>
-      </SafeAreaProvider>
+      </View>
     );
   }
 
   if (!user) {
     return (
-      <SafeAreaProvider>
-        <StatusBar style="light" />
-        <LoginScreen onLogin={(u) => setUser(u)} />
-      </SafeAreaProvider>
+      <View style={authWebStyles.outer}>
+        <View style={authWebStyles.inner}>
+          <SafeAreaProvider>
+            <StatusBar style="light" />
+            <LoginScreen onLogin={(u) => setUser(u)} />
+          </SafeAreaProvider>
+        </View>
+      </View>
     );
   }
 
+  // 로그인 이후 메인 앱만 PC에서 사이드바 레이아웃을 위해 폭 제한을 푼다.
   return (
-    <SafeAreaProvider>
-      <NavigationContainer>
-        <StatusBar style="light" />
-        <TabNavigator key={user.id} isCompanyAdmin={!!user.isCompanyAdmin} />
-      </NavigationContainer>
-    </SafeAreaProvider>
+    <View style={mainWebStyles.outer}>
+      <View style={mainWebStyles.inner}>
+        <SafeAreaProvider>
+          <NavigationContainer>
+            <StatusBar style="light" />
+            <TabNavigator key={user.id} isCompanyAdmin={!!user.isCompanyAdmin} />
+          </NavigationContainer>
+        </SafeAreaProvider>
+      </View>
+    </View>
   );
 }
 
@@ -118,31 +133,25 @@ export default function App() {
   }, []);
 
   return (
-    <View style={webStyles.outer}>
-      <View style={webStyles.inner}>
-        <UserProvider>
-          <AppContent />
-        </UserProvider>
-      </View>
-    </View>
+    <UserProvider>
+      <AppContent />
+    </UserProvider>
   );
 }
 
-// 웹은 브라우저 창 폭 그대로 늘어나므로 모바일 앱 폭(480px)으로 제한하고 가운데 정렬한다.
+// 로딩/로그인 화면: 웹이면 항상 모바일 앱 폭(480px)으로 제한하고 가운데 정렬(PC 여부 무관, 기존 그대로).
 // 네이티브(iOS/Android)는 화면 폭이 이미 480px 미만이라 사실상 영향 없음.
-const webStyles = StyleSheet.create(
+const authWebStyles = StyleSheet.create(
   Platform.OS === 'web'
-    ? {
-        outer: { flex: 1, minHeight: '100vh', backgroundColor: C.bg, alignItems: 'center' },
-        inner: { flex: 1, width: '100%', maxWidth: 480 },
-      }
-    : {
-        outer: { flex: 1 },
-        inner: { flex: 1 },
-      }
+    ? { outer: { flex: 1, minHeight: '100vh', backgroundColor: C.bg, alignItems: 'center' }, inner: { flex: 1, width: '100%', maxWidth: 480 } }
+    : { outer: { flex: 1 }, inner: { flex: 1 } }
 );
 
-function tabColor(name) {
-  const map = { 홈: C.gold, 일정: C.accentBlue, 거래처: C.accentTeal, 프로젝트: C.red, 메세지: C.accentPurple, 회의록: C.accentTeal, 설정: C.textSecondary, 회사관리: C.companyIndigo };
-  return map[name] || C.textPrimary;
-}
+// 로그인 이후 메인 앱: PC 웹은 사이드바 레이아웃을 위해 폭 제한을 풀고, 모바일 웹은 authWebStyles와 동일하게 유지.
+const mainWebStyles = StyleSheet.create(
+  Platform.OS !== 'web'
+    ? { outer: { flex: 1 }, inner: { flex: 1 } }
+    : IS_PC
+    ? { outer: { flex: 1, minHeight: '100vh', backgroundColor: C.bg }, inner: { flex: 1, width: '100%' } }
+    : { outer: { flex: 1, minHeight: '100vh', backgroundColor: C.bg, alignItems: 'center' }, inner: { flex: 1, width: '100%', maxWidth: 480 } }
+);

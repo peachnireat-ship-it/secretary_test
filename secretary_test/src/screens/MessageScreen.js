@@ -10,6 +10,7 @@ import { commonStyles } from '../styles/common';
 import { getMessages, addMessage, addMessageForUser, updateMessage, updateMessageForUser, deleteMessage, getTestAccounts, getClients } from '../services/storage';
 import { useUser } from '../context/UserContext';
 import { useSwipeClose } from '../hooks/useSwipeClose';
+import { IS_PC } from '../utils/deviceType';
 
 const PRIORITIES = ['긴급', '일반', '낮음'];
 const STATUSES = ['미확인', '확인', '처리중', '완료'];
@@ -634,7 +635,7 @@ export default function MessageScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: C.bg, paddingLeft: IS_PC ? 24 : 0 },
   header: { paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16 },
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   headerSub: { color: C.gold, fontSize: 11, marginTop: 2 },

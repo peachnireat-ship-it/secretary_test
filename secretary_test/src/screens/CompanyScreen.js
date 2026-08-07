@@ -7,6 +7,7 @@ import { useState, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
+import { IS_PC } from '../utils/deviceType';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import {
   getCompanyEmployees, getCompanyDepartments, getCompanyPositions,
@@ -786,7 +787,9 @@ export default function CompanyScreen() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  // PC는 좌측 PCSidebar(App.js)와 화면 콘텐츠 사이에 여백을 둬서 헤더·부서 사이드바가
+  // 내비게이션 사이드바에 바로 붙어 묻혀 보이지 않게 한다. 모바일은 영향 없음(0).
+  root: { flex: 1, backgroundColor: C.bg, paddingLeft: IS_PC ? 24 : 0 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingBottom: 16 },
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   headerSub: { color: C.textSecondary, fontSize: 11, marginTop: 2 },

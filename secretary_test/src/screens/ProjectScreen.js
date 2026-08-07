@@ -20,6 +20,7 @@ import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectFo
 import { statusColor, priorityColor } from '../utils/colors';
 import { daysUntil, daysLabel, dateTimeFromTimestamp } from '../utils/dateUtils';
 import { parseTranscriptSegments } from '../utils/transcript';
+import { IS_PC } from '../utils/deviceType';
 
 const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '#5BC48B', '#C47B5B'];
 // 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
@@ -683,6 +684,384 @@ export default function ProjectScreen({ navigation, route }) {
     setContentEditRecordId(null);
   }
 
+  // PC 마스터-디테일 패널에서 카드 클릭 시 상세 폼 필드를 렌더링(모달 대신 우측 패널에 그대로 재사용).
+  // 모바일 바텀시트 모달과 내용은 완전히 동일 — 바깥 껍데기(Modal vs 고정 패널)만 호출부에서 분기한다.
+  function renderDetailFields() {
+    return (
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* 헤더: 제목 + 닫기 */}
+        <View style={s.detailHeader}>
+          <View style={commonStyles.flex1}>
+            <Text style={s.inputLabel}>제목</Text>
+            <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholderTextColor={C.textDim} />
+          </View>
+          <TouchableOpacity onPress={() => setShowDetail(false)} style={s.closeBtnOffset}>
+            <Text style={s.closeBtn}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        {currentUser?.name ? <Text style={s.registrantText}>등록자: {currentUser.name}</Text> : null}
+
+        {/* 상태 */}
+        <Text style={s.inputLabel}>상태</Text>
+        <View style={s.optionRow}>
+          {STATUSES.map((st) => (
+            <TouchableOpacity key={st} style={[s.optionBtn, editStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => {
+              if (st === '완료' && editProgress !== 100) {
+                Alert.alert('상태 변경', "상태를 '완료'로 변경하시겠습니까?", [
+                  { text: '아니오', style: 'cancel' },
+                  { text: '예', onPress: () => { setEditStatus('완료'); setEditKeepProgress(true); } },
+                ]);
+                return;
+              }
+              setEditKeepProgress(false);
+              setEditStatus(st);
+              if (st === '완료') setEditProgress(100);
+            }}>
+              <Text style={[s.optionText, editStatus === st && { color: statusColor(st) }]}>{st}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* 우선순위 */}
+        <Text style={s.inputLabel}>우선순위</Text>
+        <View style={s.optionRow}>
+          {PRIORITIES.map((pr) => (
+            <TouchableOpacity key={pr} style={[s.optionBtn, editPriority === pr && { borderColor: priorityColor(pr) + '88', backgroundColor: priorityColor(pr) + '18' }]} onPress={() => setEditPriority(pr)}>
+              <Text style={[s.optionText, editPriority === pr && { color: priorityColor(pr) }]}>{pr}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* 진행률 */}
+        <Text style={s.inputLabel}>진행률 (%)</Text>
+        <View style={s.sliderWrap}>
+          <Text style={s.sliderVal}>{editProgress}%</Text>
+          <Slider
+            style={s.slider}
+            minimumValue={0}
+            maximumValue={100}
+            step={1}
+            value={editProgress}
+            onValueChange={(v) => {
+              setEditKeepProgress(false);
+              const rounded = Math.round(v);
+              setEditProgress(rounded);
+              if (rounded === 100) setEditStatus('완료');
+              else if (editStatus === '완료') setEditStatus('진행중');
+            }}
+            minimumTrackTintColor={statusColor(editStatus)}
+            maximumTrackTintColor={C.border}
+            thumbTintColor={statusColor(editStatus)}
+          />
+        </View>
+
+        {/* 시작일시 */}
+        <Text style={s.inputLabel}>시작일시 (선택)</Text>
+        <TextInput
+          style={[s.input, commonStyles.mb8]}
+          value={editStartDate}
+          onChangeText={(t) => setEditStartDate(formatDeadline(t))}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={C.textDim}
+          keyboardType="numeric"
+          maxLength={10}
+        />
+        <View style={s.timeRow}>
+          <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오전')}>
+            <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오후')}>
+            <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+          </TouchableOpacity>
+          <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+        </View>
+
+        {/* 마감일시 */}
+        <Text style={s.inputLabel}>마감일시</Text>
+        <TextInput
+          style={[s.input, commonStyles.mb8]}
+          value={editDeadline}
+          onChangeText={(t) => setEditDeadline(formatDeadline(t))}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={C.textDim}
+          keyboardType="numeric"
+          maxLength={10}
+        />
+        <View style={s.timeRow}>
+          <TouchableOpacity style={[s.ampmBtn, editDeadlineAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditDeadlineAmPm('오전')}>
+            <Text style={[s.ampmBtnText, editDeadlineAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.ampmBtn, editDeadlineAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditDeadlineAmPm('오후')}>
+            <Text style={[s.ampmBtnText, editDeadlineAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+          </TouchableOpacity>
+          <TextInput style={[s.input, commonStyles.flex1]} value={editDeadlineTime} onChangeText={(t) => setEditDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+        </View>
+
+        {/* 메모 */}
+        <Text style={s.inputLabel}>메모 (선택)</Text>
+        <TextInput
+          style={[s.input, s.h80]}
+          value={editNotes}
+          onChangeText={setEditNotes}
+          multiline
+          placeholder="메모를 입력하세요"
+          placeholderTextColor={C.textDim}
+        />
+
+        {/* 관련 인물 / 관련 토픽 */}
+        {(() => {
+          const linkedMeetings = detailProject?.meetingRecordIds?.length
+            ? meetingRecords.filter((r) => detailProject.meetingRecordIds.includes(r.id))
+            : [];
+          const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
+          const allClientIds = [...new Set([...editClientIds, ...meetingClientIds])];
+          const people = allClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+          return (
+            <>
+              <View style={s.relatedPeopleHeaderRow}>
+                <Text style={[s.inputLabel, s.inputLabelInline]}>관련 인물</Text>
+                <TouchableOpacity
+                  onPress={() => { setDetailPersonPickerVisible(true); setDetailPersonPickerSearch(''); }}
+                  style={s.addPersonBtn}
+                >
+                  <Text style={s.addPersonBtnText}>+ 추가</Text>
+                </TouchableOpacity>
+              </View>
+              {people.length > 0 && (
+                <View style={s.relatedPeopleRow}>
+                  {people.map((c) => {
+                    const isDirect = editClientIds.includes(c.id);
+                    return (
+                      <View key={c.id} style={s.relatedPersonChip}>
+                        <TouchableOpacity
+                          style={s.personChipInner}
+                          activeOpacity={0.7}
+                          onPress={() => { setPersonDetailClient(c); setShowPersonDetail(true); }}
+                        >
+                          <View style={s.relatedPersonAvatar}>
+                            <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
+                          </View>
+                          <View style={commonStyles.flex1}>
+                            <Text style={s.relatedPersonName}>{c.name}</Text>
+                            {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                          </View>
+                        </TouchableOpacity>
+                        {isDirect ? (
+                          <TouchableOpacity
+                            onPress={() => setEditClientIds((prev) => prev.filter((id) => id !== c.id))}
+                            hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
+                          >
+                            <Text style={s.removePersonIcon}>✕</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <Text style={s.personChevron}>›</Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* 관련 토픽: 관련 인물이 한 명이라도 있으면 생성 가능. 이름 중복은 담당자
+                  단위로 검사되므로(handleCreateProjectTopic), 특정 "소속 회사" 지정 없이도
+                  관련 인물 중 이름이 겹치지 않는 사람 아래에 자동으로 생성된다. */}
+              {people.length > 0 && (
+                <>
+                  <Text style={s.inputLabel}>관련 토픽</Text>
+                  {topics.filter((t) => t.projectId === detailProject?.id).length === 0 ? (
+                    <Text style={s.projectTopicEmptyText}>등록된 토픽이 없습니다</Text>
+                  ) : (
+                    topics.filter((t) => t.projectId === detailProject?.id).map((t) => (
+                      <View key={t.id} style={s.projectTopicRow}>
+                        <Text style={s.projectTopicName} numberOfLines={1}>{t.name}</Text>
+                      </View>
+                    ))
+                  )}
+                  <View style={s.topicCreateRow}>
+                    <TextInput
+                      style={[s.input, commonStyles.flex1]}
+                      value={newProjectTopicName}
+                      onChangeText={setNewProjectTopicName}
+                      placeholder="새 토픽 이름"
+                      placeholderTextColor={C.textDim}
+                    />
+                    <TouchableOpacity style={s.topicCreateBtn} onPress={handleAddProjectTopic}>
+                      <Text style={s.topicCreateBtnText}>추가</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </>
+          );
+        })()}
+
+        {/* 알림 메일 발송 여부 */}
+        <TouchableOpacity
+          style={s.notifyEmailRow}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (editClientIds.length === 0) {
+              Alert.alert('안내', '선택된 관련 인물이 없습니다.');
+              return;
+            }
+            setEditNotifyEmail((prev) => !prev);
+          }}
+        >
+          <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
+            {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
+          </View>
+          <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
+        </TouchableOpacity>
+
+        {/* 버튼 */}
+        <View style={s.modalBtns}>
+          <TouchableOpacity style={s.modalCancel} onPress={() => {
+            Alert.alert('삭제', `"${detailProject.title}" 프로젝트를 삭제할까요?`, [
+              { text: '취소', style: 'cancel' },
+              { text: '삭제', style: 'destructive', onPress: async () => { setProjects(await deleteProject(detailProject.id)); setShowDetail(false); } },
+            ]);
+          }}>
+            <Text style={[s.modalCancelText, s.textRed]}>삭제</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.modalCancel} onPress={() => confirmCopy(detailProject)}>
+            <Text style={s.modalCancelText}>복사</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.modalCancel} onPress={() => handleShare(detailProject)}>
+            <Text style={[s.modalCancelText, s.textBlue]}>공유</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
+            <Text style={s.modalConfirmText}>저장</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // "내 프로젝트" 카드 렌더링(모바일 세로 목록 / PC 그리드 공용). PC에서만 고정폭(cardPC)과 선택
+  // 강조(cardPCActive)가 추가로 붙고, 모바일에서는 IS_PC가 false라 두 스타일 다 무효(byte-동일 동작).
+  function renderMineCard(item) {
+    const days = daysUntil(item.deadline);
+    const isCompleted = item.status === '완료';
+    const risk = isAtRisk(item);
+    const urgency = getUrgency(item.deadline, item.status);
+    const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
+    const linkedMeetings = item.meetingRecordIds?.length > 0
+      ? meetingRecords.filter((r) => item.meetingRecordIds.includes(r.id))
+      : [];
+    const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
+    const allRelatedClientIds = [...new Set([...(item.clientIds || []), ...meetingClientIds])];
+    const allRelatedPeople = allRelatedClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+    // 프로젝트 사본(관련 인물로 태그되어 자동 생성된 다른 사람 프로젝트의 사본)은 조회
+    // 전용이다 — 수정 모달로 보내지 않고, 롱프레스 삭제도 걸지 않는다.
+    const isMirror = !!item.originProjectId;
+    const isSelectedOnPC = IS_PC && showDetail && detailProject?.id === item.id;
+    return (
+      <View key={item.id} style={[s.card, IS_PC && s.cardPC, risk && s.cardRisk, isSelectedOnPC && s.cardPCActive]}>
+        <TouchableOpacity
+          activeOpacity={0.75}
+          onPress={() => (isMirror ? openMirrorDetail(item) : openDetail(item))}
+          onLongPress={isMirror ? undefined : () => handleDelete(item.id, item.title)}
+        >
+          {/* 타이틀 행 */}
+          <View style={s.cardTop}>
+            <View style={s.cardTitleRow}>
+              {risk && <Text style={s.riskIcon}>⚠ </Text>}
+              <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
+            </View>
+            <View style={s.cardTopRight}>
+              <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
+                <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
+              </View>
+              {isMirror ? (
+                <View style={s.readOnlyChip}>
+                  <Text style={s.readOnlyChipText}>조회 전용</Text>
+                </View>
+              ) : (
+                <TouchableOpacity style={s.editProgressChip} onPress={() => openDetail(item)}>
+                  <Text style={s.editProgress}>수정</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* 프로그레스 바 */}
+          <View style={s.progressTrack}>
+            <View style={[s.progressFill, { width: `${item.progress}%`, backgroundColor: statusColor(item.status) }]} />
+          </View>
+          <View style={s.progressRow}>
+            <Text style={s.progressLabel}>{item.progress}% 완료</Text>
+          </View>
+
+          {/* 메타 정보 */}
+          <View style={s.cardMeta}>
+            <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
+              <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
+            </View>
+            <View style={s.deadlineWrap}>
+              {item.startDate ? (
+                <Text style={s.startDateText}>{item.startDate} 시작</Text>
+              ) : null}
+              <Text style={[s.deadlineText, days < 0 && !isCompleted && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+                {item.deadline}{isCompleted && days < 0 ? '' : ` · ${daysLabel(days)}`}
+              </Text>
+            </View>
+          </View>
+
+          {item.notes ? <Text style={s.cardNotes} numberOfLines={1}>{item.notes}</Text> : null}
+        </TouchableOpacity>
+
+        {allRelatedPeople.length > 0 && (
+          <View style={s.cardRelatedPeopleWrap}>
+            <Text style={s.cardRelatedPeopleLabel}>관련 인물</Text>
+            <View style={s.cardRelatedPeopleRow}>
+              {allRelatedPeople.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={s.cardPersonChip}
+                  activeOpacity={0.7}
+                  onPress={() => { setPersonDetailClient(c); setShowPersonDetail(true); }}
+                >
+                  <View style={s.cardPersonAvatar}>
+                    <Text style={s.cardPersonAvatarText}>{c.name[0]}</Text>
+                  </View>
+                  <View style={commonStyles.flex1}>
+                    <Text style={s.cardPersonName} numberOfLines={1}>{c.name}</Text>
+                    {c.company ? <Text style={s.cardPersonCompany} numberOfLines={1}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+        {linkedMeetings.length > 0 && (
+          <View style={s.meetingChipRow}>
+            {linkedMeetings.map((r) => (
+              <TouchableOpacity
+                key={r.id}
+                style={s.meetingChip}
+                activeOpacity={0.7}
+                onPress={() => {
+                  const latest = meetingRecords.find((rec) => rec.id === r.id) || r;
+                  setSelectedMeeting(latest);
+                  setShowMeetingDetail(true);
+                }}
+              >
+                <Text style={s.meetingChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {urgency > 0 && (
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
+        )}
+      </View>
+    );
+  }
+
+  // PC에서는 "내 프로젝트" 목록이 그리드+우측 상세패널(마스터-디테일)로 바뀐다. 회사 전체 보기는
+  // 이미 사이드바+목록 2단 레이아웃이 있어 이번 시범 범위에서 제외.
+  const showDetailPanel = IS_PC && viewMode === 'mine';
+
   return (
     <View style={s.root}>
       {/* ── 헤더 ── */}
@@ -790,397 +1169,62 @@ export default function ProjectScreen({ navigation, route }) {
         ))}
       </ScrollView>
 
-      {/* ── 프로젝트 목록 ── */}
-      <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
-        {filtered.length === 0 ? (
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyText}>프로젝트가 없습니다</Text>
-            <Text style={s.emptyHint}>+ 버튼으로 프로젝트를 추가하세요</Text>
+      {/* ── 프로젝트 목록 (PC: 그리드+우측 상세패널 / 모바일: 세로 목록+하단시트) ── */}
+      {showDetailPanel ? (
+        <View style={s.mineBodyPC}>
+          <View style={s.gridColumn}>
+            <ScrollView style={s.gridList} contentContainerStyle={s.gridListContent} showsVerticalScrollIndicator={false}>
+              {filtered.length === 0 ? (
+                <View style={s.emptyWrap}>
+                  <Text style={s.emptyText}>프로젝트가 없습니다</Text>
+                  <Text style={s.emptyHint}>+ 버튼으로 프로젝트를 추가하세요</Text>
+                </View>
+              ) : (
+                filtered.map(renderMineCard)
+              )}
+            </ScrollView>
+            <TouchableOpacity style={s.fab} onPress={() => setShowAdd(true)}>
+              <Text style={s.fabText}>+</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          // eslint-disable-next-line react-hooks/refs -- urgencyAnim은 최초 렌더에서 한 번만 생성되는 Animated.Value ref
-          filtered.map((item) => {
-            const days = daysUntil(item.deadline);
-            const isCompleted = item.status === '완료';
-            const risk = isAtRisk(item);
-            const urgency = getUrgency(item.deadline, item.status);
-            const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
-            const linkedMeetings = item.meetingRecordIds?.length > 0
-              ? meetingRecords.filter((r) => item.meetingRecordIds.includes(r.id))
-              : [];
-            const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
-            const allRelatedClientIds = [...new Set([...(item.clientIds || []), ...meetingClientIds])];
-            const allRelatedPeople = allRelatedClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
-            // 프로젝트 사본(관련 인물로 태그되어 자동 생성된 다른 사람 프로젝트의 사본)은 조회
-            // 전용이다 — 수정 모달로 보내지 않고, 롱프레스 삭제도 걸지 않는다.
-            const isMirror = !!item.originProjectId;
-            return (
-              <View key={item.id} style={[s.card, risk && s.cardRisk]}>
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  onPress={() => (isMirror ? openMirrorDetail(item) : openDetail(item))}
-                  onLongPress={isMirror ? undefined : () => handleDelete(item.id, item.title)}
-                >
-                  {/* 타이틀 행 */}
-                  <View style={s.cardTop}>
-                    <View style={s.cardTitleRow}>
-                      {risk && <Text style={s.riskIcon}>⚠ </Text>}
-                      <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
-                    </View>
-                    <View style={s.cardTopRight}>
-                      <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
-                        <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
-                      </View>
-                      {isMirror ? (
-                        <View style={s.readOnlyChip}>
-                          <Text style={s.readOnlyChipText}>조회 전용</Text>
-                        </View>
-                      ) : (
-                        <TouchableOpacity style={s.editProgressChip} onPress={() => openDetail(item)}>
-                          <Text style={s.editProgress}>수정</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-
-                  {/* 프로그레스 바 */}
-                  <View style={s.progressTrack}>
-                    <View style={[s.progressFill, { width: `${item.progress}%`, backgroundColor: statusColor(item.status) }]} />
-                  </View>
-                  <View style={s.progressRow}>
-                    <Text style={s.progressLabel}>{item.progress}% 완료</Text>
-                  </View>
-
-                  {/* 메타 정보 */}
-                  <View style={s.cardMeta}>
-                    <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
-                      <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
-                    </View>
-                    <View style={s.deadlineWrap}>
-                      {item.startDate ? (
-                        <Text style={s.startDateText}>{item.startDate} 시작</Text>
-                      ) : null}
-                      <Text style={[s.deadlineText, days < 0 && !isCompleted && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
-                        {item.deadline}{isCompleted && days < 0 ? '' : ` · ${daysLabel(days)}`}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {item.notes ? <Text style={s.cardNotes} numberOfLines={1}>{item.notes}</Text> : null}
-                </TouchableOpacity>
-
-                {allRelatedPeople.length > 0 && (
-                  <View style={s.cardRelatedPeopleWrap}>
-                    <Text style={s.cardRelatedPeopleLabel}>관련 인물</Text>
-                    <View style={s.cardRelatedPeopleRow}>
-                      {allRelatedPeople.map((c) => (
-                        <TouchableOpacity
-                          key={c.id}
-                          style={s.cardPersonChip}
-                          activeOpacity={0.7}
-                          onPress={() => { setPersonDetailClient(c); setShowPersonDetail(true); }}
-                        >
-                          <View style={s.cardPersonAvatar}>
-                            <Text style={s.cardPersonAvatarText}>{c.name[0]}</Text>
-                          </View>
-                          <View style={commonStyles.flex1}>
-                            <Text style={s.cardPersonName} numberOfLines={1}>{c.name}</Text>
-                            {c.company ? <Text style={s.cardPersonCompany} numberOfLines={1}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
-                {linkedMeetings.length > 0 && (
-                  <View style={s.meetingChipRow}>
-                    {linkedMeetings.map((r) => (
-                      <TouchableOpacity
-                        key={r.id}
-                        style={s.meetingChip}
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          const latest = meetingRecords.find((rec) => rec.id === r.id) || r;
-                          setSelectedMeeting(latest);
-                          setShowMeetingDetail(true);
-                        }}
-                      >
-                        <Text style={s.meetingChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-                {urgency > 0 && (
-                  <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
-                )}
+          <View style={s.detailPanel}>
+            {showDetail && detailProject ? renderDetailFields() : (
+              <View style={s.detailPanelEmpty}>
+                <Text style={s.detailPanelEmptyText}>프로젝트를 선택하세요</Text>
               </View>
-            );
-          })
-        )}
-      </ScrollView>
+            )}
+          </View>
+        </View>
+      ) : (
+        <>
+          <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
+            {filtered.length === 0 ? (
+              <View style={s.emptyWrap}>
+                <Text style={s.emptyText}>프로젝트가 없습니다</Text>
+                <Text style={s.emptyHint}>+ 버튼으로 프로젝트를 추가하세요</Text>
+              </View>
+            ) : (
+              filtered.map(renderMineCard)
+            )}
+          </ScrollView>
 
-      {/* ── 추가 버튼 ── */}
-      <TouchableOpacity style={s.fab} onPress={() => setShowAdd(true)}>
-        <Text style={s.fabText}>+</Text>
-      </TouchableOpacity>
+          {/* ── 추가 버튼 ── */}
+          <TouchableOpacity style={s.fab} onPress={() => setShowAdd(true)}>
+            <Text style={s.fabText}>+</Text>
+          </TouchableOpacity>
+        </>
+      )}
       </>
       )}
 
       {/* ── 프로젝트 상세 모달 ── */}
-      <Modal visible={showDetail} animationType="slide" transparent onRequestClose={() => setShowDetail(false)}>
+      <Modal visible={showDetail && !showDetailPanel} animationType="slide" transparent onRequestClose={() => setShowDetail(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
           <Animated.View style={[s.modalSheet, commonStyles.maxH90pct, swipeDetail.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeDetail.panHandlers}>
               <View style={s.modalHandle} />
             </View>
-            {detailProject && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {/* 헤더: 제목 + 닫기 */}
-                <View style={s.detailHeader}>
-                  <View style={commonStyles.flex1}>
-                    <Text style={s.inputLabel}>제목</Text>
-                    <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholderTextColor={C.textDim} />
-                  </View>
-                  <TouchableOpacity onPress={() => setShowDetail(false)} style={s.closeBtnOffset}>
-                    <Text style={s.closeBtn}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-                {currentUser?.name ? <Text style={s.registrantText}>등록자: {currentUser.name}</Text> : null}
-
-                {/* 상태 */}
-                <Text style={s.inputLabel}>상태</Text>
-                <View style={s.optionRow}>
-                  {STATUSES.map((st) => (
-                    <TouchableOpacity key={st} style={[s.optionBtn, editStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => {
-                      if (st === '완료' && editProgress !== 100) {
-                        Alert.alert('상태 변경', "상태를 '완료'로 변경하시겠습니까?", [
-                          { text: '아니오', style: 'cancel' },
-                          { text: '예', onPress: () => { setEditStatus('완료'); setEditKeepProgress(true); } },
-                        ]);
-                        return;
-                      }
-                      setEditKeepProgress(false);
-                      setEditStatus(st);
-                      if (st === '완료') setEditProgress(100);
-                    }}>
-                      <Text style={[s.optionText, editStatus === st && { color: statusColor(st) }]}>{st}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {/* 우선순위 */}
-                <Text style={s.inputLabel}>우선순위</Text>
-                <View style={s.optionRow}>
-                  {PRIORITIES.map((pr) => (
-                    <TouchableOpacity key={pr} style={[s.optionBtn, editPriority === pr && { borderColor: priorityColor(pr) + '88', backgroundColor: priorityColor(pr) + '18' }]} onPress={() => setEditPriority(pr)}>
-                      <Text style={[s.optionText, editPriority === pr && { color: priorityColor(pr) }]}>{pr}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {/* 진행률 */}
-                <Text style={s.inputLabel}>진행률 (%)</Text>
-                <View style={s.sliderWrap}>
-                  <Text style={s.sliderVal}>{editProgress}%</Text>
-                  <Slider
-                    style={s.slider}
-                    minimumValue={0}
-                    maximumValue={100}
-                    step={1}
-                    value={editProgress}
-                    onValueChange={(v) => {
-                      setEditKeepProgress(false);
-                      const rounded = Math.round(v);
-                      setEditProgress(rounded);
-                      if (rounded === 100) setEditStatus('완료');
-                      else if (editStatus === '완료') setEditStatus('진행중');
-                    }}
-                    minimumTrackTintColor={statusColor(editStatus)}
-                    maximumTrackTintColor={C.border}
-                    thumbTintColor={statusColor(editStatus)}
-                  />
-                </View>
-
-                {/* 시작일시 */}
-                <Text style={s.inputLabel}>시작일시 (선택)</Text>
-                <TextInput
-                  style={[s.input, commonStyles.mb8]}
-                  value={editStartDate}
-                  onChangeText={(t) => setEditStartDate(formatDeadline(t))}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={C.textDim}
-                  keyboardType="numeric"
-                  maxLength={10}
-                />
-                <View style={s.timeRow}>
-                  <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오전')}>
-                    <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditStartAmPm('오후')}>
-                    <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
-                  </TouchableOpacity>
-                  <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
-                </View>
-
-                {/* 마감일시 */}
-                <Text style={s.inputLabel}>마감일시</Text>
-                <TextInput
-                  style={[s.input, commonStyles.mb8]}
-                  value={editDeadline}
-                  onChangeText={(t) => setEditDeadline(formatDeadline(t))}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={C.textDim}
-                  keyboardType="numeric"
-                  maxLength={10}
-                />
-                <View style={s.timeRow}>
-                  <TouchableOpacity style={[s.ampmBtn, editDeadlineAmPm === '오전' && s.ampmBtnActive]} onPress={() => setEditDeadlineAmPm('오전')}>
-                    <Text style={[s.ampmBtnText, editDeadlineAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[s.ampmBtn, editDeadlineAmPm === '오후' && s.ampmBtnActive]} onPress={() => setEditDeadlineAmPm('오후')}>
-                    <Text style={[s.ampmBtnText, editDeadlineAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
-                  </TouchableOpacity>
-                  <TextInput style={[s.input, commonStyles.flex1]} value={editDeadlineTime} onChangeText={(t) => setEditDeadlineTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
-                </View>
-
-                {/* 메모 */}
-                <Text style={s.inputLabel}>메모 (선택)</Text>
-                <TextInput
-                  style={[s.input, s.h80]}
-                  value={editNotes}
-                  onChangeText={setEditNotes}
-                  multiline
-                  placeholder="메모를 입력하세요"
-                  placeholderTextColor={C.textDim}
-                />
-
-                {/* 관련 인물 / 관련 토픽 */}
-                {(() => {
-                  const linkedMeetings = detailProject?.meetingRecordIds?.length
-                    ? meetingRecords.filter((r) => detailProject.meetingRecordIds.includes(r.id))
-                    : [];
-                  const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
-                  const allClientIds = [...new Set([...editClientIds, ...meetingClientIds])];
-                  const people = allClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
-                  return (
-                    <>
-                      <View style={s.relatedPeopleHeaderRow}>
-                        <Text style={[s.inputLabel, s.inputLabelInline]}>관련 인물</Text>
-                        <TouchableOpacity
-                          onPress={() => { setDetailPersonPickerVisible(true); setDetailPersonPickerSearch(''); }}
-                          style={s.addPersonBtn}
-                        >
-                          <Text style={s.addPersonBtnText}>+ 추가</Text>
-                        </TouchableOpacity>
-                      </View>
-                      {people.length > 0 && (
-                        <View style={s.relatedPeopleRow}>
-                          {people.map((c) => {
-                            const isDirect = editClientIds.includes(c.id);
-                            return (
-                              <View key={c.id} style={s.relatedPersonChip}>
-                                <TouchableOpacity
-                                  style={s.personChipInner}
-                                  activeOpacity={0.7}
-                                  onPress={() => { setPersonDetailClient(c); setShowPersonDetail(true); }}
-                                >
-                                  <View style={s.relatedPersonAvatar}>
-                                    <Text style={s.relatedPersonAvatarText}>{c.name[0]}</Text>
-                                  </View>
-                                  <View style={commonStyles.flex1}>
-                                    <Text style={s.relatedPersonName}>{c.name}</Text>
-                                    {c.company ? <Text style={s.relatedPersonCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
-                                  </View>
-                                </TouchableOpacity>
-                                {isDirect ? (
-                                  <TouchableOpacity
-                                    onPress={() => setEditClientIds((prev) => prev.filter((id) => id !== c.id))}
-                                    hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
-                                  >
-                                    <Text style={s.removePersonIcon}>✕</Text>
-                                  </TouchableOpacity>
-                                ) : (
-                                  <Text style={s.personChevron}>›</Text>
-                                )}
-                              </View>
-                            );
-                          })}
-                        </View>
-                      )}
-
-                      {/* 관련 토픽: 관련 인물이 한 명이라도 있으면 생성 가능. 이름 중복은 담당자
-                          단위로 검사되므로(handleCreateProjectTopic), 특정 "소속 회사" 지정 없이도
-                          관련 인물 중 이름이 겹치지 않는 사람 아래에 자동으로 생성된다. */}
-                      {people.length > 0 && (
-                        <>
-                          <Text style={s.inputLabel}>관련 토픽</Text>
-                          {topics.filter((t) => t.projectId === detailProject?.id).length === 0 ? (
-                            <Text style={s.projectTopicEmptyText}>등록된 토픽이 없습니다</Text>
-                          ) : (
-                            topics.filter((t) => t.projectId === detailProject?.id).map((t) => (
-                              <View key={t.id} style={s.projectTopicRow}>
-                                <Text style={s.projectTopicName} numberOfLines={1}>{t.name}</Text>
-                              </View>
-                            ))
-                          )}
-                          <View style={s.topicCreateRow}>
-                            <TextInput
-                              style={[s.input, commonStyles.flex1]}
-                              value={newProjectTopicName}
-                              onChangeText={setNewProjectTopicName}
-                              placeholder="새 토픽 이름"
-                              placeholderTextColor={C.textDim}
-                            />
-                            <TouchableOpacity style={s.topicCreateBtn} onPress={handleAddProjectTopic}>
-                              <Text style={s.topicCreateBtnText}>추가</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </>
-                      )}
-                    </>
-                  );
-                })()}
-
-                {/* 알림 메일 발송 여부 */}
-                <TouchableOpacity
-                  style={s.notifyEmailRow}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    if (editClientIds.length === 0) {
-                      Alert.alert('안내', '선택된 관련 인물이 없습니다.');
-                      return;
-                    }
-                    setEditNotifyEmail((prev) => !prev);
-                  }}
-                >
-                  <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
-                    {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
-                  </View>
-                  <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
-                </TouchableOpacity>
-
-                {/* 버튼 */}
-                <View style={s.modalBtns}>
-                  <TouchableOpacity style={s.modalCancel} onPress={() => {
-                    Alert.alert('삭제', `"${detailProject.title}" 프로젝트를 삭제할까요?`, [
-                      { text: '취소', style: 'cancel' },
-                      { text: '삭제', style: 'destructive', onPress: async () => { setProjects(await deleteProject(detailProject.id)); setShowDetail(false); } },
-                    ]);
-                  }}>
-                    <Text style={[s.modalCancelText, s.textRed]}>삭제</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.modalCancel} onPress={() => confirmCopy(detailProject)}>
-                    <Text style={s.modalCancelText}>복사</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.modalCancel} onPress={() => handleShare(detailProject)}>
-                    <Text style={[s.modalCancelText, s.textBlue]}>공유</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
-                    <Text style={s.modalConfirmText}>저장</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            )}
+            {detailProject && renderDetailFields()}
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
@@ -2192,7 +2236,9 @@ export default function ProjectScreen({ navigation, route }) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  // PC는 좌측 PCSidebar(App.js)와 화면 콘텐츠 사이에 여백을 둬서 헤더·필터탭·부서 사이드바가
+  // 내비게이션 사이드바에 바로 붙어 묻혀 보이지 않게 한다. 모바일은 영향 없음(0).
+  root: { flex: 1, backgroundColor: C.bg, paddingLeft: IS_PC ? 24 : 0 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16 },
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   headerSub: { color: C.red, fontSize: 11, marginTop: 2 },
@@ -2222,6 +2268,18 @@ const s = StyleSheet.create({
   sidebarItemText: { color: C.textDim, fontSize: 12, fontWeight: '500' },
   sidebarItemTextActive: { color: C.companyIndigo, fontWeight: '600' },
   treePrefix: { color: C.textDim, fontWeight: '400' },
+
+  // PC 전용: "내 프로젝트" 그리드 + 우측 상세패널(마스터-디테일, IS_PC일 때만 사용). 모바일은
+  // 기존 list/listContent/card를 그대로 쓰고 이 스타일들은 참조하지 않는다.
+  mineBodyPC: { flex: 1, flexDirection: 'row' },
+  gridColumn: { flex: 1 },
+  gridList: { flex: 1 },
+  gridListContent: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100, gap: 14 },
+  cardPC: { width: 320 },
+  cardPCActive: { borderColor: C.accentBlue + 'aa', backgroundColor: C.accentBlue + '0c' },
+  detailPanel: { width: 400, borderLeftWidth: 1, borderLeftColor: C.border, paddingHorizontal: 20, paddingTop: 12 },
+  detailPanelEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 },
+  detailPanelEmptyText: { color: C.textDim, fontSize: 13 },
 
   filterWrap: { maxHeight: 44 },
   filterRow: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
