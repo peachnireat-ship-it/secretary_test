@@ -827,7 +827,9 @@ export async function addProject(project) {
   // 경우는 예외 — Alert에서 '예'를 눌러 진행률을 그대로 두기로 확인한 저장까지 여기서 되돌리지 않는다.
   else if (safeProject.status === '완료' && !keepProgress) safeProject.progress = 100;
   await assertClientIdsOwned(user.id, safeProject.clientIds);
-  const row = { id: safeProject.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(safeProject, PROJECT_KEYMAP) };
+  // projects.created_at/updated_at는 timestamptz라 PostgREST에 ISO 문자열로 보내야 한다(bigint 시절의
+  // Date.now() 그대로 보내면 타입 캐스팅 에러).
+  const row = { id: safeProject.id || Date.now().toString(), user_id: user.id, created_at: new Date().toISOString(), ...toRow(safeProject, PROJECT_KEYMAP) };
   const { error } = await supabase.from('projects').insert(row);
   if (error) throw error;
   await syncProjectMirrors(row.id);
@@ -845,7 +847,8 @@ export async function updateProject(id, changes) {
   // 경우는 예외 — Alert에서 '예'를 눌러 진행률을 그대로 두기로 확인한 저장까지 여기서 되돌리지 않는다.
   else if (safeChanges.status === '완료' && !keepProgress) safeChanges.progress = 100;
   if (safeChanges.clientIds !== undefined) await assertClientIdsOwned(user.id, safeChanges.clientIds);
-  const row = { ...toRow(safeChanges, PROJECT_KEYMAP), updated_at: Date.now() };
+  // created_at과 동일한 이유로 ISO 문자열 사용(timestamptz).
+  const row = { ...toRow(safeChanges, PROJECT_KEYMAP), updated_at: new Date().toISOString() };
   const { error } = await supabase.from('projects').update(row).eq('id', id).eq('user_id', user.id);
   if (error) throw error;
   await syncProjectMirrors(id);
@@ -1352,6 +1355,10 @@ export async function migrateLocalDataToCloud() {
     const rows = legacyProjects.map((p) => ({
       id: ns(p.id), user_id: user.id, ...toRow(p, PROJECT_KEYMAP, PROJECT_DEFAULTS),
       client_ids: nsArr(p.clientIds) ?? [], meeting_record_ids: nsArr(p.meetingRecordIds) ?? [],
+      // 레거시 AsyncStorage 데이터의 createdAt/updatedAt은 Date.now() 숫자였다 — projects.created_at/
+      // updated_at이 timestamptz라 ISO 문자열로 변환해야 한다.
+      created_at: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
+      updated_at: p.updatedAt ? new Date(p.updatedAt).toISOString() : null,
     }));
     const { error } = await supabase.from('projects').upsert(rows);
     if (error) throw error;

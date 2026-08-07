@@ -202,8 +202,9 @@ create table if not exists projects (
   -- (schedules.origin_schedule_id와 동일 패턴 — schema.sql에는 컬럼만 반영하고 함수 본문은
   -- patch 파일에만 둔다).
   origin_project_id text references projects(id) on delete cascade,
-  created_at bigint not null,
-  updated_at bigint
+  -- 2026-08-07 patch_projects_timestamptz.sql에서 bigint(Date.now() epoch ms) → timestamptz로 변경.
+  created_at timestamptz not null,
+  updated_at timestamptz
 );
 -- projects 테이블이 이 컬럼 추가 이전에 이미 생성되어 있었다면 위 create table은 no-op이라
 -- 컬럼이 실제로는 없을 수 있다(schedules.origin_schedule_id와 동일한 문제). alter로 한 번 더
@@ -532,11 +533,14 @@ grant execute on function get_company_colleagues() to authenticated;
 -- 아닌 일반 프로젝트) 기존처럼 자기 자신을 쓰도록 한다. sync_project_mirrors()가 "사본은 다시
 -- 동기화 대상이 되지 않는다"고 보장하므로 origin_project_id 체인은 항상 최대 1단계다(patch_
 -- company_projects_mirror_origin.sql 참고).
+-- OUT 파라미터(RETURNS TABLE) 타입이 바뀌면 create or replace만으로는 안 되고(42P13 에러) 먼저
+-- drop이 필요하다 — created_at/updated_at을 bigint→timestamptz로 바꾼 2026-08-07 변경 때문에 추가.
+drop function if exists get_company_projects();
 create or replace function get_company_projects()
 returns table (
   id text, title text, deadline text, start_date text, status text, priority text, notes text,
   progress int, client_ids jsonb, owner_client_id text, meeting_record_ids jsonb,
-  origin_project_id text, created_at bigint, updated_at bigint,
+  origin_project_id text, created_at timestamptz, updated_at timestamptz,
   owner_name text, owner_team text, department_name text, related_people jsonb
 )
 language sql security definer stable
