@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { supabase } from './supabaseClient';
+import { buildDeptTree, flattenDeptTree } from '../utils/deptTree';
 
 // expo-secure-store는 웹에서 네이티브 모듈이 구현되어 있지 않아(getValueWithKeyAsync 등이 없음)
 // SecureStore.getItemAsync/setItemAsync를 웹에서 그대로 호출하면 TypeError가 던져진다.
@@ -853,6 +854,14 @@ export async function deleteProject(id) {
 // 예전에는 projects.select('*, profiles!inner(...)')로 직접 임베드 조회를 했었지만, 다른 직원의
 // profiles 행은 profiles_select_own RLS에 막혀 !inner 조인에서 통째로 탈락하는 버그가 있었다
 // (get_company_colleagues()와 동일한 이유 — 자세한 배경은 patch_get_company_projects.sql 참고).
+// 부서 그룹의 표시 순서는 RPC가 order by p.created_at desc로 정렬해 반환하는 원본 행 순서(=Map
+// 삽입 순서)가 아니라, 부서 관리 모달에서 관리자가 지정한 순서(departments.sort_order)를 따른다.
+// getCompanyDepartments()(이미 sort_order로 정렬)를 buildDeptTree/flattenDeptTree(CompanyScreen
+// 사이드바와 동일한 유틸)로 계층 순회하면 부서 관리 모달 트리와 동일한 순서의 부서명 목록을 얻을 수
+// 있다 — 그 순서대로 그룹을 재배열한다. 그룹 내부(같은 부서 안 프로젝트 순서)는 손대지 않으므로
+// 여전히 RPC의 created_at desc(최신순) 그대로 유지된다. '미배정'은 부서 트리에 없는 이름이라
+// known 목록에 안 걸리므로 항상 맨 뒤에 붙인다. 부서 목록 조회가 실패해도 프로젝트 조회 자체가
+// 막히면 안 되므로, 이때는 기존 삽입 순서로 폴백한다.
 export async function getCompanyProjects() {
   const { data, error } = await supabase.rpc('get_company_projects');
   if (error) throw error;
@@ -869,7 +878,22 @@ export async function getCompanyProjects() {
     if (!groups.has(groupName)) groups.set(groupName, []);
     groups.get(groupName).push(project);
   }
-  return [...groups.entries()].map(([departmentName, projects]) => ({ departmentName, projects }));
+
+  let orderedNames = [...groups.keys()];
+  try {
+    const departments = await getCompanyDepartments();
+    const deptTreeOrder = flattenDeptTree(buildDeptTree(departments)).map((d) => d.name);
+    // 부서명이 회사 내에서 유일하다는 전제(create_department/rename_department RPC가 상위부서
+    // 무관 company_id 전체 범위로 이름 중복을 막음)에 기대지만, DB 레벨 unique 제약은 아니므로
+    // 방어적으로 dedupe한다 — 동명 부서가 존재해도 그룹이 중복 렌더링되지 않도록 한다.
+    const known = [...new Set(deptTreeOrder.filter((name) => groups.has(name)))];
+    const rest = orderedNames.filter((name) => name !== '미배정' && !known.includes(name));
+    orderedNames = [...known, ...rest, ...(groups.has('미배정') ? ['미배정'] : [])];
+  } catch {
+    // 부서 목록 조회 실패 시 기존 삽입 순서(created_at desc 기반)로 폴백 — 정렬만 못 할 뿐 조회는 계속된다.
+  }
+
+  return orderedNames.map((departmentName) => ({ departmentName, projects: groups.get(departmentName) }));
 }
 
 // 프로젝트 사본(mirror) 소유자 본인 전용: 자신의 사본 하나에 대해 원본 등록자 이름/팀/부서, 원본의

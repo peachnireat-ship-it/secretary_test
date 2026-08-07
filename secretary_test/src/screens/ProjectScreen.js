@@ -12,7 +12,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
 import { useUser } from '../context/UserContext';
-import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules, getTopics, addTopic, getCompanyProjects, getProjectMirrorInfo } from '../services/storage';
+import { getProjects, addProject, updateProject, deleteProject, getMeetingRecords, updateMeetingRecord, getClients, addClient, getHistories, getSchedules, getTopics, addTopic, getCompanyProjects, getCompanyDepartments, getProjectMirrorInfo } from '../services/storage';
+import { buildDeptTree, flattenDeptTree, DEPT_INDENT } from '../utils/deptTree';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useProjectAI } from '../hooks/useProjectAI';
 import { useProjectForm, formatDeadline, fmtTime12 } from '../hooks/useProjectForm';
@@ -71,6 +72,13 @@ const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
 const PRIORITIES = ['높음', '보통', '낮음'];
 const FILTERS = ['전체', '진행중', '위험', '지연', '완료'];
 
+// "회사 전체" 보기 부서 사이드바(CompanyScreen.js와 동일 패턴). 사이드바 폭 범위는 가장 긴
+// 부서명에 맞춰 이 범위 안에서 자동으로 늘어난다(SIDEBAR_MIN_WIDTH~SIDEBAR_MAX_WIDTH).
+const ALL_KEY = '__all__';
+const SIDEBAR_MIN_WIDTH = 90;
+const SIDEBAR_MAX_WIDTH = 160;
+const SIDEBAR_PADDING_H = 10;
+
 function isAtRisk(project) {
   if (project.status === '완료' || project.status === '취소') return false;
   const days = daysUntil(project.deadline);
@@ -106,6 +114,9 @@ export default function ProjectScreen({ navigation, route }) {
   const [viewMode, setViewMode] = useState('mine'); // 'mine' | 'company'
   const [companyGroups, setCompanyGroups] = useState([]);
   const [companyLoading, setCompanyLoading] = useState(false);
+  // 부서 트리 사이드바(CompanyScreen.js와 동일 패턴): 부서 원본 목록 + 현재 선택된 부서("전체" 기본값)
+  const [departments, setDepartments] = useState([]);
+  const [selectedDept, setSelectedDept] = useState(ALL_KEY);
   // 회사 전체 보기는 조회 전용이다 — 다른 부서 직원의 프로젝트를 수정/삭제할 수 없다.
   const [showCompanyDetail, setShowCompanyDetail] = useState(false);
   const [companyDetailProject, setCompanyDetailProject] = useState(null);
@@ -143,10 +154,20 @@ export default function ProjectScreen({ navigation, route }) {
   const [pickerNewRole, setPickerNewRole] = useState('');
   const [pickerNewContact, setPickerNewContact] = useState('');
 
+  // "회사 전체" 보기에서는 companyGroups(다른 부서/직원 등록분 포함, ownerName/departmentName 포함)를
+  // 평탄화해 AI에 넘긴다 — 본인 소유 프로젝트만 담긴 projects state 그대로 넘기면 다른 사람이 등록한
+  // 프로젝트에 대한 질문(예: "등록한 사람이 누구야?")에 AI가 답할 데이터 자체가 없기 때문.
+  const aiProjects = viewMode === 'company' ? companyGroups.flatMap((g) => g.projects) : projects;
   const {
     showAI, setShowAI, chatMessages, chatInput, setChatInput, aiLoading, chatScrollRef,
-    handleAIChat, handleQuickAnalysis,
-  } = useProjectAI({ projects, setProjects });
+    handleAIChat, handleQuickAnalysis, resetChat: resetAiChat,
+  } = useProjectAI({ projects: aiProjects, setProjects, readOnly: viewMode === 'company' });
+
+  // viewMode 전환 시 이전 컨텍스트 기준 대화가 새 컨텍스트와 뒤섞이지 않도록 초기화.
+  useEffect(() => {
+    resetAiChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
 
   const {
     showAdd, setShowAdd, newTitle, setNewTitle, newStartDate, setNewStartDate,
@@ -265,7 +286,9 @@ export default function ProjectScreen({ navigation, route }) {
   async function loadCompanyProjects() {
     setCompanyLoading(true);
     try {
-      setCompanyGroups(await getCompanyProjects());
+      const [groups, depts] = await Promise.all([getCompanyProjects(), getCompanyDepartments()]);
+      setCompanyGroups(groups);
+      setDepartments(depts);
     } catch (e) {
       console.warn('getCompanyProjects 실패:', e.message);
       Alert.alert('오류', '회사 프로젝트를 불러오지 못했습니다.');
@@ -319,6 +342,52 @@ export default function ProjectScreen({ navigation, route }) {
   }
 
   const companyProjectCount = companyGroups.reduce((sum, g) => sum + g.projects.length, 0);
+
+  // "회사 전체" 부서 사이드바(CompanyScreen.js와 동일 패턴)
+  const deptTree = buildDeptTree(departments);
+  const flatDeptTree = flattenDeptTree(deptTree);
+  // 선택된 부서가 최신 부서 트리에 더 이상 없으면(삭제 등) "전체"로 자동 복귀.
+  const effectiveSelectedDept = selectedDept !== ALL_KEY && flatDeptTree.some((d) => d.name === selectedDept)
+    ? selectedDept
+    : ALL_KEY;
+  const showAllDepts = effectiveSelectedDept === ALL_KEY;
+  // "미배정"(부서 없는 프로젝트) 그룹은 트리에 없으므로 사이드바에서 개별 선택이 불가능하다 —
+  // "전체" 선택 시에만 companyGroups의 일부로 자연스럽게 표시된다(CompanyScreen과 동일한 제약).
+  const selectedDeptGroup = showAllDepts ? null : companyGroups.find((g) => g.departmentName === effectiveSelectedDept);
+
+  // "회사 전체" 보기 프로젝트 카드 렌더링. "전체"/특정 부서 선택 두 목록에서 공용으로 사용(중복 코드 방지).
+  function renderCompanyProjectCard(item) {
+    const days = daysUntil(item.deadline);
+    const isCompleted = item.status === '완료';
+    return (
+      <TouchableOpacity key={item.id} style={s.card} activeOpacity={0.75} onPress={() => openCompanyDetail(item)}>
+        <View style={s.cardTop}>
+          <View style={s.cardTitleRow}>
+            <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
+          </View>
+          <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
+            <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
+          </View>
+        </View>
+
+        <View style={s.progressTrack}>
+          <View style={[s.progressFill, { width: `${item.progress}%`, backgroundColor: statusColor(item.status) }]} />
+        </View>
+
+        <View style={s.cardMeta}>
+          <View style={s.ownerChip}>
+            <Text style={s.ownerChipText}>{item.ownerName}</Text>
+          </View>
+          <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
+            <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
+          </View>
+          <Text style={[s.deadlineText, days < 0 && !isCompleted && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
+            {item.deadline}{isCompleted && days < 0 ? '' : ` · ${daysLabel(days)}`}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   const filtered = projects.filter((p) => filter === '전체' || p.status === filter);
 
@@ -623,55 +692,58 @@ export default function ProjectScreen({ navigation, route }) {
 
       {viewMode === 'company' ? (
       <>
-      {/* ── 회사 전체 프로젝트 (부서별) ── */}
-      <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
-        {!companyLoading && companyGroups.length === 0 ? (
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyText}>회사 프로젝트가 없습니다</Text>
-          </View>
-        ) : (
-          companyGroups.map((group) => (
-            <View key={group.departmentName} style={s.deptSection}>
-              <View style={s.deptHeaderRow}>
-                <Text style={s.deptName}>{group.departmentName}</Text>
-                <Text style={s.deptMeta}>{group.projects.length}건</Text>
+      {/* ── 회사 전체 프로젝트 (부서 트리 사이드바 + 우측 목록, CompanyScreen.js와 동일 패턴) ── */}
+      <View style={s.body}>
+        <ScrollView style={s.sidebar} contentContainerStyle={s.sidebarContent} showsVerticalScrollIndicator={false}>
+          <TouchableOpacity style={s.sidebarItem} onPress={() => setSelectedDept(ALL_KEY)} activeOpacity={0.6}>
+            <Text style={[s.sidebarItemText, showAllDepts && s.sidebarItemTextActive]} numberOfLines={1}>전체</Text>
+          </TouchableOpacity>
+          {flatDeptTree.map((dept) => {
+            const active = !showAllDepts && effectiveSelectedDept === dept.name;
+            return (
+              <TouchableOpacity
+                key={dept.id}
+                style={[s.sidebarItem, { marginLeft: dept.depth * DEPT_INDENT }]}
+                onPress={() => setSelectedDept(dept.name)}
+                activeOpacity={0.6}
+              >
+                <Text style={[s.sidebarItemText, active && s.sidebarItemTextActive]} numberOfLines={2}>
+                  {dept.depth > 0 && <Text style={s.treePrefix}>{'└ '}</Text>}
+                  {dept.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
+          {showAllDepts ? (
+            !companyLoading && companyGroups.length === 0 ? (
+              <View style={s.emptyWrap}>
+                <Text style={s.emptyText}>회사 프로젝트가 없습니다</Text>
               </View>
-              {group.projects.map((item) => {
-                const days = daysUntil(item.deadline);
-                const isCompleted = item.status === '완료';
-                return (
-                  <TouchableOpacity key={item.id} style={s.card} activeOpacity={0.75} onPress={() => openCompanyDetail(item)}>
-                    <View style={s.cardTop}>
-                      <View style={s.cardTitleRow}>
-                        <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
-                      </View>
-                      <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
-                        <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
-                      </View>
-                    </View>
-
-                    <View style={s.progressTrack}>
-                      <View style={[s.progressFill, { width: `${item.progress}%`, backgroundColor: statusColor(item.status) }]} />
-                    </View>
-
-                    <View style={s.cardMeta}>
-                      <View style={s.ownerChip}>
-                        <Text style={s.ownerChipText}>{item.ownerName}</Text>
-                      </View>
-                      <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
-                        <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
-                      </View>
-                      <Text style={[s.deadlineText, days < 0 && !isCompleted && { color: C.red }, days >= 0 && days <= 3 && { color: C.gold }]}>
-                        {item.deadline}{isCompleted && days < 0 ? '' : ` · ${daysLabel(days)}`}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))
-        )}
-      </ScrollView>
+            ) : (
+              companyGroups.map((group) => (
+                <View key={group.departmentName} style={s.deptSection}>
+                  <View style={s.deptHeaderRow}>
+                    <Text style={s.deptName}>{group.departmentName}</Text>
+                    <Text style={s.deptMeta}>{group.projects.length}건</Text>
+                  </View>
+                  {group.projects.map(renderCompanyProjectCard)}
+                </View>
+              ))
+            )
+          ) : (
+            !companyLoading && (!selectedDeptGroup || selectedDeptGroup.projects.length === 0) ? (
+              <View style={s.emptyWrap}>
+                <Text style={s.emptyText}>이 부서에 프로젝트가 없습니다</Text>
+              </View>
+            ) : (
+              selectedDeptGroup.projects.map(renderCompanyProjectCard)
+            )
+          )}
+        </ScrollView>
+      </View>
       </>
       ) : (
       <>
@@ -2062,6 +2134,15 @@ const s = StyleSheet.create({
   ownerChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: C.companyIndigo + '18', borderWidth: 1, borderColor: C.companyIndigo + '44' },
   ownerChipText: { color: C.companyIndigo, fontSize: 10, fontWeight: '500' },
 
+  // "회사 전체" 부서 트리 사이드바 (CompanyScreen.js와 동일 패턴)
+  body: { flex: 1, flexDirection: 'row' },
+  sidebar: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', minWidth: SIDEBAR_MIN_WIDTH, maxWidth: SIDEBAR_MAX_WIDTH, borderRightWidth: 1, borderRightColor: C.border },
+  sidebarContent: { paddingHorizontal: SIDEBAR_PADDING_H, paddingTop: 12, paddingBottom: 100, gap: 8 },
+  sidebarItem: { alignSelf: 'flex-start', maxWidth: '100%', paddingVertical: 6, paddingHorizontal: 4 },
+  sidebarItemText: { color: C.textDim, fontSize: 12, fontWeight: '500' },
+  sidebarItemTextActive: { color: C.companyIndigo, fontWeight: '600' },
+  treePrefix: { color: C.textDim, fontWeight: '400' },
+
   filterWrap: { maxHeight: 44 },
   filterRow: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
   filterTab: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: C.border },
@@ -2177,8 +2258,6 @@ const s = StyleSheet.create({
   clientPickerInput: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: C.textPrimary, fontSize: 14 },
   clientPickerList: { maxHeight: 280 },
   clientPickerItem: { paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.border },
-  clientPickerItemSelected: { backgroundColor: C.red + '14' },
-  clientPickerCheckMark: { color: C.red, fontWeight: '700' },
   clientPickerName: { color: C.textPrimary, fontSize: 14, fontWeight: '500' },
   clientPickerCompany: { color: C.textDim, fontSize: 12, marginTop: 2 },
   clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },

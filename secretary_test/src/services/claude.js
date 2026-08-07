@@ -121,7 +121,7 @@ ${list || '(등록된 일정 없음)'}
 - 일정 우선순위 제안 및 시간 관리 조언`;
 }
 
-export function buildProjectDelaySystem(projects, schedules) {
+export function buildProjectDelaySystem(projects, schedules, { readOnly = false } = {}) {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
@@ -131,8 +131,20 @@ export function buildProjectDelaySystem(projects, schedules) {
     const daysLabel = diffDays > 0 ? `마감 ${diffDays}일 후` : diffDays === 0 ? '오늘 마감' : `마감 ${Math.abs(diffDays)}일 초과`;
     const isAtRisk = p.status !== '완료' && p.status !== '취소' && (diffDays <= 7 && p.progress < 80);
     const riskFlag = isAtRisk ? ' ⚠️ 위험' : '';
-    return `- [${p.status}${riskFlag}] ${p.title} | 우선순위: ${p.priority} | 진행률: ${p.progress}% | 마감: ${p.deadline} (${daysLabel}) | 메모: ${p.notes || '없음'}`;
+    const ownerLabel = p.ownerName ? ` | 등록자: ${p.ownerName}${p.departmentName ? `(${p.departmentName})` : ''}` : '';
+    const relatedPeopleLabel = Array.isArray(p.relatedPeople) && p.relatedPeople.length > 0
+      ? ` | 관련인물: ${p.relatedPeople.map((person) => {
+          const meta = [person.company, person.role].filter(Boolean).join('·');
+          return meta ? `${person.name}(${meta})` : person.name;
+        }).join(', ')}`
+      : '';
+    const mirrorLabel = p.originProjectId ? ' [타인 등록 사본 - 수정 불가]' : '';
+    return `- [${p.status}${riskFlag}] ${p.title}${mirrorLabel}${ownerLabel} | 우선순위: ${p.priority} | 진행률: ${p.progress}% | 마감: ${p.deadline} (${daysLabel}) | 메모: ${p.notes || '없음'}${relatedPeopleLabel}`;
   }).join('\n');
+
+  const hasMirrorProject = projects.some((p) => p.originProjectId);
+
+  const hasRelatedPeople = projects.some((p) => Array.isArray(p.relatedPeople) && p.relatedPeople.length > 0);
 
   const delayedCount = projects.filter((p) => p.status === '지연' || p.status === '위험').length;
   const overdueCount = projects.filter((p) => {
@@ -149,17 +161,21 @@ export function buildProjectDelaySystem(projects, schedules) {
 프로젝트 현황 (총 ${projects.length}건 / 지연·위험 ${delayedCount}건 / 마감 초과 ${overdueCount}건):
 ${projectLines || '(등록된 프로젝트 없음)'}
 
-## 응답 규칙
-- 분석·조언·조회 요청: 자연스러운 한국어 텍스트로만 응답하세요. JSON을 절대 포함하지 마세요.
-- 프로젝트 상태·진행률 변경 요청일 때만: 아래 JSON 한 줄만 출력하세요.
-  {"action":"update_project","id":"프로젝트ID","changes":{"status":"상태값","progress":숫자}}
+이 목록에 다른 직원이 등록한 프로젝트가 포함될 수 있습니다. 각 항목의 "등록자" 필드는 그 프로젝트를 실제로 등록한 사람입니다. "이거 등록한 사람이 누구야?", "담당자가 누구야?" 같은 질문에는 반드시 등록자 필드를 참고해 정확히 답하세요.
+${hasRelatedPeople ? '\n각 항목의 "관련인물" 필드는 그 프로젝트와 관련된 거래처 담당자입니다. "관련인물이 누구야", "이 프로젝트 관련된 사람 누구야" 같은 질문에는 관련인물 필드를 참고해 답하세요.\n' : ''}
 
+## 응답 규칙
+- 분석·조언·조회 요청: 자연스러운 한국어 텍스트로만 응답하세요. JSON을 절대 포함하지 마세요.${readOnly ? '' : `
+- 프로젝트 상태·진행률 변경 요청일 때만: 아래 JSON 한 줄만 출력하세요.
+  {"action":"update_project","id":"프로젝트ID","changes":{"status":"상태값","progress":숫자}}`}
+${readOnly ? '\n[중요] 지금 이 목록에는 본인 소유가 아닌 프로젝트가 섞여 있을 수 있습니다. 본인 소유가 아닌 프로젝트는 상태·진행률을 수정할 수 없으므로 update_project 액션을 절대 사용하지 마세요. 수정·업데이트 요청을 받으면 "다른 직원의 프로젝트는 조회만 가능합니다"라고 안내하세요.\n' : ''}
+${hasMirrorProject ? '\n[중요] 목록에서 "[타인 등록 사본 - 수정 불가]" 표시가 붙은 항목은 다른 사람이 등록한 프로젝트의 사본입니다. 이 표시가 있는 프로젝트는 절대 update_project 액션을 사용하지 말고 조회만 가능합니다. 수정·업데이트 요청을 받으면 "다른 사람이 등록한 프로젝트는 수정할 수 없습니다"라고 안내하세요.\n' : ''}
 ## 할 수 있는 작업
 1. 전체 지연 원인 패턴 분석 (메모·상태·진행률 기반)
 2. 우선 조치가 필요한 프로젝트 식별 및 순서 제안
 3. 마감 위험 프로젝트의 회복 계획 수립
 4. 반복 지연 패턴 및 근본 원인 진단
-5. 프로젝트 상태·진행률 업데이트
+5. ${readOnly ? '등록자·부서 등 프로젝트 정보 조회 응답' : '프로젝트 상태·진행률 업데이트'}
 
 분석 요청 시 반드시 다음 항목을 포함하세요:
 - 지연 원인 분류 (자원 부족 / 의사결정 지연 / 외부 의존 / 범위 변경 / 커뮤니케이션 문제 등)
