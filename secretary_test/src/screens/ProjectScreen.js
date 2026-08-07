@@ -163,6 +163,40 @@ export default function ProjectScreen({ navigation, route }) {
     handleAIChat, handleQuickAnalysis, resetChat: resetAiChat,
   } = useProjectAI({ projects: aiProjects, setProjects, readOnly: viewMode === 'company' });
 
+  // AI 채팅 모달의 빠른 질문 칩 목록(가로 스크롤). 모바일은 터치 스와이프로 기본 지원되지만,
+  // PC(웹)는 마우스 휠이 기본적으로 세로로만 동작해 좌우로 넘기지 못하므로 휠 이벤트를 가로
+  // 스크롤로 변환해준다(react-native-web은 인식 못 하는 DOM 이벤트 prop을 그대로 밑단 엘리먼트에
+  // 전달하므로 onWheel을 그대로 써도 된다).
+  // 스크롤바를 노출하는 대신, 클릭한 채로 좌우로 끄는 "드래그 스크롤"도 지원한다(흔한 웹 캐러셀 패턴).
+  // moved 플래그로 실제 드래그와 단순 클릭을 구분해 칩의 onPress가 드래그 도중에 실수로 실행되지
+  // 않도록 막는다(칩 onPress 쪽에서 isQuickDragClick()으로 확인).
+  const quickScrollRef = useRef(null);
+  const quickDragRef = useRef({ dragging: false, moved: false, startX: 0, startScrollLeft: 0 });
+  function handleQuickWheel(e) {
+    if (Platform.OS !== 'web' || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    quickScrollRef.current?.scrollTo({ x: e.currentTarget.scrollLeft + e.deltaY, animated: false });
+  }
+  function handleQuickMouseDown(e) {
+    if (Platform.OS !== 'web') return;
+    quickDragRef.current = { dragging: true, moved: false, startX: e.pageX, startScrollLeft: e.currentTarget.scrollLeft };
+  }
+  function handleQuickMouseMove(e) {
+    if (Platform.OS !== 'web' || !quickDragRef.current.dragging) return;
+    const delta = e.pageX - quickDragRef.current.startX;
+    if (Math.abs(delta) > 4) quickDragRef.current.moved = true;
+    if (quickDragRef.current.moved) {
+      e.preventDefault();
+      quickScrollRef.current?.scrollTo({ x: quickDragRef.current.startScrollLeft - delta, animated: false });
+    }
+  }
+  function handleQuickMouseUp() {
+    if (Platform.OS === 'web') quickDragRef.current.dragging = false;
+  }
+  function isQuickDragClick() {
+    return Platform.OS === 'web' && quickDragRef.current.moved;
+  }
+
   // viewMode 전환 시 이전 컨텍스트 기준 대화가 새 컨텍스트와 뒤섞이지 않도록 초기화.
   useEffect(() => {
     resetAiChat();
@@ -1334,14 +1368,27 @@ export default function ProjectScreen({ navigation, route }) {
 
             {/* 빠른 질문 버튼 */}
             {chatMessages.length <= 2 && !aiLoading && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.quickRow} contentContainerStyle={s.quickContent}>
+              <ScrollView
+                ref={quickScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={[s.quickRow, Platform.OS === 'web' && s.quickRowWeb]}
+                contentContainerStyle={s.quickContent}
+                {...(Platform.OS === 'web' ? {
+                  onWheel: handleQuickWheel,
+                  onMouseDown: handleQuickMouseDown,
+                  onMouseMove: handleQuickMouseMove,
+                  onMouseUp: handleQuickMouseUp,
+                  onMouseLeave: handleQuickMouseUp,
+                } : {})}
+              >
                 {chatMessages.length === 1 && (
-                  <TouchableOpacity style={s.quickBtn} onPress={handleQuickAnalysis}>
+                  <TouchableOpacity style={s.quickBtn} onPress={() => { if (!isQuickDragClick()) handleQuickAnalysis(); }}>
                     <Text style={s.quickText}>⚡ 전체 현황 요약</Text>
                   </TouchableOpacity>
                 )}
                 {['등록자가 누구야?', '관련인물이 누구야?', '마감일이 언제야?'].map((q) => (
-                  <TouchableOpacity key={q} style={s.quickBtn} onPress={() => { setChatInput(q); }}>
+                  <TouchableOpacity key={q} style={s.quickBtn} onPress={() => { if (!isQuickDragClick()) setChatInput(q); }}>
                     <Text style={s.quickText}>{q}</Text>
                   </TouchableOpacity>
                 ))}
@@ -2399,6 +2446,7 @@ const s = StyleSheet.create({
   bubbleTextAI: { color: C.textSecondary },
   bubbleTextUser: { color: C.textPrimary },
   quickRow: { maxHeight: 40, marginBottom: 8 },
+  quickRowWeb: { cursor: 'grab' },
   quickContent: { gap: 8, paddingLeft: 2, paddingRight: 20 },
   quickBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   quickText: { color: C.textSecondary, fontSize: 11 },
