@@ -295,7 +295,7 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity
             activeOpacity={0.7}
             style={[s.aiRow, s.aiRowBordered]}
-            onPress={() => navigation.navigate('프로젝트', { openAI: true })}
+            onPress={() => navigation.navigate('프로젝트', { openQuickAnalysis: true })}
           >
             <View style={[s.aiDot, { backgroundColor: C.red }]} />
             <View style={commonStyles.flex1}>

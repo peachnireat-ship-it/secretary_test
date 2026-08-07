@@ -247,11 +247,10 @@ export default function ProjectScreen({ navigation, route }) {
   }, [route?.params?.openProjectId, projects]);
 
   useEffect(() => {
-    if (!route?.params?.openAI) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setShowAI(true);
-    navigation.setParams({ openAI: undefined });
-  }, [route?.params?.openAI]);
+    if (!route?.params?.openQuickAnalysis) return;
+    handleQuickAnalysis();
+    navigation.setParams({ openQuickAnalysis: undefined });
+  }, [route?.params?.openQuickAnalysis]);
 
   useEffect(() => {
     if (showDetail) {
@@ -663,9 +662,6 @@ export default function ProjectScreen({ navigation, route }) {
           ) : null}
         </View>
         <View style={s.headerBtns}>
-          <TouchableOpacity style={s.analyzeBtn} onPress={handleQuickAnalysis}>
-            <Text style={s.analyzeBtnText}>✦ 지연 분석</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
             <Text style={s.aiBtnText}>AI</Text>
           </TouchableOpacity>
@@ -1339,6 +1335,11 @@ export default function ProjectScreen({ navigation, route }) {
             {/* 빠른 질문 버튼 */}
             {chatMessages.length <= 2 && !aiLoading && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.quickRow} contentContainerStyle={s.quickContent}>
+                {chatMessages.length === 1 && (
+                  <TouchableOpacity style={s.quickBtn} onPress={handleQuickAnalysis}>
+                    <Text style={s.quickText}>⚡ 전체 지연 분석</Text>
+                  </TouchableOpacity>
+                )}
                 {['이번 주 위험 프로젝트 알려줘', '지연 패턴 분석해줘', '조치 계획 세워줘'].map((q) => (
                   <TouchableOpacity key={q} style={s.quickBtn} onPress={() => { setChatInput(q); }}>
                     <Text style={s.quickText}>{q}</Text>
@@ -2116,8 +2117,6 @@ const s = StyleSheet.create({
   headerSub: { color: C.red, fontSize: 11, marginTop: 2 },
   headerSubDim: { color: C.textSecondary, fontSize: 11, marginTop: 2 },
   headerBtns: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  analyzeBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.gold + '22', borderWidth: 1, borderColor: C.gold + '55', borderRadius: 20 },
-  analyzeBtnText: { color: C.gold, fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
   aiBtn: { paddingHorizontal: 12, paddingVertical: 7, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 20 },
   aiBtnText: { color: C.accentBlue, fontSize: 12, fontWeight: '600' },
 
