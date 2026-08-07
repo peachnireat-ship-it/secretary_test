@@ -2399,7 +2399,7 @@ const s = StyleSheet.create({
   bubbleTextAI: { color: C.textSecondary },
   bubbleTextUser: { color: C.textPrimary },
   quickRow: { maxHeight: 40, marginBottom: 8 },
-  quickContent: { gap: 8, paddingHorizontal: 2 },
+  quickContent: { gap: 8, paddingLeft: 2, paddingRight: 20 },
   quickBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   quickText: { color: C.textSecondary, fontSize: 11 },
   chatInputRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
