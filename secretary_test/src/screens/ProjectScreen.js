@@ -1305,8 +1305,8 @@ export default function ProjectScreen({ navigation, route }) {
               <View style={s.chatHeaderLeft}>
                 <Text style={s.aiGlyph}>✦</Text>
                 <View>
-                  <Text style={s.modalTitle}>AI 지연 분석</Text>
-                  <Text style={s.chatSubtitle}>프로젝트 지연 원인 · 개선 계획</Text>
+                  <Text style={s.modalTitle}>AI 도우미</Text>
+                  <Text style={s.chatSubtitle}>프로젝트 정보 문의 · 현황 요약</Text>
                 </View>
               </View>
               <TouchableOpacity onPress={() => setShowAI(false)}>
@@ -1337,10 +1337,10 @@ export default function ProjectScreen({ navigation, route }) {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.quickRow} contentContainerStyle={s.quickContent}>
                 {chatMessages.length === 1 && (
                   <TouchableOpacity style={s.quickBtn} onPress={handleQuickAnalysis}>
-                    <Text style={s.quickText}>⚡ 전체 지연 분석</Text>
+                    <Text style={s.quickText}>⚡ 전체 현황 요약</Text>
                   </TouchableOpacity>
                 )}
-                {['이번 주 위험 프로젝트 알려줘', '지연 패턴 분석해줘', '조치 계획 세워줘'].map((q) => (
+                {['등록자가 누구야?', '관련인물이 누구야?', '마감일이 언제야?'].map((q) => (
                   <TouchableOpacity key={q} style={s.quickBtn} onPress={() => { setChatInput(q); }}>
                     <Text style={s.quickText}>{q}</Text>
                   </TouchableOpacity>
@@ -1353,7 +1353,7 @@ export default function ProjectScreen({ navigation, route }) {
                 style={s.chatInput}
                 value={chatInput}
                 onChangeText={setChatInput}
-                placeholder="지연 분석 또는 개선 방안을 물어보세요..."
+                placeholder="프로젝트에 대해 무엇이든 물어보세요..."
                 placeholderTextColor={C.textDim}
                 onSubmitEditing={handleAIChat}
                 returnKeyType="send"

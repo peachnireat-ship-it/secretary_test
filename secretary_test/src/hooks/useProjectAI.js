@@ -12,7 +12,7 @@ import { updateProject } from '../services/storage';
  * @param {boolean} [params.readOnly=false] true면 "회사 전체" 등 본인 소유가 아닌 프로젝트가 섞여 있는
  *   컨텍스트로 간주해 update_project 액션 처리를 코드 레벨에서 완전히 건너뛰고 항상 텍스트 응답만 표시한다.
  */
-const INITIAL_CHAT_MESSAGE = { role: 'assistant', text: '안녕하세요! 프로젝트 지연 분석 AI입니다.\n\n"전체 지연 분석해줘", "가장 위험한 프로젝트가 뭐야?", "이번 주 조치 계획 세워줘" 와 같이 물어보세요.' };
+const INITIAL_CHAT_MESSAGE = { role: 'assistant', text: '안녕하세요! 프로젝트 도우미 AI입니다.\n\n"등록자가 누구야?", "관련인물이 누구야?", "마감일이 언제야?" 와 같이 물어보세요.' };
 
 export function useProjectAI({ projects, setProjects, readOnly = false }) {
   const [showAI, setShowAI] = useState(false);
@@ -99,7 +99,7 @@ export function useProjectAI({ projects, setProjects, readOnly = false }) {
     setShowAI(true);
     if (chatMessages.length > 1) return;
     setChatInput('');
-    const userMsg = { role: 'user', text: '전체 프로젝트 지연 원인을 분석하고 우선 조치 계획을 알려줘.' };
+    const userMsg = { role: 'user', text: '전체 프로젝트 현황을 요약해줘.' };
     const history = [...chatMessages, userMsg];
     setChatMessages(history);
     setAiLoading(true);
