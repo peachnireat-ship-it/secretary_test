@@ -115,6 +115,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
   const [newDeadlineAmPm, setNewDeadlineAmPm] = useState('오후');
   const [newStatus, setNewStatus] = useState('진행중');
   const [newProgress, setNewProgress] = useState(0);
+  const [newKeepProgress, setNewKeepProgress] = useState(false);
   const [newPriority, setNewPriority] = useState('보통');
   const [newNotes, setNewNotes] = useState('');
   const [pendingMeetingRecordId, setPendingMeetingRecordId] = useState(null);
@@ -134,6 +135,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
   const [editDeadlineAmPm, setEditDeadlineAmPm] = useState('오후');
   const [editStatus, setEditStatus] = useState('진행중');
   const [editProgress, setEditProgress] = useState(0);
+  const [editKeepProgress, setEditKeepProgress] = useState(false);
   const [editPriority, setEditPriority] = useState('보통');
   const [editNotes, setEditNotes] = useState('');
   const [editClientIds, setEditClientIds] = useState([]);
@@ -160,12 +162,13 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
       meetingRecordIds: pendingMeetingRecordId ? [pendingMeetingRecordId] : [],
       clientIds: [...new Set([...(meetingRecord?.clientIds || []), ...newClientIds])],
       notifyEmail: newNotifyEmail,
+      keepProgress: newKeepProgress,
     });
     setProjects(updated);
     setShowAdd(false);
     setNewTitle(''); setNewStartDate(''); setNewStartTime('09:00'); setNewStartAmPm('오전');
     setNewDeadline(''); setNewDeadlineTime('06:00'); setNewDeadlineAmPm('오후');
-    setNewStatus('진행중'); setNewProgress(0); setNewPriority('보통'); setNewNotes('');
+    setNewStatus('진행중'); setNewProgress(0); setNewKeepProgress(false); setNewPriority('보통'); setNewNotes('');
     setPendingMeetingRecordId(null);
     setNewClientIds([]);
     setNewNotifyEmail(true);
@@ -258,6 +261,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
 
     setEditStatus(project.status);
     setEditProgress(project.progress ?? 0);
+    setEditKeepProgress(false);
     setEditPriority(project.priority);
     setEditNotes(project.notes || '');
     setEditClientIds(project.clientIds || []);
@@ -287,6 +291,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
       notes: editNotes.trim(),
       clientIds: editClientIds,
       notifyEmail: editNotifyEmail,
+      keepProgress: editKeepProgress,
     });
     setProjects(updated);
     const refreshed = updated.find((p) => p.id === detailProject.id);
@@ -384,7 +389,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     showAdd, setShowAdd, newTitle, setNewTitle, newStartDate, setNewStartDate,
     newStartTime, setNewStartTime, newStartAmPm, setNewStartAmPm, newDeadline, setNewDeadline,
     newDeadlineTime, setNewDeadlineTime, newDeadlineAmPm, setNewDeadlineAmPm, newStatus, setNewStatus,
-    newProgress, setNewProgress, newPriority, setNewPriority, newNotes, setNewNotes,
+    newProgress, setNewProgress, newKeepProgress, setNewKeepProgress, newPriority, setNewPriority, newNotes, setNewNotes,
     pendingMeetingRecordId, setPendingMeetingRecordId,
     newClientIds, setNewClientIds, newNotifyEmail, setNewNotifyEmail,
 
@@ -392,7 +397,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     viewProject, setViewProject, editTitle, setEditTitle, editStartDate, setEditStartDate,
     editStartTime, setEditStartTime, editStartAmPm, setEditStartAmPm, editDeadline, setEditDeadline,
     editDeadlineTime, setEditDeadlineTime, editDeadlineAmPm, setEditDeadlineAmPm, editStatus, setEditStatus,
-    editProgress, setEditProgress, editPriority, setEditPriority, editNotes, setEditNotes,
+    editProgress, setEditProgress, editKeepProgress, setEditKeepProgress, editPriority, setEditPriority, editNotes, setEditNotes,
     editClientIds, setEditClientIds, editNotifyEmail, setEditNotifyEmail,
 
     detailPersonPickerVisible, setDetailPersonPickerVisible,

@@ -820,7 +820,12 @@ export async function addProject(project) {
   // 프로젝트의 사본으로 위조해 get_project_mirror_info()로 그 사람 정보를 열람하는 것을 막기
   // 위함 — DB 트리거 trg_prevent_client_origin_project_id_write가 최종 방어선이고, 여기서는
   // 저장 시도 전에 먼저 걸러 명확한 에러 없이 조용히 무시한다).
-  const { originProjectId, ...safeProject } = project;
+  const { originProjectId, keepProgress, ...safeProject } = project;
+  // 진행률 100은 곧 완료다 — addProject/updateProject 두 곳으로 모든 저장 경로가 수렴하므로 여기서 한 번만 강제한다.
+  if (safeProject.progress === 100) safeProject.status = '완료';
+  // 완료로 저장되면 진행률도 100으로 함께 맞춘다. 단, 사용자가 진행률 유지 확인(keepProgress)을 거친
+  // 경우는 예외 — Alert에서 '예'를 눌러 진행률을 그대로 두기로 확인한 저장까지 여기서 되돌리지 않는다.
+  else if (safeProject.status === '완료' && !keepProgress) safeProject.progress = 100;
   await assertClientIdsOwned(user.id, safeProject.clientIds);
   const row = { id: safeProject.id || Date.now().toString(), user_id: user.id, created_at: Date.now(), ...toRow(safeProject, PROJECT_KEYMAP) };
   const { error } = await supabase.from('projects').insert(row);
@@ -833,7 +838,12 @@ export async function updateProject(id, changes) {
   const user = await getCurrentUser();
   // addProject와 동일한 이유로 originProjectId 변경은 무시한다(AI update_project 액션처럼
   // 필드 화이트리스트 없이 changes를 그대로 넘기는 경로가 실제로 존재하므로 특히 중요).
-  const { originProjectId, ...safeChanges } = changes;
+  const { originProjectId, keepProgress, ...safeChanges } = changes;
+  // 진행률 100은 곧 완료다 — 호출자가 다른 status를 함께 넘겨도 진행률 100이 우선한다.
+  if (safeChanges.progress === 100) safeChanges.status = '완료';
+  // 완료로 저장되면 진행률도 100으로 함께 맞춘다. 단, 사용자가 진행률 유지 확인(keepProgress)을 거친
+  // 경우는 예외 — Alert에서 '예'를 눌러 진행률을 그대로 두기로 확인한 저장까지 여기서 되돌리지 않는다.
+  else if (safeChanges.status === '완료' && !keepProgress) safeChanges.progress = 100;
   if (safeChanges.clientIds !== undefined) await assertClientIdsOwned(user.id, safeChanges.clientIds);
   const row = { ...toRow(safeChanges, PROJECT_KEYMAP), updated_at: Date.now() };
   const { error } = await supabase.from('projects').update(row).eq('id', id).eq('user_id', user.id);

@@ -207,7 +207,7 @@ export default function ProjectScreen({ navigation, route }) {
     showAdd, setShowAdd, newTitle, setNewTitle, newStartDate, setNewStartDate,
     newStartTime, setNewStartTime, newStartAmPm, setNewStartAmPm, newDeadline, setNewDeadline,
     newDeadlineTime, setNewDeadlineTime, newDeadlineAmPm, setNewDeadlineAmPm, newStatus, setNewStatus,
-    newProgress, setNewProgress, newPriority, setNewPriority, newNotes, setNewNotes,
+    newProgress, setNewProgress, newKeepProgress, setNewKeepProgress, newPriority, setNewPriority, newNotes, setNewNotes,
     setPendingMeetingRecordId,
     newClientIds, setNewClientIds, newNotifyEmail, setNewNotifyEmail,
 
@@ -215,7 +215,7 @@ export default function ProjectScreen({ navigation, route }) {
     viewProject, setViewProject, editTitle, setEditTitle, editStartDate, setEditStartDate,
     editStartTime, setEditStartTime, editStartAmPm, setEditStartAmPm, editDeadline, setEditDeadline,
     editDeadlineTime, setEditDeadlineTime, editDeadlineAmPm, setEditDeadlineAmPm, editStatus, setEditStatus,
-    editProgress, setEditProgress, editPriority, setEditPriority, editNotes, setEditNotes,
+    editProgress, setEditProgress, editKeepProgress, setEditKeepProgress, editPriority, setEditPriority, editNotes, setEditNotes,
     editClientIds, setEditClientIds, editNotifyEmail, setEditNotifyEmail,
 
     detailPersonPickerVisible, setDetailPersonPickerVisible,
@@ -951,7 +951,18 @@ export default function ProjectScreen({ navigation, route }) {
                 <Text style={s.inputLabel}>상태</Text>
                 <View style={s.optionRow}>
                   {STATUSES.map((st) => (
-                    <TouchableOpacity key={st} style={[s.optionBtn, editStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => setEditStatus(st)}>
+                    <TouchableOpacity key={st} style={[s.optionBtn, editStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => {
+                      if (st === '완료' && editProgress !== 100) {
+                        Alert.alert('상태 변경', "상태를 '완료'로 변경하시겠습니까?", [
+                          { text: '아니오', style: 'cancel' },
+                          { text: '예', onPress: () => { setEditStatus('완료'); setEditKeepProgress(true); } },
+                        ]);
+                        return;
+                      }
+                      setEditKeepProgress(false);
+                      setEditStatus(st);
+                      if (st === '완료') setEditProgress(100);
+                    }}>
                       <Text style={[s.optionText, editStatus === st && { color: statusColor(st) }]}>{st}</Text>
                     </TouchableOpacity>
                   ))}
@@ -977,7 +988,13 @@ export default function ProjectScreen({ navigation, route }) {
                     maximumValue={100}
                     step={1}
                     value={editProgress}
-                    onValueChange={(v) => setEditProgress(Math.round(v))}
+                    onValueChange={(v) => {
+                      setEditKeepProgress(false);
+                      const rounded = Math.round(v);
+                      setEditProgress(rounded);
+                      if (rounded === 100) setEditStatus('완료');
+                      else if (editStatus === '완료') setEditStatus('진행중');
+                    }}
                     minimumTrackTintColor={statusColor(editStatus)}
                     maximumTrackTintColor={C.border}
                     thumbTintColor={statusColor(editStatus)}
@@ -1242,7 +1259,18 @@ export default function ProjectScreen({ navigation, route }) {
             <Text style={s.inputLabel}>상태</Text>
             <View style={s.optionRow}>
               {STATUSES.map((st) => (
-                <TouchableOpacity key={st} style={[s.optionBtn, newStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => setNewStatus(st)}>
+                <TouchableOpacity key={st} style={[s.optionBtn, newStatus === st && { borderColor: statusColor(st) + '88', backgroundColor: statusColor(st) + '18' }]} onPress={() => {
+                  if (st === '완료' && newProgress !== 100) {
+                    Alert.alert('상태 변경', "상태를 '완료'로 변경하시겠습니까?", [
+                      { text: '아니오', style: 'cancel' },
+                      { text: '예', onPress: () => { setNewStatus('완료'); setNewKeepProgress(true); } },
+                    ]);
+                    return;
+                  }
+                  setNewKeepProgress(false);
+                  setNewStatus(st);
+                  if (st === '완료') setNewProgress(100);
+                }}>
                   <Text style={[s.optionText, newStatus === st && { color: statusColor(st) }]}>{st}</Text>
                 </TouchableOpacity>
               ))}
@@ -1266,7 +1294,13 @@ export default function ProjectScreen({ navigation, route }) {
                 maximumValue={100}
                 step={1}
                 value={newProgress}
-                onValueChange={(v) => setNewProgress(Math.round(v))}
+                onValueChange={(v) => {
+                  setNewKeepProgress(false);
+                  const rounded = Math.round(v);
+                  setNewProgress(rounded);
+                  if (rounded === 100) setNewStatus('완료');
+                  else if (newStatus === '완료') setNewStatus('진행중');
+                }}
                 minimumTrackTintColor={statusColor(newStatus)}
                 maximumTrackTintColor={C.border}
                 thumbTintColor={statusColor(newStatus)}
