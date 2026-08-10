@@ -15,6 +15,7 @@ import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/clau
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
 import { IS_PC } from '../utils/deviceType';
+import { applyScopedScrollbarStyle } from '../utils/scopedScrollbar';
 import { priorityColor, tagColor, statusColor } from '../utils/colors';
 import { daysUntil, daysLabel, findOverlappingItems, formatOverlapMessage, isValidOptionalDateStr } from '../utils/dateUtils';
 
@@ -81,6 +82,9 @@ export default function ScheduleScreen({ navigation, route }) {
   const [projects, setProjects] = useState([]);
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth() + 1);
+  // PC 전용 "등록된 일정·프로젝트" 목록 높이를 달력 그리드 높이와 맞추기 위한 실측값. 그리드 행 수는
+  // 월마다 5~6행으로 달라져 고정값을 둘 수 없으므로, 그리드 실제 렌더 높이를 onLayout으로 읽어 저장한다.
+  const [gridHeight, setGridHeight] = useState(null);
 
   const [copyTarget, setCopyTarget] = useState(null);
   const [copyTitleInput, setCopyTitleInput] = useState('');
@@ -210,6 +214,12 @@ export default function ScheduleScreen({ navigation, route }) {
     return () => animation.stop();
   }, []);
 
+  // PC 전용 "등록된 일정 · 프로젝트" 패널 목록만 스코프된 테마 스크롤바를 노출한다(다른 화면의
+  // showsVerticalScrollIndicator={false} 컨벤션은 유지, 이 리스트 하나만 예외).
+  useEffect(() => {
+    if (Platform.OS === 'web') applyScopedScrollbarStyle('schedule-project-panel-list');
+  }, []);
+
   useEffect(() => {
     if (!route?.params?.openAI) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -264,6 +274,28 @@ export default function ScheduleScreen({ navigation, route }) {
           return sd ? sd <= monthEnd && dl >= monthStart : dl >= monthStart && dl <= monthEnd;
         })
   ), [projects, selectedDate, monthStart, monthEnd]);
+
+  // PC 전용: 우측 상세 패널에 표시 중인 일정/프로젝트가 날짜 변경·삭제 등으로 daySchedules/
+  // dayProjects 목록에서 더 이상 보이지 않게 되면 선택을 해제하고 placeholder로 되돌린다.
+  // 모바일은 하단 모달이라 달력 조작 중엔 이미 화면을 가리고 있어 영향 없음(변경 금지 대상).
+  useEffect(() => {
+    if (!IS_PC || !showScheduleView || !viewSchedule) return;
+    if (!daySchedules.some((sc) => sc.id === viewSchedule.id)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 가드가 무한루프를 방지하는 조건부 선택 해제 패턴
+      setShowScheduleView(false);
+      setViewSchedule(null);
+      setEditMode(false);
+    }
+  }, [daySchedules, showScheduleView, viewSchedule]);
+
+  useEffect(() => {
+    if (!IS_PC || !showProjectView || !viewProject) return;
+    if (!dayProjects.some((p) => p.id === viewProject.id)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 가드가 무한루프를 방지하는 조건부 선택 해제 패턴
+      setShowProjectView(false);
+      setViewProject(null);
+    }
+  }, [dayProjects, showProjectView, viewProject]);
 
   // 달력 그리드 — calYear/calMonth가 바뀔 때만 재계산 (매 렌더 재계산 방지)
   const monthGrid = useMemo(() => buildMonthGrid(calYear, calMonth), [calYear, calMonth]);
@@ -587,6 +619,313 @@ export default function ScheduleScreen({ navigation, route }) {
     setNewStartDate(defaultDate); setNewEndDate(''); setShowAdd(true);
   }
 
+  // 일정 상세(보기/편집) 콘텐츠 — 모바일 하단 모달과 PC 우측 인라인 상세 패널이 그대로 공유한다
+  // (중복 정의 방지). 반드시 함수 호출({renderScheduleDetailBody()})로만 사용할 것 — JSX
+  // 컴포넌트(<X/>)로 사용하면 렌더마다 새 컴포넌트 타입으로 인식되어 내부 TextInput 포커스가
+  // 매 렌더 초기화된다. isInline=true(PC 인라인 패널)일 때만 ScrollView에 flex:1(s.detailScroll)을
+  // 줘서 고정 높이의 detailPanel 안에서 스크롤되게 한다. 모바일 바텀시트는 원래 style prop이
+  // 전혀 없던 콘텐츠 기준 auto 높이(80% 상한)라 flex:1을 주면 안 됨 — 반드시 style prop 없이 렌더.
+  function renderScheduleDetailBody(isInline = false) {
+    if (!viewSchedule) return null;
+    return (
+      <ScrollView style={isInline ? s.detailScroll : undefined} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={s.modalTitleRow}>
+          <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>
+            {editMode ? '일정 수정' : viewSchedule.title}
+          </Text>
+          <View style={s.titleActionRow}>
+            <TouchableOpacity onPress={() => { setShowScheduleView(false); setEditMode(false); }}>
+              <Text style={s.closeBtn}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {editMode ? (
+          <>
+            <Text style={s.inputLabel}>제목</Text>
+            <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
+
+            <Text style={s.inputLabel}>시작일시</Text>
+            <TextInput style={[s.input, commonStyles.mb8]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <View style={s.timeRow}>
+              <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.optionActive]} onPress={() => setEditStartAmPm('오전')}>
+                <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.optionActive]} onPress={() => setEditStartAmPm('오후')}>
+                <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+              </TouchableOpacity>
+              <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+            </View>
+
+            <Text style={s.inputLabel}>마감일시 (선택)</Text>
+            <TextInput style={[s.input, commonStyles.mb8]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+            <View style={s.timeRow}>
+              <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.optionActive]} onPress={() => setEditEndAmPm('오전')}>
+                <Text style={[s.ampmBtnText, editEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.optionActive]} onPress={() => setEditEndAmPm('오후')}>
+                <Text style={[s.ampmBtnText, editEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+              </TouchableOpacity>
+              <TextInput style={[s.input, commonStyles.flex1]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+            </View>
+
+            <Text style={s.inputLabel}>분류</Text>
+            <View style={s.tagRow}>
+              {TAGS.map((t) => (
+                <TouchableOpacity key={t} style={[s.tagOption, editTag === t && s.optionActive]} onPress={() => setEditTag(t)}>
+                  <Text style={[s.tagOptionText, editTag === t && s.tagOptionTextActive]}>{t}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={s.inputLabel}>관련 인물 · 담당자 (선택)</Text>
+            {editClientIds.length > 0 && (
+              <View style={s.selectedPeopleRow}>
+                {editClientIds.map((id) => {
+                  const c = clients.find((cl) => cl.id === id);
+                  if (!c) return null;
+                  return (
+                    <View key={id} style={s.selectedPersonChip}>
+                      <TouchableOpacity onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
+                        <Text style={s.selectedPersonChipText}>{c.name}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setEditClientIds((prev) => prev.filter((x) => x !== id))}>
+                        <Text style={s.selectedPersonChipX}> ✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+            {/* eslint-disable-next-line react-hooks/refs -- openClientPicker는 pickerCallback ref를 onPress 핸들러 내부(이벤트 콜백)에서만 쓴다. renderScheduleDetailBody가 함수 호출로 인라인되면서 정적 분석이 렌더 중 접근으로 오탐하는 기존 패턴과 동일 */}
+            <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(editClientIds, setEditClientIds)}>
+              <Text style={[s.pickerTriggerText, editClientIds.length > 0 && s.pickerTriggerTextActive]}>
+                {editClientIds.length > 0 ? `${editClientIds.length}명 선택됨 · 변경` : '담당자 인원 선택'}
+              </Text>
+              <Text style={s.pickerTriggerIcon}>›</Text>
+            </TouchableOpacity>
+
+            <Text style={s.inputLabel}>관련 프로젝트 (선택)</Text>
+            <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(editProjectId, (id) => { setEditProjectId(id); applyProjectClientIds(id, setEditClientIds); })}>
+              <Text style={[s.pickerTriggerText, editProjectId && s.pickerTriggerTextActive]}>
+                {editProjectId ? (projects.find((p) => p.id === editProjectId)?.title || '선택된 프로젝트') : '프로젝트 선택'}
+              </Text>
+              <Text style={s.pickerTriggerIcon}>›</Text>
+            </TouchableOpacity>
+
+            <Text style={s.inputLabel}>메모 (선택)</Text>
+            <TextInput style={[s.input, s.h72]} value={editNotes} onChangeText={setEditNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
+
+            {/* 알림 메일 발송 여부 */}
+            <TouchableOpacity
+              style={s.notifyEmailRow}
+              activeOpacity={0.7}
+              onPress={() => {
+                if (editClientIds.length === 0) {
+                  Alert.alert('안내', '선택된 관련 인물이 없습니다.');
+                  return;
+                }
+                setEditNotifyEmail((prev) => !prev);
+              }}
+            >
+              <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
+                {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
+              </View>
+              <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
+            </TouchableOpacity>
+
+            <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
+                <Text style={s.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
+                <Text style={s.modalConfirmText}>저장</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={s.modalDateLabel}>{formatDateKo(viewSchedule.date)}</Text>
+
+            <View style={s.scheduleActionRow}>
+              <TouchableOpacity onPress={() => {
+                const { ampm, time12 } = from24h(viewSchedule.time);
+                setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm);
+                setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []); setEditProjectId(viewSchedule.projectId || null);
+                const sp = (viewSchedule.startDate || '').split(' ');
+                setEditStartDate(sp[0] || '');
+                if (sp[1]) { const r = from24h(sp[1]); setEditStartAmPm(r.ampm); setEditStartTime(r.time12); } else { setEditStartAmPm('오전'); setEditStartTime('09:00'); }
+                const ep = (viewSchedule.endDate || '').split(' ');
+                setEditEndDate(ep[0] || '');
+                if (ep[1]) { const r = from24h(ep[1]); setEditEndAmPm(r.ampm); setEditEndTime(r.time12); } else { setEditEndAmPm('오후'); setEditEndTime('06:00'); }
+                setEditMode(true);
+              }}>
+                <Text style={s.editBtn}>수정</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => Alert.alert('삭제', `"${viewSchedule.title}" 일정을 삭제할까요?`, [
+                { text: '취소', style: 'cancel' },
+                { text: '삭제', style: 'destructive', onPress: async () => { const updated = await deleteSchedule(viewSchedule.id); setSchedules(updated); setShowScheduleView(false); } },
+              ])}>
+                <Text style={s.deleteBtn}>삭제</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => confirmCopy(viewSchedule)}>
+                <Text style={s.copyBtn}>복사</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleShare(viewSchedule)}>
+                <Text style={s.shareBtn}>공유</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={s.viewLabel}>시작일시</Text>
+            <Text style={s.viewText}>{formatStartDateTime(viewSchedule)}</Text>
+
+            {viewSchedule.endDate ? (
+              <>
+                <Text style={s.viewLabel}>마감일시</Text>
+                <Text style={s.viewText}>{formatDateTimeKo(viewSchedule.endDate)}</Text>
+              </>
+            ) : null}
+
+            <Text style={s.viewLabel}>분류</Text>
+            <View style={[s.tagBadge, { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: tagColor(viewSchedule.tag) + '22', borderColor: tagColor(viewSchedule.tag) + '55' }]}>
+              <Text style={[s.tagText, { color: tagColor(viewSchedule.tag) }]}>{viewSchedule.tag}</Text>
+            </View>
+
+            {viewSchedule.notes ? (
+              <>
+                <Text style={s.viewLabel}>메모</Text>
+                <Text style={s.viewText}>{viewSchedule.notes}</Text>
+              </>
+            ) : null}
+
+            {(viewSchedule.clientIds?.length > 0) && (() => {
+              const people = viewSchedule.clientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+              if (people.length === 0) return null;
+              return (
+                <>
+                  <Text style={s.viewLabel}>관련 인물</Text>
+                  <View style={s.viewPeopleList}>
+                    {people.map((c) => (
+                      <TouchableOpacity key={c.id} style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
+                        <View style={s.viewPersonAvatar}>
+                          <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
+                        </View>
+                        <View style={commonStyles.flex1}>
+                          <Text style={s.viewPersonName}>{c.name}</Text>
+                          {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                        </View>
+                        <Text style={s.viewPersonChevron}>›</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              );
+            })()}
+
+            {viewSchedule.projectId && (() => {
+              const proj = projects.find((p) => p.id === viewSchedule.projectId);
+              if (!proj) return null;
+              return (
+                <>
+                  <Text style={s.viewLabel}>관련 프로젝트</Text>
+                  <TouchableOpacity style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); if (IS_PC) setShowScheduleView(false); }}>
+                    <View style={commonStyles.flex1}>
+                      <Text style={s.viewPersonName}>{proj.title}</Text>
+                      <Text style={s.viewPersonSub}>{proj.status}{proj.deadline ? ` · ${proj.deadline}` : ''}</Text>
+                    </View>
+                    <Text style={s.viewPersonChevron}>›</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
+          </>
+        )}
+        <View style={s.spacerH16} />
+      </ScrollView>
+    );
+  }
+
+  // 프로젝트 상세 콘텐츠 — 모바일 하단 모달과 PC 우측 인라인 상세 패널이 그대로 공유한다
+  // (중복 정의 방지). renderScheduleDetailBody와 동일한 이유로 반드시 함수 호출로만 사용할 것.
+  // isInline=true(PC 인라인 패널)일 때만 ScrollView에 flex:1(s.detailScroll) 적용 — 위 함수와 동일한
+  // 이유(모바일 바텀시트 auto 높이 유지).
+  function renderProjectDetailBody(isInline = false) {
+    if (!viewProject) return null;
+    const days = daysUntil(viewProject.deadline);
+    const linkedMeetings = viewProject.meetingRecordIds?.length > 0
+      ? meetingRecords.filter((r) => viewProject.meetingRecordIds.includes(r.id))
+      : [];
+    const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
+    const allRelatedClientIds = [...new Set([...(viewProject.clientIds || []), ...meetingClientIds])];
+    const relatedPeople = allRelatedClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+    return (
+      <ScrollView style={isInline ? s.detailScroll : undefined} showsVerticalScrollIndicator={false}>
+        <View style={s.modalTitleRow}>
+          <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>{viewProject.title}</Text>
+          <TouchableOpacity onPress={() => setShowProjectView(false)} style={commonStyles.ml12}>
+            <Text style={s.closeBtn}>✕</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={s.viewBadgeRow}>
+          <View style={[s.viewBadge, { borderColor: statusColor(viewProject.status) + '66', backgroundColor: statusColor(viewProject.status) + '18' }]}>
+            <Text style={[s.viewBadgeText, { color: statusColor(viewProject.status) }]}>{viewProject.status}</Text>
+          </View>
+          <View style={[s.viewBadge, { borderColor: priorityColor(viewProject.priority) + '55' }]}>
+            <Text style={[s.viewBadgeText, { color: priorityColor(viewProject.priority) }]}>{viewProject.priority}</Text>
+          </View>
+        </View>
+
+        <Text style={s.viewLabel}>진행률</Text>
+        <View style={s.viewProgressTrack}>
+          <View style={[s.viewProgressFill, { width: `${viewProject.progress}%`, backgroundColor: statusColor(viewProject.status) }]} />
+        </View>
+        <Text style={s.viewProgressText}>{viewProject.progress}% 완료</Text>
+
+        {viewProject.startDate ? (
+          <>
+            <Text style={s.viewLabel}>시작일</Text>
+            <Text style={s.viewText}>{viewProject.startDate}</Text>
+          </>
+        ) : null}
+
+        <Text style={s.viewLabel}>마감일</Text>
+        <Text style={[s.viewText, days < 0 && { color: '#C45B5B' }, days >= 0 && days <= 3 && { color: C.gold }]}>
+          {viewProject.deadline}  ·  {daysLabel(days)}
+        </Text>
+
+        {viewProject.notes ? (
+          <>
+            <Text style={s.viewLabel}>메모</Text>
+            <Text style={s.viewText}>{viewProject.notes}</Text>
+          </>
+        ) : null}
+
+        {relatedPeople.length > 0 && (
+          <>
+            <Text style={s.viewLabel}>관련 인물</Text>
+            <View style={s.viewPeopleList}>
+              {relatedPeople.map((c) => (
+                <TouchableOpacity key={c.id} style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
+                  <View style={s.viewPersonAvatar}>
+                    <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
+                  </View>
+                  <View style={commonStyles.flex1}>
+                    <Text style={s.viewPersonName}>{c.name}</Text>
+                    {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
+                  </View>
+                  <Text style={s.viewPersonChevron}>›</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        <View style={s.spacerH16} />
+      </ScrollView>
+    );
+  }
+
   return (
     <View style={s.root}>
       {/* ── 헤더: PC는 AI/추가 버튼이 우측 프로젝트 패널 옆(actionColumn)으로 옮겨가므로
@@ -630,7 +969,7 @@ export default function ScheduleScreen({ navigation, route }) {
       </View>
 
       {/* ── 캘린더 그리드 ── */}
-      <View style={s.gridClip}>
+      <View style={s.gridClip} onLayout={IS_PC ? (e) => setGridHeight(e.nativeEvent.layout.height) : undefined}>
         {/* eslint-disable-next-line react-hooks/refs -- calPanResponder/calTranslateX는 최초 렌더에서 한 번만 생성되는 안전한 ref */}
         <Animated.View style={[s.grid, { transform: [{ translateX: calTranslateX }] }]} {...calPanResponder.panHandlers}>
         {monthGrid.map((cell, i) => {
@@ -730,14 +1069,24 @@ export default function ScheduleScreen({ navigation, route }) {
           {dayProjects.length === 0 && daySchedules.length === 0 ? (
             <Text style={s.projectPanelEmpty}>등록된 일정·프로젝트가 없습니다</Text>
           ) : (
-            <ScrollView style={s.projectPanelList} contentContainerStyle={s.projectPanelListContent} showsVerticalScrollIndicator={false}>
+            // gridHeight는 좌측 달력 그리드(gridClip)의 onLayout 실측값 — 월별 5~6행 차이로
+            // StyleSheet 고정값을 둘 수 없어 인라인으로 유지. flex:0은 RN(Yoga)에서
+            // flexBasis:0%로 변환되어 flex-basis가 main-axis(세로, 부모가 column)의 height를
+            // 덮어써 버려 목록이 0px로 찌그러지는 버그가 있었다 — flexBasis:'auto'를 명시해
+            // height가 실제로 적용되도록 해야 한다.
+            <ScrollView
+              nativeID="schedule-project-panel-list"
+              style={[s.projectPanelList, gridHeight ? [s.projectPanelListMeasured, { height: gridHeight }] : null]}
+              contentContainerStyle={s.projectPanelListContent}
+              showsVerticalScrollIndicator={true}
+            >
               {/* eslint-disable-next-line react-hooks/refs -- urgencyAnim은 최초 렌더에서 한 번만 생성되는 Animated.Value ref */}
               {dayProjects.map((proj) => {
                 const urgency = getUrgency(proj.deadline, proj.status);
                 const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
                 return (
                   <View key={`p-${proj.id}`}>
-                    <TouchableOpacity style={s.itemCard} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
+                    <TouchableOpacity style={s.itemCard} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); setShowScheduleView(false); }}>
                       <Text style={[s.projectDeadlineLabel, s.projectLabelTeal]}>프로젝트</Text>
                       <View style={s.scheduleDivider} />
                       <View style={s.scheduleBody}>
@@ -767,7 +1116,7 @@ export default function ScheduleScreen({ navigation, route }) {
                     <TouchableOpacity
                       style={s.itemCard}
                       activeOpacity={0.7}
-                      onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
+                      onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); setShowProjectView(false); }}
                       onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
                         { text: '취소', style: 'cancel' },
                         { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
@@ -799,6 +1148,25 @@ export default function ScheduleScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* ── 상세 보기 패널(PC 전용, 세 번째 칼럼): 일정/프로젝트 카드를 클릭하면 모바일처럼 하단
+          모달을 띄우는 대신 이 자리에 그 내용을 인라인으로 표시한다. showScheduleView/viewSchedule,
+          showProjectView/viewProject state는 모바일 모달과 동일하게 재사용하되(카드 클릭 핸들러
+          변경 없음), PC에서는 Modal 렌더링 대신 이 View 표시 여부 조건으로만 쓰인다. 콘텐츠는
+          renderScheduleDetailBody()/renderProjectDetailBody()로 모달과 완전히 공유한다 ── */}
+      {IS_PC && (
+        <View style={s.detailPanel}>
+          {showScheduleView && viewSchedule ? (
+            renderScheduleDetailBody(true)
+          ) : showProjectView && viewProject ? (
+            renderProjectDetailBody(true)
+          ) : (
+            <View style={s.detailPanelPlaceholder}>
+              <Text style={s.detailPanelPlaceholderText}>일정이나 프로젝트를 선택하세요</Text>
+            </View>
+          )}
+        </View>
+      )}
       </View>
       </View>
 
@@ -826,7 +1194,7 @@ export default function ScheduleScreen({ navigation, route }) {
               const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
               return (
                 <View key={proj.id}>
-                  <TouchableOpacity style={s.itemCard} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
+                  <TouchableOpacity style={s.itemCard} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); setShowScheduleView(false); }}>
                     <Text style={[s.projectDeadlineLabel, s.projectLabelTeal]}>프로젝트</Text>
                     <View style={s.scheduleDivider} />
                     <View style={s.scheduleBody}>
@@ -856,7 +1224,7 @@ export default function ScheduleScreen({ navigation, route }) {
                   <TouchableOpacity
                     style={s.itemCard}
                     activeOpacity={0.7}
-                    onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
+                    onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); setShowProjectView(false); }}
                     onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
                       { text: '취소', style: 'cancel' },
                       { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
@@ -895,7 +1263,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 const urgencyColor = urgency === 2 ? '#C45B5B' : C.gold;
                 return (
                   <View key={`p-${item.id}`}>
-                    <TouchableOpacity style={s.itemCard} activeOpacity={0.7} onPress={() => { setViewProject(item); setShowProjectView(true); }}>
+                    <TouchableOpacity style={s.itemCard} activeOpacity={0.7} onPress={() => { setViewProject(item); setShowProjectView(true); setShowScheduleView(false); }}>
                       <Text style={[s.projectDeadlineLabel, s.projectLabelTeal]}>프로젝트</Text>
                       <View style={s.scheduleDivider} />
                       <View style={s.scheduleBody}>
@@ -923,7 +1291,7 @@ export default function ScheduleScreen({ navigation, route }) {
                   <TouchableOpacity
                     style={s.itemCard}
                     activeOpacity={0.7}
-                    onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); }}
+                    onPress={() => { setViewSchedule(item); setEditMode(false); setShowScheduleView(true); setShowProjectView(false); }}
                     onLongPress={() => Alert.alert('삭제', `"${item.title}" 일정을 삭제할까요?`, [
                       { text: '취소', style: 'cancel' },
                       { text: '삭제', style: 'destructive', onPress: () => handleDelete(item.id) },
@@ -1125,317 +1493,36 @@ export default function ScheduleScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── 일정 상세 모달 ── */}
+      {/* ── 일정 상세 모달(모바일 전용): PC는 모달 대신 우측 인라인 상세 패널(s.detailPanel)을
+          사용한다 — 콘텐츠는 renderScheduleDetailBody()로 공유하므로 중복 없음 ── */}
+      {!IS_PC && (
       <Modal visible={showScheduleView} animationType="slide" transparent onRequestClose={() => { setShowScheduleView(false); setEditMode(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
           <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.maxH80pct, swipeSchedule.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeSchedule.panHandlers}>
               <View style={s.modalHandle} />
             </View>
-            {viewSchedule && (
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View style={s.modalTitleRow}>
-                  <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>
-                    {editMode ? '일정 수정' : viewSchedule.title}
-                  </Text>
-                  <View style={s.titleActionRow}>
-                    <TouchableOpacity onPress={() => { setShowScheduleView(false); setEditMode(false); }}>
-                      <Text style={s.closeBtn}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {editMode ? (
-                  <>
-                    <Text style={s.inputLabel}>제목</Text>
-                    <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
-
-                    <Text style={s.inputLabel}>시작일시</Text>
-                    <TextInput style={[s.input, commonStyles.mb8]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-                    <View style={s.timeRow}>
-                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.optionActive]} onPress={() => setEditStartAmPm('오전')}>
-                        <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.optionActive]} onPress={() => setEditStartAmPm('오후')}>
-                        <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
-                      </TouchableOpacity>
-                      <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
-                    </View>
-
-                    <Text style={s.inputLabel}>마감일시 (선택)</Text>
-                    <TextInput style={[s.input, commonStyles.mb8]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-                    <View style={s.timeRow}>
-                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.optionActive]} onPress={() => setEditEndAmPm('오전')}>
-                        <Text style={[s.ampmBtnText, editEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.optionActive]} onPress={() => setEditEndAmPm('오후')}>
-                        <Text style={[s.ampmBtnText, editEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
-                      </TouchableOpacity>
-                      <TextInput style={[s.input, commonStyles.flex1]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
-                    </View>
-
-                    <Text style={s.inputLabel}>분류</Text>
-                    <View style={s.tagRow}>
-                      {TAGS.map((t) => (
-                        <TouchableOpacity key={t} style={[s.tagOption, editTag === t && s.optionActive]} onPress={() => setEditTag(t)}>
-                          <Text style={[s.tagOptionText, editTag === t && s.tagOptionTextActive]}>{t}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-
-                    <Text style={s.inputLabel}>관련 인물 · 담당자 (선택)</Text>
-                    {editClientIds.length > 0 && (
-                      <View style={s.selectedPeopleRow}>
-                        {editClientIds.map((id) => {
-                          const c = clients.find((cl) => cl.id === id);
-                          if (!c) return null;
-                          return (
-                            <View key={id} style={s.selectedPersonChip}>
-                              <TouchableOpacity onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
-                                <Text style={s.selectedPersonChipText}>{c.name}</Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity onPress={() => setEditClientIds((prev) => prev.filter((x) => x !== id))}>
-                                <Text style={s.selectedPersonChipX}> ✕</Text>
-                              </TouchableOpacity>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    )}
-                    <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(editClientIds, setEditClientIds)}>
-                      <Text style={[s.pickerTriggerText, editClientIds.length > 0 && s.pickerTriggerTextActive]}>
-                        {editClientIds.length > 0 ? `${editClientIds.length}명 선택됨 · 변경` : '담당자 인원 선택'}
-                      </Text>
-                      <Text style={s.pickerTriggerIcon}>›</Text>
-                    </TouchableOpacity>
-
-                    <Text style={s.inputLabel}>관련 프로젝트 (선택)</Text>
-                    <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(editProjectId, (id) => { setEditProjectId(id); applyProjectClientIds(id, setEditClientIds); })}>
-                      <Text style={[s.pickerTriggerText, editProjectId && s.pickerTriggerTextActive]}>
-                        {editProjectId ? (projects.find((p) => p.id === editProjectId)?.title || '선택된 프로젝트') : '프로젝트 선택'}
-                      </Text>
-                      <Text style={s.pickerTriggerIcon}>›</Text>
-                    </TouchableOpacity>
-
-                    <Text style={s.inputLabel}>메모 (선택)</Text>
-                    <TextInput style={[s.input, s.h72]} value={editNotes} onChangeText={setEditNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
-
-                    {/* 알림 메일 발송 여부 */}
-                    <TouchableOpacity
-                      style={s.notifyEmailRow}
-                      activeOpacity={0.7}
-                      onPress={() => {
-                        if (editClientIds.length === 0) {
-                          Alert.alert('안내', '선택된 관련 인물이 없습니다.');
-                          return;
-                        }
-                        setEditNotifyEmail((prev) => !prev);
-                      }}
-                    >
-                      <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
-                        {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
-                      </View>
-                      <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
-                    </TouchableOpacity>
-
-                    <View style={s.modalBtns}>
-                      <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
-                        <Text style={s.modalCancelText}>취소</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
-                        <Text style={s.modalConfirmText}>저장</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Text style={s.modalDateLabel}>{formatDateKo(viewSchedule.date)}</Text>
-
-                    <View style={s.scheduleActionRow}>
-                      <TouchableOpacity onPress={() => {
-                        const { ampm, time12 } = from24h(viewSchedule.time);
-                        setEditTitle(viewSchedule.title); setEditTime(time12); setEditAmPm(ampm);
-                        setEditTag(viewSchedule.tag); setEditNotes(viewSchedule.notes || ''); setEditClientIds(viewSchedule.clientIds || []); setEditProjectId(viewSchedule.projectId || null);
-                        const sp = (viewSchedule.startDate || '').split(' ');
-                        setEditStartDate(sp[0] || '');
-                        if (sp[1]) { const r = from24h(sp[1]); setEditStartAmPm(r.ampm); setEditStartTime(r.time12); } else { setEditStartAmPm('오전'); setEditStartTime('09:00'); }
-                        const ep = (viewSchedule.endDate || '').split(' ');
-                        setEditEndDate(ep[0] || '');
-                        if (ep[1]) { const r = from24h(ep[1]); setEditEndAmPm(r.ampm); setEditEndTime(r.time12); } else { setEditEndAmPm('오후'); setEditEndTime('06:00'); }
-                        setEditMode(true);
-                      }}>
-                        <Text style={s.editBtn}>수정</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => Alert.alert('삭제', `"${viewSchedule.title}" 일정을 삭제할까요?`, [
-                        { text: '취소', style: 'cancel' },
-                        { text: '삭제', style: 'destructive', onPress: async () => { const updated = await deleteSchedule(viewSchedule.id); setSchedules(updated); setShowScheduleView(false); } },
-                      ])}>
-                        <Text style={s.deleteBtn}>삭제</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => confirmCopy(viewSchedule)}>
-                        <Text style={s.copyBtn}>복사</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleShare(viewSchedule)}>
-                        <Text style={s.shareBtn}>공유</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text style={s.viewLabel}>시작일시</Text>
-                    <Text style={s.viewText}>{formatStartDateTime(viewSchedule)}</Text>
-
-                    {viewSchedule.endDate ? (
-                      <>
-                        <Text style={s.viewLabel}>마감일시</Text>
-                        <Text style={s.viewText}>{formatDateTimeKo(viewSchedule.endDate)}</Text>
-                      </>
-                    ) : null}
-
-                    <Text style={s.viewLabel}>분류</Text>
-                    <View style={[s.tagBadge, { alignSelf: 'flex-start', marginBottom: 16, backgroundColor: tagColor(viewSchedule.tag) + '22', borderColor: tagColor(viewSchedule.tag) + '55' }]}>
-                      <Text style={[s.tagText, { color: tagColor(viewSchedule.tag) }]}>{viewSchedule.tag}</Text>
-                    </View>
-
-                    {viewSchedule.notes ? (
-                      <>
-                        <Text style={s.viewLabel}>메모</Text>
-                        <Text style={s.viewText}>{viewSchedule.notes}</Text>
-                      </>
-                    ) : null}
-
-                    {(viewSchedule.clientIds?.length > 0) && (() => {
-                      const people = viewSchedule.clientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
-                      if (people.length === 0) return null;
-                      return (
-                        <>
-                          <Text style={s.viewLabel}>관련 인물</Text>
-                          <View style={s.viewPeopleList}>
-                            {people.map((c) => (
-                              <TouchableOpacity key={c.id} style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
-                                <View style={s.viewPersonAvatar}>
-                                  <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
-                                </View>
-                                <View style={commonStyles.flex1}>
-                                  <Text style={s.viewPersonName}>{c.name}</Text>
-                                  {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
-                                </View>
-                                <Text style={s.viewPersonChevron}>›</Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        </>
-                      );
-                    })()}
-
-                    {viewSchedule.projectId && (() => {
-                      const proj = projects.find((p) => p.id === viewSchedule.projectId);
-                      if (!proj) return null;
-                      return (
-                        <>
-                          <Text style={s.viewLabel}>관련 프로젝트</Text>
-                          <TouchableOpacity style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewProject(proj); setShowProjectView(true); }}>
-                            <View style={commonStyles.flex1}>
-                              <Text style={s.viewPersonName}>{proj.title}</Text>
-                              <Text style={s.viewPersonSub}>{proj.status}{proj.deadline ? ` · ${proj.deadline}` : ''}</Text>
-                            </View>
-                            <Text style={s.viewPersonChevron}>›</Text>
-                          </TouchableOpacity>
-                        </>
-                      );
-                    })()}
-                  </>
-                )}
-                <View style={s.spacerH16} />
-              </ScrollView>
-            )}
+            {renderScheduleDetailBody()}
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
+      )}
 
-      {/* ── 프로젝트 보기 모달 (일정 상세 모달보다 뒤에 선언해 그 위에 겹쳐 뜨도록 함) ── */}
+      {/* ── 프로젝트 보기 모달(모바일 전용, 일정 상세 모달보다 뒤에 선언해 그 위에 겹쳐 뜨도록 함):
+          PC는 모달 대신 우측 인라인 상세 패널을 사용한다 — 콘텐츠는 renderProjectDetailBody()로
+          공유하므로 중복 없음 ── */}
+      {!IS_PC && (
       <Modal visible={showProjectView} animationType="slide" transparent onRequestClose={() => setShowProjectView(false)}>
         <View style={s.modalOverlay}>
           <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.maxH80pct, swipeProject.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeProject.panHandlers}>
               <View style={s.modalHandle} />
             </View>
-            {viewProject && (() => {
-              const days = daysUntil(viewProject.deadline);
-              const linkedMeetings = viewProject.meetingRecordIds?.length > 0
-                ? meetingRecords.filter((r) => viewProject.meetingRecordIds.includes(r.id))
-                : [];
-              const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
-              const allRelatedClientIds = [...new Set([...(viewProject.clientIds || []), ...meetingClientIds])];
-              const relatedPeople = allRelatedClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
-              return (
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  <View style={s.modalTitleRow}>
-                    <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>{viewProject.title}</Text>
-                    <TouchableOpacity onPress={() => setShowProjectView(false)} style={commonStyles.ml12}>
-                      <Text style={s.closeBtn}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={s.viewBadgeRow}>
-                    <View style={[s.viewBadge, { borderColor: statusColor(viewProject.status) + '66', backgroundColor: statusColor(viewProject.status) + '18' }]}>
-                      <Text style={[s.viewBadgeText, { color: statusColor(viewProject.status) }]}>{viewProject.status}</Text>
-                    </View>
-                    <View style={[s.viewBadge, { borderColor: priorityColor(viewProject.priority) + '55' }]}>
-                      <Text style={[s.viewBadgeText, { color: priorityColor(viewProject.priority) }]}>{viewProject.priority}</Text>
-                    </View>
-                  </View>
-
-                  <Text style={s.viewLabel}>진행률</Text>
-                  <View style={s.viewProgressTrack}>
-                    <View style={[s.viewProgressFill, { width: `${viewProject.progress}%`, backgroundColor: statusColor(viewProject.status) }]} />
-                  </View>
-                  <Text style={s.viewProgressText}>{viewProject.progress}% 완료</Text>
-
-                  {viewProject.startDate ? (
-                    <>
-                      <Text style={s.viewLabel}>시작일</Text>
-                      <Text style={s.viewText}>{viewProject.startDate}</Text>
-                    </>
-                  ) : null}
-
-                  <Text style={s.viewLabel}>마감일</Text>
-                  <Text style={[s.viewText, days < 0 && { color: '#C45B5B' }, days >= 0 && days <= 3 && { color: C.gold }]}>
-                    {viewProject.deadline}  ·  {daysLabel(days)}
-                  </Text>
-
-                  {viewProject.notes ? (
-                    <>
-                      <Text style={s.viewLabel}>메모</Text>
-                      <Text style={s.viewText}>{viewProject.notes}</Text>
-                    </>
-                  ) : null}
-
-                  {relatedPeople.length > 0 && (
-                    <>
-                      <Text style={s.viewLabel}>관련 인물</Text>
-                      <View style={s.viewPeopleList}>
-                        {relatedPeople.map((c) => (
-                          <TouchableOpacity key={c.id} style={s.viewPersonRow} activeOpacity={0.7} onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
-                            <View style={s.viewPersonAvatar}>
-                              <Text style={s.viewPersonAvatarText}>{c.name[0]}</Text>
-                            </View>
-                            <View style={commonStyles.flex1}>
-                              <Text style={s.viewPersonName}>{c.name}</Text>
-                              {c.company ? <Text style={s.viewPersonSub}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
-                            </View>
-                            <Text style={s.viewPersonChevron}>›</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </>
-                  )}
-
-                  <View style={s.spacerH16} />
-                </ScrollView>
-              );
-            })()}
+            {renderProjectDetailBody()}
           </Animated.View>
         </View>
       </Modal>
+      )}
 
       {/* ── 복사본 이름 입력 모달 ── */}
       <Modal visible={showCopyTitleModal} animationType="slide" transparent onRequestClose={() => setShowCopyTitleModal(false)}>
@@ -1790,11 +1877,13 @@ const s = StyleSheet.create({
   // 안에서 세로 중앙에 놓는다 — 이게 없으면 calendarRow는 자기 콘텐츠 높이만큼만 차지해 화면
   // 상단(header 바로 아래)에 붙어 보인다.
   calendarRowOuter: IS_PC ? { flex: 1, alignItems: 'center', justifyContent: 'center' } : {},
-  // PC는 캘린더(고정 480px)와 프로젝트 패널을 가로로 나란히 배치, 초광폭 모니터에서 지나치게
-  // 늘어지지 않도록 maxWidth로 상한을 둔다. 모바일은 프로젝트 패널이 아예 렌더링되지 않으므로
-  // flexDirection이 의미가 없어 기존과 동일한 세로 스택으로 보인다.
+  // PC는 캘린더(고정 480px) + 프로젝트 패널 + 상세 보기 패널(3번째 칼럼)을 가로로 나란히 배치,
+  // 초광폭 모니터에서 지나치게 늘어지지 않도록 maxWidth로 상한을 둔다. 2칼럼(960)에서 상세
+  // 패널 폭만큼(약 416 + gap 24) 늘려 3칼럼이 모두 여유 있게 들어가도록 함. 모바일은 프로젝트
+  // 패널/상세 패널이 아예 렌더링되지 않으므로 flexDirection이 의미가 없어 기존과 동일한 세로
+  // 스택으로 보인다.
   calendarRow: IS_PC
-    ? { flexDirection: 'row', width: '100%', maxWidth: 960, gap: 24 }
+    ? { flexDirection: 'row', width: '100%', maxWidth: 1400, gap: 24 }
     : { flexDirection: 'column' },
   // PC는 넓은 화면에서도 그리드 칸이 과도하게 커지지 않도록 앱 전역 모바일 기준 폭(480px, App.js
   // webStyles와 동일)으로 줄여서 가운데 정렬한다. 모바일은 기존처럼 화면 폭 그대로 채운다.
@@ -1804,6 +1893,10 @@ const s = StyleSheet.create({
   projectPanel: { flex: 1 },
   projectPanelTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '600', letterSpacing: 0.5, marginBottom: 12 },
   projectPanelList: { flex: 1 },
+  // gridHeight(달력 그리드 실측 높이, 인라인 유지) 적용 시 함께 켜지는 정적 부분만 분리.
+  // flexGrow/flexShrink:0 + flexBasis:'auto'는 RN(Yoga)에서 flex:0이 flexBasis:0%로 변환돼
+  // height를 덮어쓰는 버그를 막기 위해 필요(ScheduleScreen.js 750번째 줄 주석 참고).
+  projectPanelListMeasured: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
   projectPanelListContent: { gap: 10, paddingBottom: 24 },
   projectPanelEmpty: { color: C.textDim, fontSize: 12 },
   // AI 버튼: projectPanel(flex:1) 안에서 alignSelf:'flex-end'로 우측 끝을 패널 폭 기준에 정확히
@@ -1813,6 +1906,18 @@ const s = StyleSheet.create({
   // 추가 버튼: 마찬가지로 패널 우측 끝에 맞추되, 목록(ScrollView/빈 상태 텍스트) 아래에 오도록
   // 위쪽에 여백을 둔다.
   pcPanelAddBtn: { alignSelf: 'flex-end', marginTop: 12 },
+  // 상세 보기 패널(PC 전용 3번째 칼럼): projectPanel과 동일하게 flex:1로 calendarRow의 stretch
+  // 정렬을 받아 캘린더 높이에 맞춰진다. 모달(sheetBase+modalSheet)과 달리 바텀시트가 아니라
+  // 상시 노출되는 카드형 패널이라 자체 배경/모서리/여백을 둔다.
+  detailPanel: { flex: 1, backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 20 },
+  // renderScheduleDetailBody/renderProjectDetailBody가 PC 인라인 패널(isInline=true)에서만 쓰는
+  // ScrollView 스타일 — detailPanel(flex:1로 stretch된 고정 높이) 안에서 실제로 스크롤되려면
+  // flex:1이 필요하다. 모바일 바텀시트는 원래 style prop 없이 콘텐츠 기준 auto 높이(모달의
+  // maxHeight 80%가 상한)로 렌더링되므로 여기 적용하면 안 됨(짧은 내용도 시트가 항상 커지는
+  // 시각적 회귀) — isInline=false일 때는 style={undefined}로 렌더링된다.
+  detailScroll: { flex: 1 },
+  detailPanelPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  detailPanelPlaceholderText: { color: C.textDim, fontSize: 13 },
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   aiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 20 },
   aiBtnText: { color: C.accentBlue, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
