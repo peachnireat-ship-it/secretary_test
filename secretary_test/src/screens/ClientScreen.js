@@ -672,6 +672,428 @@ export default function ClientScreen({ navigation, route }) {
     fetchHistorySummary();
   }, [showHistoryAI, loaded]);
 
+  // 담당자 수정 폼 필드 — 모바일 하단 모달과 PC 전용 수정 팝업이 그대로 공유한다(중복 정의 방지).
+  function renderClientEditFields() {
+    return (
+      <>
+        <View style={s.inputLabelRow}>
+          <Text style={s.inputLabel}>담당자 이름</Text>
+          <Text style={s.requiredMark}>*</Text>
+        </View>
+        <TextInput style={s.input} value={newName} onChangeText={setNewName} placeholder="홍길동" placeholderTextColor={C.textDim} />
+        <View style={s.inputLabelRow}>
+          <Text style={s.inputLabel}>회사명</Text>
+          <Text style={s.requiredMark}>*</Text>
+        </View>
+        <TextInput style={s.input} value={newCompany} onChangeText={setNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
+        <Text style={[s.inputLabel, s.inputLabelSpacing]}>직책</Text>
+        <TextInput style={s.input} value={newRole} onChangeText={setNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
+        <View style={s.inputLabelRow}>
+          <Text style={s.inputLabel}>연락처</Text>
+          <Text style={s.requiredMark}>*</Text>
+        </View>
+        <TextInput style={s.input} value={newContact} onChangeText={(v) => setNewContact(fmtPhone(v))} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+        <Text style={[s.inputLabel, s.inputLabelSpacing]}>직장 연락처</Text>
+        <TextInput style={s.input} value={newWorkContact} onChangeText={(v) => setNewWorkContact(fmtPhone(v))} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
+        <Text style={[s.inputLabel, s.inputLabelSpacing]}>이메일</Text>
+        <TextInput style={s.input} value={newEmail} onChangeText={setNewEmail} placeholder="example@company.com" placeholderTextColor={C.textDim} keyboardType="email-address" autoCapitalize="none" />
+        <Text style={[s.inputLabel, s.inputLabelSpacing]}>SNS 계정</Text>
+        <TextInput style={s.input} value={newSns} onChangeText={setNewSns} placeholder="instagram.com/company" placeholderTextColor={C.textDim} autoCapitalize="none" />
+        <Text style={[s.inputLabel, s.inputLabelSpacing]}>메모</Text>
+        <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
+
+        <View style={s.modalBtns}>
+          <TouchableOpacity style={s.modalCancel} onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes(''); }}>
+            <Text style={s.modalCancelText}>취소</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.modalConfirm} onPress={handleEditClient}>
+            <Text style={s.modalConfirmText}>저장</Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  }
+
+  // PC 마스터-디테일 패널에서 담당자 카드 클릭 시 상세 내용을 렌더링(모바일 바텀시트 모달과 완전히
+  // 동일한 내용을 우측 인라인 패널에서도 재사용). 바깥 껍데기(Modal vs 고정 패널)만 호출부에서 분기한다.
+  function renderClientDetailBody() {
+    return (
+      <>
+        <View style={s.detailHeader}>
+          <View style={s.detailAvatar}>
+            <Text style={s.detailAvatarText}>{selectedClient?.name?.[0]}</Text>
+          </View>
+          <View style={commonStyles.flex1}>
+            <View style={s.nameStarRow}>
+              <Text style={s.detailName}>{selectedClient?.name}</Text>
+              <TouchableOpacity onPress={() => selectedClient && handleToggleFavorite(selectedClient.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={[s.detailStarIcon, selectedClient && favorites.includes(selectedClient.id) && s.starIconActive]}>
+                  {selectedClient && favorites.includes(selectedClient.id) ? '★' : '☆'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={s.detailCompany}>
+              {[
+                selectedClient?.company,
+                selectedClient?.linkedProfileId ? departmentByProfileId[selectedClient.linkedProfileId] : null,
+                selectedClient?.role,
+              ].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+          <View style={s.editCloseRow}>
+            <TouchableOpacity onPress={() => openEditClient(selectedClient)} style={s.editClientBtn}>
+              <Text style={s.editClientBtnText}>수정</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert('삭제', `"${selectedClient?.name}" 담당자를 삭제할까요?`, [
+                  { text: '취소', style: 'cancel' },
+                  {
+                    text: '삭제',
+                    style: 'destructive',
+                    onPress: async () => {
+                      setClients(await deleteClient(selectedClient.id));
+                      setSelectedClient(null);
+                    },
+                  },
+                ]);
+              }}
+              style={s.deleteClientBtn}
+            >
+              <Text style={s.deleteClientBtnText}>삭제</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSelectedClient(null)}>
+              <Text style={s.closeBtn}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 연락처 */}
+        {(selectedClient?.contact || selectedClient?.workContact || selectedClient?.email || selectedClient?.sns) && (
+          <View style={s.contactSection}>
+            {(() => {
+              // "직장" 연락처는 개인 연락처와 이메일이 모두 함께 있을 때만, 아랫줄 이메일
+              // 텍스트가 끝나는 x좌표에 맞춰 절대 위치로 정렬한다(실측 기반). 조건이 안 맞으면
+              // 기존처럼 개인 연락처 옆에 자연스럽게 흐른다.
+              const alignWorkToEmail = !!(selectedClient.contact && selectedClient.workContact && selectedClient.email);
+              // 이메일 폭·컨테이너 폭·"직장" 박스 자체 폭을 모두 실측한 뒤에만 위치를 확정한다.
+              // 그 전까지는 opacity 0으로 숨겨 잘못된 위치가 잠깐 보이는 것을 막는다.
+              const measured = emailRowWidth != null && contactPairWidth != null && workRowWidth != null;
+              const workLeft = measured ? Math.max(0, Math.min(emailRowWidth, contactPairWidth - workRowWidth)) : 0;
+              return (selectedClient.contact || selectedClient.workContact) ? (
+                <View style={s.contactPairRow} onLayout={(e) => setContactPairWidth(e.nativeEvent.layout.width)}>
+                  {selectedClient.contact ? (
+                    <View style={s.contactRow}>
+                      <Text style={s.contactLabel}>개인</Text>
+                      <TouchableOpacity onPress={() => Alert.alert(
+                        '전화 걸기',
+                        `${selectedClient.name}(${selectedClient.contact})에게 전화하시겠습니까?`,
+                        [
+                          { text: '취소', style: 'cancel' },
+                          { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.contact.replace(/[^0-9+]/g, '')}`) },
+                        ]
+                      )}>
+                        <Text style={s.contactNumber}>{selectedClient.contact}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                  {selectedClient.workContact ? (
+                    <View
+                      onLayout={(e) => setWorkRowWidth(e.nativeEvent.layout.width)}
+                      style={[
+                        s.contactRow,
+                        alignWorkToEmail && {
+                          position: 'absolute',
+                          top: 0,
+                          left: workLeft,
+                          opacity: measured ? 1 : 0,
+                        },
+                      ]}
+                    >
+                      <Text style={s.contactLabel}>직장</Text>
+                      <TouchableOpacity onPress={() => Alert.alert(
+                        '전화 걸기',
+                        `${selectedClient.name} 직장(${selectedClient.workContact})에 전화하시겠습니까?`,
+                        [
+                          { text: '취소', style: 'cancel' },
+                          { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.workContact.replace(/[^0-9+]/g, '')}`) },
+                        ]
+                      )}>
+                        <Text style={s.contactNumber}>{selectedClient.workContact}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null;
+            })()}
+            {selectedClient.email ? (
+              <View style={s.contactRow} onLayout={(e) => setEmailRowWidth(e.nativeEvent.layout.width)}>
+                <Text style={s.contactLabel}>이메일</Text>
+                <TouchableOpacity onPress={() => Alert.alert(
+                  '메일 보내기',
+                  `${selectedClient.name}(${selectedClient.email})에게 메일을 보내시겠습니까?`,
+                  [
+                    { text: '취소', style: 'cancel' },
+                    { text: '메일 보내기', onPress: () => Linking.openURL(`mailto:${selectedClient.email}`) },
+                  ]
+                )}>
+                  <Text style={s.contactNumber}>{selectedClient.email}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {selectedClient.sns ? (
+              <View style={s.contactRow}>
+                <Text style={s.contactLabel}>SNS</Text>
+                <TouchableOpacity onPress={() => Alert.alert(
+                  'SNS로 이동',
+                  `${selectedClient.name}님의 SNS 계정으로 이동하시겠습니까?\n\n${selectedClient.sns}`,
+                  [
+                    { text: '취소', style: 'cancel' },
+                    { text: '이동', onPress: () => Linking.openURL(/^https?:\/\//i.test(selectedClient.sns) ? selectedClient.sns : `https://${selectedClient.sns}`) },
+                  ]
+                )}>
+                  <Text style={s.contactNumber}>{selectedClient.sns}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        {/* 메모 */}
+        {selectedClient?.notes ? (
+          <View style={s.notesBox}>
+            <Text style={s.notesLabel}>MEMO</Text>
+            <Text style={s.notesText}>{selectedClient.notes}</Text>
+          </View>
+        ) : null}
+
+        {/* AI 요약 */}
+        <View style={s.summaryBox}>
+          <View style={s.summaryLabelRow}>
+            <Text style={s.aiGlyph}>✦</Text>
+            <Text style={s.summaryLabel}>AI 관계 요약</Text>
+            <TouchableOpacity
+              style={s.summaryRefreshBtn}
+              disabled={summaryLoading}
+              onPress={() => fetchClientSummary(selectedClient, histories, mutualHistory)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[s.summaryRefreshText, summaryLoading && commonStyles.opacity40]}>⟳ 새로고침</Text>
+            </TouchableOpacity>
+          </View>
+          {summaryLoading
+            ? <ActivityIndicator size="small" color={C.accentTeal} style={commonStyles.mt8} />
+            : <Text style={s.summaryText}>{clientSummary || '요약 준비 중...'}</Text>
+          }
+        </View>
+
+        {/* 연결된 프로젝트 */}
+        {(() => {
+          const linked = projects.filter((p) => p.clientIds?.includes(selectedClient?.id));
+          if (!linked.length) return null;
+          return (
+            <View style={s.linkedSection}>
+              <Text style={s.linkedSectionLabel}>연결된 프로젝트</Text>
+              <View style={s.linkedChipRow}>
+                {linked.map((p) => (
+                  <TouchableOpacity key={p.id} style={[s.projectChip, { borderColor: projectStatusColor(p.status) + '55', backgroundColor: projectStatusColor(p.status) + '15' }]} activeOpacity={0.7} onPress={() => setSelectedProject(p)}>
+                    <View style={[s.projectChipDot, { backgroundColor: projectStatusColor(p.status) }]} />
+                    <Text style={[s.projectChipText, { color: projectStatusColor(p.status) }]} numberOfLines={1}>{p.title}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
+
+        <ClientHistorySection client={selectedClient} histories={histories} mutualHistories={mutualHistory} mutualTopics={mutualTopics} topics={topics} onHistoriesChange={handleHistoriesChange} onTopicsChange={handleTopicsChange}>
+          {/* 연결된 회의록 */}
+          {(() => {
+            const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));
+            if (!linked.length) return null;
+            return (
+              <View style={[s.linkedSection, commonStyles.mt16]}>
+                <Text style={s.linkedSectionLabel}>연결된 회의록 {linked.length}건</Text>
+                {linked.map((r) => (
+                  <TouchableOpacity key={r.id} style={s.meetingRecordItem} activeOpacity={0.7} onPress={() => setSelectedMeetingRecord(r)}>
+                    <View style={s.meetingRecordItemHeader}>
+                      <Text style={s.meetingRecordItemTitle} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
+                      <Text style={s.meetingRecordItemDate}>{formatDate(r.createdAt)}</Text>
+                    </View>
+                    {r.summary ? <Text style={s.meetingRecordItemSummary} numberOfLines={2}>{r.summary}</Text> : null}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            );
+          })()}
+        </ClientHistorySection>
+      </>
+    );
+  }
+
+  // 프로젝트 상세 콘텐츠 — 모바일 하단 바텀시트 모달과 PC 중앙 팝업이 그대로 공유한다(중복 정의 방지).
+  // 호출부(양쪽 모두)에서 selectedProject가 있을 때만 렌더링되도록 이미 감싸져 있지만, 방어적으로
+  // 여기서도 null이면 아무것도 렌더링하지 않는다.
+  function renderProjectDetailBody() {
+    if (!selectedProject) return null;
+    return (
+      <>
+        <View style={s.projDetailHeader}>
+          <View style={commonStyles.flex1}>
+            <View style={s.projDetailBadgeRow}>
+              <View style={[s.projStatusBadge, { borderColor: projectStatusColor(selectedProject.status) + '66', backgroundColor: projectStatusColor(selectedProject.status) + '18' }]}>
+                <Text style={[s.projStatusText, { color: projectStatusColor(selectedProject.status) }]}>{selectedProject.status}</Text>
+              </View>
+              {selectedProject.priority ? (
+                <View style={[s.projPriorityBadge, { borderColor: priorityColorClient(selectedProject.priority) + '55' }]}>
+                  <Text style={[s.projPriorityText, { color: priorityColorClient(selectedProject.priority) }]}>{selectedProject.priority}</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={s.projDetailTitle}>{selectedProject.title}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setSelectedProject(null)} style={commonStyles.ml8}>
+            <Text style={s.closeBtn}>✕</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={s.projProgressWrap}>
+          <View style={s.projProgressTrack}>
+            <View style={[s.projProgressFill, { width: `${selectedProject.progress ?? 0}%`, backgroundColor: projectStatusColor(selectedProject.status) }]} />
+          </View>
+          <View style={s.projDeadlineRow}>
+            <Text style={s.projDeadlineText}>마감일 {selectedProject.deadline}{selectedProject.deadline && selectedProject.deadline !== '미정' ? (() => { const d = projDaysUntil(selectedProject.deadline); return d > 0 ? `  ·  ${d}일 후` : d === 0 ? '  ·  오늘 마감' : `  ·  ${Math.abs(d)}일 초과`; })() : ''}</Text>
+            <Text style={s.projProgressLabel}>{selectedProject.progress ?? 0}%</Text>
+          </View>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {selectedProject.notes ? (
+            <View style={s.projSection}>
+              <Text style={s.linkedSectionLabel}>메모</Text>
+              <View style={s.projSectionBox}>
+                <Text style={s.meetingDetailText}>{selectedProject.notes}</Text>
+              </View>
+            </View>
+          ) : null}
+
+          {(() => {
+            const people = (selectedProject.clientIds || []).map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+            if (!people.length) return null;
+            return (
+              <View style={s.projSection}>
+                <Text style={s.linkedSectionLabel}>관련 인물 {people.length}명</Text>
+                {people.map((c, idx) => (
+                  <View key={c.id} style={[s.projPersonRow, idx < people.length - 1 && commonStyles.borderBottom]}>
+                    <View style={s.clientAvatar}>
+                      <Text style={s.clientAvatarText}>{c.name[0]}</Text>
+                    </View>
+                    <View style={commonStyles.flex1}>
+                      <Text style={s.clientName}>{c.name}</Text>
+                      {c.company ? (
+                        <Text style={s.clientRole}>
+                          {[c.company, c.linkedProfileId ? departmentByProfileId[c.linkedProfileId] : null, c.role].filter(Boolean).join(' · ')}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
+
+          {(() => {
+            const linked = (selectedProject.meetingRecordIds || []).map((id) => meetingRecords.find((r) => r.id === id)).filter(Boolean);
+            if (!linked.length) return null;
+            return (
+              <View style={s.projSection}>
+                <Text style={s.linkedSectionLabel}>연결된 회의록 {linked.length}건</Text>
+                {linked.map((r) => (
+                  <TouchableOpacity key={r.id} style={s.meetingRecordItem} activeOpacity={0.7} onPress={() => setSelectedMeetingRecord(r)}>
+                    <View style={s.meetingRecordItemHeader}>
+                      <Text style={s.meetingRecordItemTitle} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
+                      <Text style={s.meetingRecordItemDate}>{formatDate(r.createdAt)}</Text>
+                    </View>
+                    {r.summary ? <Text style={s.meetingRecordItemSummary} numberOfLines={2}>{r.summary}</Text> : null}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            );
+          })()}
+          <View style={commonStyles.spacerH20} />
+        </ScrollView>
+      </>
+    );
+  }
+
+  // 담당자 목록 카드 — PC(좌측 컬럼)와 모바일(전체 목록) 양쪽에서 동일하게 재사용
+  function renderClientCard(client) {
+    const clientHist = historiesByClient.get(client.id) || [];
+    const lastH = clientHist[0];
+    const hCount = clientHist.length;
+    return (
+      <TouchableOpacity key={client.id} style={[s.clientCard, favorites.includes(client.id) && s.clientCardFav]} activeOpacity={0.7} onPress={() => openClient(client)}>
+        <View style={s.clientAvatar}>
+          <Text style={s.clientAvatarText}>{client.name[0]}</Text>
+        </View>
+        <View style={s.clientBody}>
+          <View style={s.clientRow}>
+            <Text style={s.clientName}>{client.name}</Text>
+            <Text style={s.clientCompany}>
+              {client.company}
+              {client.linkedProfileId && departmentByProfileId[client.linkedProfileId] ? ` · ${departmentByProfileId[client.linkedProfileId]}` : ''}
+            </Text>
+          </View>
+          <Text style={s.clientRole}>{client.role}</Text>
+          <View style={s.clientMeta}>
+            <Text style={s.clientMetaText}>히스토리 {hCount}건</Text>
+            {lastH && <Text style={s.clientMetaText}>마지막 연락: {formatHistoryDate(lastH.date)}</Text>}
+          </View>
+        </View>
+        <TouchableOpacity style={s.starBtn} onPress={() => handleToggleFavorite(client.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={[s.starIcon, favorites.includes(client.id) && s.starIconActive]}>
+            {favorites.includes(client.id) ? '★' : '☆'}
+          </Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  }
+
+  // 검색창 + 탭(전체/즐겨찾기, 정렬) — PC 좌측 컬럼과 모바일 전체 폭 양쪽에서 동일하게 재사용.
+  // 자체 width를 지정하지 않으므로 실제 폭은 호출부의 부모 컨테이너(클라이언트 목록 컬럼 vs 루트)에 따라 결정된다.
+  function renderSearchAndTabs() {
+    return (
+      <>
+        <View style={s.searchWrap}>
+          <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="담당자 또는 회사명 검색" placeholderTextColor={C.textDim} />
+        </View>
+
+        <View style={s.tabRow}>
+          <TouchableOpacity style={[s.tab, activeTab === 'all' && s.tabActive]} onPress={() => setActiveTab('all')}>
+            <Text style={[s.tabText, activeTab === 'all' && s.tabTextActive]}>전체</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.tab, activeTab === 'favorites' && s.tabActive]} onPress={() => setActiveTab('favorites')}>
+            <Text style={[s.tabText, activeTab === 'favorites' && s.tabTextActive]}>★ 즐겨찾기</Text>
+            {favorites.length > 0 && (
+              <View style={s.tabBadge}>
+                <Text style={s.tabBadgeText}>{favorites.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <View style={commonStyles.flex1} />
+          <TouchableOpacity style={[s.sortBtn, sortOrder === 'asc' && s.sortBtnActive]} onPress={() => setSortOrder('asc')}>
+            <Text style={[s.sortBtnText, sortOrder === 'asc' && s.sortBtnTextActive]}>가↑</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.sortBtn, sortOrder === 'desc' && s.sortBtnActive]} onPress={() => setSortOrder('desc')}>
+            <Text style={[s.sortBtnText, sortOrder === 'desc' && s.sortBtnTextActive]}>가↓</Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  }
+
+  const showDetailPanel = IS_PC;
+
   return (
     <View style={s.root}>
       {/* ── 헤더 ── */}
@@ -682,72 +1104,44 @@ export default function ClientScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      {/* ── 검색 ── */}
-      <View style={s.searchWrap}>
-        <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="담당자 또는 회사명 검색" placeholderTextColor={C.textDim} />
-      </View>
+      {/* ── 검색+탭+목록 (PC: 좌우 50:50 분할 + 우측 상세 패널 / 모바일: 기존과 동일) ── */}
+      {showDetailPanel ? (
+        <View style={s.clientBodyPC}>
+          <View style={s.clientListColumn}>
+            {renderSearchAndTabs()}
 
-      {/* ── 탭 ── */}
-      <View style={s.tabRow}>
-        <TouchableOpacity style={[s.tab, activeTab === 'all' && s.tabActive]} onPress={() => setActiveTab('all')}>
-          <Text style={[s.tabText, activeTab === 'all' && s.tabTextActive]}>전체</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.tab, activeTab === 'favorites' && s.tabActive]} onPress={() => setActiveTab('favorites')}>
-          <Text style={[s.tabText, activeTab === 'favorites' && s.tabTextActive]}>★ 즐겨찾기</Text>
-          {favorites.length > 0 && (
-            <View style={s.tabBadge}>
-              <Text style={s.tabBadgeText}>{favorites.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <View style={commonStyles.flex1} />
-        <TouchableOpacity style={[s.sortBtn, sortOrder === 'asc' && s.sortBtnActive]} onPress={() => setSortOrder('asc')}>
-          <Text style={[s.sortBtnText, sortOrder === 'asc' && s.sortBtnTextActive]}>가↑</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.sortBtn, sortOrder === 'desc' && s.sortBtnActive]} onPress={() => setSortOrder('desc')}>
-          <Text style={[s.sortBtnText, sortOrder === 'desc' && s.sortBtnTextActive]}>가↓</Text>
-        </TouchableOpacity>
-      </View>
+            <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
+              {filteredClients.map(renderClientCard)}
+            </ScrollView>
 
-      {/* ── 담당자 목록 ── */}
-      <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
-        {filteredClients.map((client) => {
-          const clientHist = historiesByClient.get(client.id) || [];
-          const lastH = clientHist[0];
-          const hCount = clientHist.length;
-          return (
-            <TouchableOpacity key={client.id} style={[s.clientCard, favorites.includes(client.id) && s.clientCardFav]} activeOpacity={0.7} onPress={() => openClient(client)}>
-              <View style={s.clientAvatar}>
-                <Text style={s.clientAvatarText}>{client.name[0]}</Text>
-              </View>
-              <View style={s.clientBody}>
-                <View style={s.clientRow}>
-                  <Text style={s.clientName}>{client.name}</Text>
-                  <Text style={s.clientCompany}>
-                    {client.company}
-                    {client.linkedProfileId && departmentByProfileId[client.linkedProfileId] ? ` · ${departmentByProfileId[client.linkedProfileId]}` : ''}
-                  </Text>
-                </View>
-                <Text style={s.clientRole}>{client.role}</Text>
-                <View style={s.clientMeta}>
-                  <Text style={s.clientMetaText}>히스토리 {hCount}건</Text>
-                  {lastH && <Text style={s.clientMetaText}>마지막 연락: {formatHistoryDate(lastH.date)}</Text>}
-                </View>
-              </View>
-              <TouchableOpacity style={s.starBtn} onPress={() => handleToggleFavorite(client.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={[s.starIcon, favorites.includes(client.id) && s.starIconActive]}>
-                  {favorites.includes(client.id) ? '★' : '☆'}
-                </Text>
-              </TouchableOpacity>
+            <TouchableOpacity style={s.fab} onPress={() => setShowSourcePicker(true)}>
+              <Text style={s.fabText}>+</Text>
             </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+          </View>
 
-      {/* ── 추가 버튼 ── */}
-      <TouchableOpacity style={s.fab} onPress={() => setShowSourcePicker(true)}>
-        <Text style={s.fabText}>+</Text>
-      </TouchableOpacity>
+          <View style={s.detailPanel}>
+            {selectedClient ? renderClientDetailBody() : (
+              <View style={s.detailPanelEmpty}>
+                <Text style={s.detailPanelEmptyText}>담당자를 선택하세요</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      ) : (
+        <>
+          {renderSearchAndTabs()}
+
+          {/* ── 담당자 목록 ── */}
+          <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
+            {filteredClients.map(renderClientCard)}
+          </ScrollView>
+
+          {/* ── 추가 버튼 ── */}
+          <TouchableOpacity style={s.fab} onPress={() => setShowSourcePicker(true)}>
+            <Text style={s.fabText}>+</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       {/* ── 입력 방식 선택 ── */}
       <Modal visible={showSourcePicker} animationType="fade" transparent>
@@ -923,269 +1317,56 @@ export default function ClientScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── 클라이언트 상세 모달 ── */}
-      <Modal visible={!!selectedClient} animationType="slide" transparent>
+      {/* ── 클라이언트 상세 모달 (모바일 전용): PC는 모달 대신 우측 인라인 상세 패널(s.detailPanel)이
+          renderClientDetailBody()를 그대로 재사용해 표시한다 ── */}
+      <Modal visible={!!selectedClient && !showDetailPanel} animationType="slide" transparent>
         <View style={s.modalOverlay}>
           <Animated.View style={[s.modalSheet, s.h90pct, swipeClient.animStyle]}>
             <View style={s.modalHandleWrap} {...swipeClient.panHandlers}>
               <View style={s.modalHandle} />
             </View>
-            <View style={s.detailHeader}>
-              <View style={s.detailAvatar}>
-                <Text style={s.detailAvatarText}>{selectedClient?.name?.[0]}</Text>
-              </View>
-              <View style={commonStyles.flex1}>
-                <View style={s.nameStarRow}>
-                  <Text style={s.detailName}>{selectedClient?.name}</Text>
-                  <TouchableOpacity onPress={() => selectedClient && handleToggleFavorite(selectedClient.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={[s.detailStarIcon, selectedClient && favorites.includes(selectedClient.id) && s.starIconActive]}>
-                      {selectedClient && favorites.includes(selectedClient.id) ? '★' : '☆'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={s.detailCompany}>
-                  {[
-                    selectedClient?.company,
-                    selectedClient?.linkedProfileId ? departmentByProfileId[selectedClient.linkedProfileId] : null,
-                    selectedClient?.role,
-                  ].filter(Boolean).join(' · ')}
-                </Text>
-              </View>
-              <View style={s.editCloseRow}>
-                <TouchableOpacity onPress={() => openEditClient(selectedClient)} style={s.editClientBtn}>
-                  <Text style={s.editClientBtnText}>수정</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    Alert.alert('삭제', `"${selectedClient?.name}" 담당자를 삭제할까요?`, [
-                      { text: '취소', style: 'cancel' },
-                      {
-                        text: '삭제',
-                        style: 'destructive',
-                        onPress: async () => {
-                          setClients(await deleteClient(selectedClient.id));
-                          setSelectedClient(null);
-                        },
-                      },
-                    ]);
-                  }}
-                  style={s.deleteClientBtn}
-                >
-                  <Text style={s.deleteClientBtnText}>삭제</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setSelectedClient(null)}>
-                  <Text style={s.closeBtn}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* 연락처 */}
-            {(selectedClient?.contact || selectedClient?.workContact || selectedClient?.email || selectedClient?.sns) && (
-              <View style={s.contactSection}>
-                {(() => {
-                  // "직장" 연락처는 개인 연락처와 이메일이 모두 함께 있을 때만, 아랫줄 이메일
-                  // 텍스트가 끝나는 x좌표에 맞춰 절대 위치로 정렬한다(실측 기반). 조건이 안 맞으면
-                  // 기존처럼 개인 연락처 옆에 자연스럽게 흐른다.
-                  const alignWorkToEmail = !!(selectedClient.contact && selectedClient.workContact && selectedClient.email);
-                  // 이메일 폭·컨테이너 폭·"직장" 박스 자체 폭을 모두 실측한 뒤에만 위치를 확정한다.
-                  // 그 전까지는 opacity 0으로 숨겨 잘못된 위치가 잠깐 보이는 것을 막는다.
-                  const measured = emailRowWidth != null && contactPairWidth != null && workRowWidth != null;
-                  const workLeft = measured ? Math.max(0, Math.min(emailRowWidth, contactPairWidth - workRowWidth)) : 0;
-                  return (selectedClient.contact || selectedClient.workContact) ? (
-                    <View style={s.contactPairRow} onLayout={(e) => setContactPairWidth(e.nativeEvent.layout.width)}>
-                      {selectedClient.contact ? (
-                        <View style={s.contactRow}>
-                          <Text style={s.contactLabel}>개인</Text>
-                          <TouchableOpacity onPress={() => Alert.alert(
-                            '전화 걸기',
-                            `${selectedClient.name}(${selectedClient.contact})에게 전화하시겠습니까?`,
-                            [
-                              { text: '취소', style: 'cancel' },
-                              { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.contact.replace(/[^0-9+]/g, '')}`) },
-                            ]
-                          )}>
-                            <Text style={s.contactNumber}>{selectedClient.contact}</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : null}
-                      {selectedClient.workContact ? (
-                        <View
-                          onLayout={(e) => setWorkRowWidth(e.nativeEvent.layout.width)}
-                          style={[
-                            s.contactRow,
-                            alignWorkToEmail && {
-                              position: 'absolute',
-                              top: 0,
-                              left: workLeft,
-                              opacity: measured ? 1 : 0,
-                            },
-                          ]}
-                        >
-                          <Text style={s.contactLabel}>직장</Text>
-                          <TouchableOpacity onPress={() => Alert.alert(
-                            '전화 걸기',
-                            `${selectedClient.name} 직장(${selectedClient.workContact})에 전화하시겠습니까?`,
-                            [
-                              { text: '취소', style: 'cancel' },
-                              { text: '전화 걸기', onPress: () => Linking.openURL(`tel:${selectedClient.workContact.replace(/[^0-9+]/g, '')}`) },
-                            ]
-                          )}>
-                            <Text style={s.contactNumber}>{selectedClient.workContact}</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : null}
-                    </View>
-                  ) : null;
-                })()}
-                {selectedClient.email ? (
-                  <View style={s.contactRow} onLayout={(e) => setEmailRowWidth(e.nativeEvent.layout.width)}>
-                    <Text style={s.contactLabel}>이메일</Text>
-                    <TouchableOpacity onPress={() => Alert.alert(
-                      '메일 보내기',
-                      `${selectedClient.name}(${selectedClient.email})에게 메일을 보내시겠습니까?`,
-                      [
-                        { text: '취소', style: 'cancel' },
-                        { text: '메일 보내기', onPress: () => Linking.openURL(`mailto:${selectedClient.email}`) },
-                      ]
-                    )}>
-                      <Text style={s.contactNumber}>{selectedClient.email}</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-                {selectedClient.sns ? (
-                  <View style={s.contactRow}>
-                    <Text style={s.contactLabel}>SNS</Text>
-                    <TouchableOpacity onPress={() => Alert.alert(
-                      'SNS로 이동',
-                      `${selectedClient.name}님의 SNS 계정으로 이동하시겠습니까?\n\n${selectedClient.sns}`,
-                      [
-                        { text: '취소', style: 'cancel' },
-                        { text: '이동', onPress: () => Linking.openURL(/^https?:\/\//i.test(selectedClient.sns) ? selectedClient.sns : `https://${selectedClient.sns}`) },
-                      ]
-                    )}>
-                      <Text style={s.contactNumber}>{selectedClient.sns}</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-              </View>
-            )}
-
-            {/* 메모 */}
-            {selectedClient?.notes ? (
-              <View style={s.notesBox}>
-                <Text style={s.notesLabel}>MEMO</Text>
-                <Text style={s.notesText}>{selectedClient.notes}</Text>
-              </View>
-            ) : null}
-
-            {/* AI 요약 */}
-            <View style={s.summaryBox}>
-              <View style={s.summaryLabelRow}>
-                <Text style={s.aiGlyph}>✦</Text>
-                <Text style={s.summaryLabel}>AI 관계 요약</Text>
-                <TouchableOpacity
-                  style={s.summaryRefreshBtn}
-                  disabled={summaryLoading}
-                  onPress={() => fetchClientSummary(selectedClient, histories, mutualHistory)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={[s.summaryRefreshText, summaryLoading && commonStyles.opacity40]}>⟳ 새로고침</Text>
-                </TouchableOpacity>
-              </View>
-              {summaryLoading
-                ? <ActivityIndicator size="small" color={C.accentTeal} style={commonStyles.mt8} />
-                : <Text style={s.summaryText}>{clientSummary || '요약 준비 중...'}</Text>
-              }
-            </View>
-
-            {/* 연결된 프로젝트 */}
-            {(() => {
-              const linked = projects.filter((p) => p.clientIds?.includes(selectedClient?.id));
-              if (!linked.length) return null;
-              return (
-                <View style={s.linkedSection}>
-                  <Text style={s.linkedSectionLabel}>연결된 프로젝트</Text>
-                  <View style={s.linkedChipRow}>
-                    {linked.map((p) => (
-                      <TouchableOpacity key={p.id} style={[s.projectChip, { borderColor: projectStatusColor(p.status) + '55', backgroundColor: projectStatusColor(p.status) + '15' }]} activeOpacity={0.7} onPress={() => setSelectedProject(p)}>
-                        <View style={[s.projectChipDot, { backgroundColor: projectStatusColor(p.status) }]} />
-                        <Text style={[s.projectChipText, { color: projectStatusColor(p.status) }]} numberOfLines={1}>{p.title}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              );
-            })()}
-
-            <ClientHistorySection client={selectedClient} histories={histories} mutualHistories={mutualHistory} mutualTopics={mutualTopics} topics={topics} onHistoriesChange={handleHistoriesChange} onTopicsChange={handleTopicsChange}>
-              {/* 연결된 회의록 */}
-              {(() => {
-                const linked = meetingRecords.filter((r) => r.clientIds?.includes(selectedClient?.id));
-                if (!linked.length) return null;
-                return (
-                  <View style={[s.linkedSection, commonStyles.mt16]}>
-                    <Text style={s.linkedSectionLabel}>연결된 회의록 {linked.length}건</Text>
-                    {linked.map((r) => (
-                      <TouchableOpacity key={r.id} style={s.meetingRecordItem} activeOpacity={0.7} onPress={() => setSelectedMeetingRecord(r)}>
-                        <View style={s.meetingRecordItemHeader}>
-                          <Text style={s.meetingRecordItemTitle} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
-                          <Text style={s.meetingRecordItemDate}>{formatDate(r.createdAt)}</Text>
-                        </View>
-                        {r.summary ? <Text style={s.meetingRecordItemSummary} numberOfLines={2}>{r.summary}</Text> : null}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                );
-              })()}
-            </ClientHistorySection>
+            {renderClientDetailBody()}
           </Animated.View>
         </View>
       </Modal>
 
-      {/* ── 담당자 수정 모달 ── */}
+      {/* ── 담당자 수정 모달(모바일 전용, 하단 바텀시트): PC(IS_PC)는 대신 아래의 중앙 팝업
+          (editPopupOverlay/editPopupCard)을 사용한다. 콘텐츠는 renderClientEditFields()로 공유하므로
+          중복 없음. 모바일 동작은 기존과 동일 ── */}
+      {!IS_PC && (
       <Modal visible={showEditClient} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
           <View style={[s.modalSheet, commonStyles.maxH90pct]}>
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>담당자 수정</Text>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.scrollPB8}>
-              <View style={s.inputLabelRow}>
-                <Text style={s.inputLabel}>담당자 이름</Text>
-                <Text style={s.requiredMark}>*</Text>
-              </View>
-              <TextInput style={s.input} value={newName} onChangeText={setNewName} placeholder="홍길동" placeholderTextColor={C.textDim} />
-              <View style={s.inputLabelRow}>
-                <Text style={s.inputLabel}>회사명</Text>
-                <Text style={s.requiredMark}>*</Text>
-              </View>
-              <TextInput style={s.input} value={newCompany} onChangeText={setNewCompany} placeholder="(주)ABC" placeholderTextColor={C.textDim} />
-              <Text style={[s.inputLabel, s.inputLabelSpacing]}>직책</Text>
-              <TextInput style={s.input} value={newRole} onChangeText={setNewRole} placeholder="구매팀장" placeholderTextColor={C.textDim} />
-              <View style={s.inputLabelRow}>
-                <Text style={s.inputLabel}>연락처</Text>
-                <Text style={s.requiredMark}>*</Text>
-              </View>
-              <TextInput style={s.input} value={newContact} onChangeText={(v) => setNewContact(fmtPhone(v))} placeholder="010-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
-              <Text style={[s.inputLabel, s.inputLabelSpacing]}>직장 연락처</Text>
-              <TextInput style={s.input} value={newWorkContact} onChangeText={(v) => setNewWorkContact(fmtPhone(v))} placeholder="02-0000-0000" placeholderTextColor={C.textDim} keyboardType="phone-pad" />
-              <Text style={[s.inputLabel, s.inputLabelSpacing]}>이메일</Text>
-              <TextInput style={s.input} value={newEmail} onChangeText={setNewEmail} placeholder="example@company.com" placeholderTextColor={C.textDim} keyboardType="email-address" autoCapitalize="none" />
-              <Text style={[s.inputLabel, s.inputLabelSpacing]}>SNS 계정</Text>
-              <TextInput style={s.input} value={newSns} onChangeText={setNewSns} placeholder="instagram.com/company" placeholderTextColor={C.textDim} autoCapitalize="none" />
-              <Text style={[s.inputLabel, s.inputLabelSpacing]}>메모</Text>
-              <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
+              {renderClientEditFields()}
             </ScrollView>
-            <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes(''); }}>
-                <Text style={s.modalCancelText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalConfirm} onPress={handleEditClient}>
-                <Text style={s.modalConfirmText}>저장</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      )}
+
+      {/* ── 담당자 수정 팝업(PC 전용): 하단 바텀시트 대신 화면 중앙에 사면 둥근 모서리로 뜨는 전용
+          팝업 스타일(editPopupOverlay/editPopupCard)을 사용한다. 콘텐츠는 renderClientEditFields()로
+          모바일 바텀시트와 공유한다(ScheduleScreen "일정 수정 팝업(PC 전용)" 패턴과 동일) ── */}
+      {IS_PC && showEditClient && (
+      <Modal visible transparent animationType="fade" onRequestClose={() => setShowEditClient(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.editPopupOverlay}>
+          <View style={[s.editPopupCard, commonStyles.maxH80pct]}>
+            <View style={s.modalTitleRow}>
+              <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>담당자 수정</Text>
+              <TouchableOpacity onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes(''); }}>
+                <Text style={s.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {renderClientEditFields()}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      )}
 
       {/* ── 담당자 추가 모달 ── */}
       <Modal visible={showAddClient} animationType="slide" transparent>
@@ -1363,102 +1544,32 @@ export default function ClientScreen({ navigation, route }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-      {/* ── 프로젝트 상세 모달 ── */}
+      {/* ── 프로젝트 상세 모달(모바일 전용, 하단 바텀시트): PC(IS_PC)는 대신 아래의 중앙 팝업
+          (editPopupOverlay/editPopupCard)을 사용한다. 콘텐츠는 renderProjectDetailBody()로 공유하므로
+          중복 없음. 모바일 동작은 기존과 동일 ── */}
+      {!IS_PC && (
       <Modal visible={!!selectedProject} animationType="slide" transparent onRequestClose={() => setSelectedProject(null)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalSheet, commonStyles.maxH85pct]}>
             <View style={s.modalHandle} />
-            {selectedProject && (
-              <>
-                <View style={s.projDetailHeader}>
-                  <View style={commonStyles.flex1}>
-                    <View style={s.projDetailBadgeRow}>
-                      <View style={[s.projStatusBadge, { borderColor: projectStatusColor(selectedProject.status) + '66', backgroundColor: projectStatusColor(selectedProject.status) + '18' }]}>
-                        <Text style={[s.projStatusText, { color: projectStatusColor(selectedProject.status) }]}>{selectedProject.status}</Text>
-                      </View>
-                      {selectedProject.priority ? (
-                        <View style={[s.projPriorityBadge, { borderColor: priorityColorClient(selectedProject.priority) + '55' }]}>
-                          <Text style={[s.projPriorityText, { color: priorityColorClient(selectedProject.priority) }]}>{selectedProject.priority}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text style={s.projDetailTitle}>{selectedProject.title}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setSelectedProject(null)} style={commonStyles.ml8}>
-                    <Text style={s.closeBtn}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={s.projProgressWrap}>
-                  <View style={s.projProgressTrack}>
-                    <View style={[s.projProgressFill, { width: `${selectedProject.progress ?? 0}%`, backgroundColor: projectStatusColor(selectedProject.status) }]} />
-                  </View>
-                  <View style={s.projDeadlineRow}>
-                    <Text style={s.projDeadlineText}>마감일 {selectedProject.deadline}{selectedProject.deadline && selectedProject.deadline !== '미정' ? (() => { const d = projDaysUntil(selectedProject.deadline); return d > 0 ? `  ·  ${d}일 후` : d === 0 ? '  ·  오늘 마감' : `  ·  ${Math.abs(d)}일 초과`; })() : ''}</Text>
-                    <Text style={s.projProgressLabel}>{selectedProject.progress ?? 0}%</Text>
-                  </View>
-                </View>
-
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  {selectedProject.notes ? (
-                    <View style={s.projSection}>
-                      <Text style={s.linkedSectionLabel}>메모</Text>
-                      <View style={s.projSectionBox}>
-                        <Text style={s.meetingDetailText}>{selectedProject.notes}</Text>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {(() => {
-                    const people = (selectedProject.clientIds || []).map((id) => clients.find((c) => c.id === id)).filter(Boolean);
-                    if (!people.length) return null;
-                    return (
-                      <View style={s.projSection}>
-                        <Text style={s.linkedSectionLabel}>관련 인물 {people.length}명</Text>
-                        {people.map((c, idx) => (
-                          <View key={c.id} style={[s.projPersonRow, idx < people.length - 1 && commonStyles.borderBottom]}>
-                            <View style={s.clientAvatar}>
-                              <Text style={s.clientAvatarText}>{c.name[0]}</Text>
-                            </View>
-                            <View style={commonStyles.flex1}>
-                              <Text style={s.clientName}>{c.name}</Text>
-                              {c.company ? (
-                                <Text style={s.clientRole}>
-                                  {[c.company, c.linkedProfileId ? departmentByProfileId[c.linkedProfileId] : null, c.role].filter(Boolean).join(' · ')}
-                                </Text>
-                              ) : null}
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    );
-                  })()}
-
-                  {(() => {
-                    const linked = (selectedProject.meetingRecordIds || []).map((id) => meetingRecords.find((r) => r.id === id)).filter(Boolean);
-                    if (!linked.length) return null;
-                    return (
-                      <View style={s.projSection}>
-                        <Text style={s.linkedSectionLabel}>연결된 회의록 {linked.length}건</Text>
-                        {linked.map((r) => (
-                          <TouchableOpacity key={r.id} style={s.meetingRecordItem} activeOpacity={0.7} onPress={() => setSelectedMeetingRecord(r)}>
-                            <View style={s.meetingRecordItemHeader}>
-                              <Text style={s.meetingRecordItemTitle} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
-                              <Text style={s.meetingRecordItemDate}>{formatDate(r.createdAt)}</Text>
-                            </View>
-                            {r.summary ? <Text style={s.meetingRecordItemSummary} numberOfLines={2}>{r.summary}</Text> : null}
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    );
-                  })()}
-                  <View style={commonStyles.spacerH20} />
-                </ScrollView>
-              </>
-            )}
+            {renderProjectDetailBody()}
           </View>
         </View>
       </Modal>
+      )}
+
+      {/* ── 프로젝트 상세 팝업(PC 전용): 하단 바텀시트 대신 화면 중앙에 사면 둥근 모서리로 뜨는 전용
+          팝업 스타일(editPopupOverlay/editPopupCard)을 사용한다. 콘텐츠는 renderProjectDetailBody()로
+          모바일 바텀시트와 공유한다(ScheduleScreen의 "일정 수정 팝업(PC 전용)" 패턴과 동일) ── */}
+      {IS_PC && !!selectedProject && (
+      <Modal visible transparent animationType="fade" onRequestClose={() => setSelectedProject(null)}>
+        <View style={s.editPopupOverlay}>
+          <View style={[s.editPopupCard, commonStyles.maxH80pct]}>
+            {renderProjectDetailBody()}
+          </View>
+        </View>
+      </Modal>
+      )}
 
       {/* ── 회의록 상세 모달 ── */}
       <Modal visible={!!selectedMeetingRecord} animationType="slide" transparent onRequestClose={() => setSelectedMeetingRecord(null)}>
@@ -1591,6 +1702,12 @@ function parsePastedContacts(text) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg, paddingLeft: IS_PC ? 24 : 0 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 12 },
+  // PC 마스터-디테일 레이아웃: 좌측 목록 컬럼과 우측 상세 패널을 flex:1로 50:50 분할
+  clientBodyPC: { flex: 1, flexDirection: 'row' },
+  clientListColumn: { flex: 1 },
+  detailPanel: { flex: 1, borderLeftWidth: 1, borderLeftColor: C.border, paddingHorizontal: 20, paddingTop: 12 },
+  detailPanelEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 },
+  detailPanelEmptyText: { color: C.textDim, fontSize: 13 },
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   aiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentTeal + '22', borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 20 },
   aiBtnText: { color: C.accentTeal, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
@@ -1650,6 +1767,17 @@ const s = StyleSheet.create({
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
   modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
   modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
+  // 프로젝트 상세 팝업(PC 전용) 전용 스타일 — 다른 모달들처럼 하단에 붙는 바텀시트가 아니라 화면
+  // 중앙에 사면 모두 둥근 별도 창처럼 띄우기 위해 modalOverlay/modalSheet 대신 사용한다.
+  editPopupOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },
+  editPopupCard: {
+    backgroundColor: C.surfaceHigh, borderRadius: 20, width: '100%', maxWidth: 480,
+    paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24,
+    ...(Platform.OS === 'web' ? { boxShadow: '0 12px 40px rgba(0,0,0,0.45)' } : {
+      shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 12,
+    }),
+  },
+  modalTitleRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
   detailHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   detailAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
   detailAvatarText: { color: C.accentTeal, fontSize: 22, fontWeight: '400' },

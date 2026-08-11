@@ -73,6 +73,9 @@ const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
 const PRIORITIES = ['높음', '보통', '낮음'];
 const FILTERS = ['전체', '진행중', '위험', '지연', '완료'];
 
+// window.open() 창 이름을 호출마다 고유하게 만들기 위한 카운터 (이유는 MessageScreen.js 참고)
+let popupSeq = 0;
+
 // "회사 전체" 보기 부서 사이드바(CompanyScreen.js와 동일 패턴). 사이드바 폭 범위는 가장 긴
 // 부서명에 맞춰 이 범위 안에서 자동으로 늘어난다(SIDEBAR_MIN_WIDTH~SIDEBAR_MAX_WIDTH).
 const ALL_KEY = '__all__';
@@ -227,6 +230,28 @@ export default function ProjectScreen({ navigation, route }) {
 
     handleAdd, openDetail, handleEditSave, addClientToDetail,
   } = useProjectForm({ meetingRecords, projects, schedules, clients, setProjects });
+
+  // PC 웹은 "프로젝트 추가"를 실제 브라우저 새 창(팝업)으로 띄운다. 저장 완료 시 팝업이 postMessage로
+  // 알려오면 아래 message 리스너가 목록을 새로고침한다. 팝업 차단 등으로 open이 실패하면 기존 모달로 대체.
+  function handleAddPress() {
+    if (IS_PC && Platform.OS === 'web') {
+      // 창 이름을 매번 고유하게 줘야 브라우저가 기존에 열려 있던(혹은 사용자가 리사이즈한) 같은 이름의
+      // 창을 재사용하지 않고 매번 지정한 크기로 새로 연다.
+      const popup = window.open('?popup=project-new', `secretary-project-new-${++popupSeq}`, 'width=560,height=840,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
+      if (popup) return;
+    }
+    setShowAdd(true);
+  }
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    function handleMessage(e) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === 'secretary:project-created') load();
+    }
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const swipeDetail = useSwipeClose(() => setShowDetail(false), showDetail);
   const swipeAdd = useSwipeClose(() => setShowAdd(false), showAdd);
@@ -1183,7 +1208,7 @@ export default function ProjectScreen({ navigation, route }) {
                 filtered.map(renderMineCard)
               )}
             </ScrollView>
-            <TouchableOpacity style={s.fab} onPress={() => setShowAdd(true)}>
+            <TouchableOpacity style={s.fab} onPress={handleAddPress}>
               <Text style={s.fabText}>+</Text>
             </TouchableOpacity>
           </View>
@@ -1209,7 +1234,7 @@ export default function ProjectScreen({ navigation, route }) {
           </ScrollView>
 
           {/* ── 추가 버튼 ── */}
-          <TouchableOpacity style={s.fab} onPress={() => setShowAdd(true)}>
+          <TouchableOpacity style={s.fab} onPress={handleAddPress}>
             <Text style={s.fabText}>+</Text>
           </TouchableOpacity>
         </>

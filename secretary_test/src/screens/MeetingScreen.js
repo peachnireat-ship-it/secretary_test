@@ -10,11 +10,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
 import { askClaude, buildWorkTopicsSystem, fixForeignWordsInText } from '../services/claude';
-import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects, getHistories } from '../services/storage';
+import { getMeetingRecords, addMeetingRecord, updateMeetingRecord, deleteMeetingRecord, getWorkTopics, saveWorkTopics, getClients, addClient, getProjects, getHistories, getSchedules } from '../services/storage';
 import { projectStatusColor as statusColor, typeColor as histTypeColor } from '../utils/colors';
 import { useAudioRecording, formatTime } from '../hooks/useAudioRecording';
 import { useDiarization, applyNames, parseTranscriptSegments, mergeConsecutiveSegments } from '../hooks/useDiarization';
 import { useSwipeClose } from '../hooks/useSwipeClose';
+import { useProjectForm } from '../hooks/useProjectForm';
+import ProjectAddForm from '../components/ProjectAddForm';
 import { formatDate } from '../utils/dateUtils';
 import { IS_PC } from '../utils/deviceType';
 
@@ -60,6 +62,8 @@ export default function MeetingScreen({ navigation }) {
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
   const [histories, setHistories] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [peopleSearch, setPeopleSearch] = useState('');
   const [selectedPersonClient, setSelectedPersonClient] = useState(null);
   const [clientPickerSpeaker, setClientPickerSpeaker] = useState(null);
   const [clientPickerContext, setClientPickerContext] = useState(null);
@@ -146,6 +150,22 @@ export default function MeetingScreen({ navigation }) {
   useEffect(() => {
     getHistories().then(setHistories);
   }, []);
+
+  useEffect(() => {
+    getSchedules().then(setSchedules);
+  }, []);
+
+  const {
+    showAdd, setShowAdd, newTitle, setNewTitle, newStartDate, setNewStartDate,
+    newStartTime, setNewStartTime, newStartAmPm, setNewStartAmPm, newDeadline, setNewDeadline,
+    newDeadlineTime, setNewDeadlineTime, newDeadlineAmPm, setNewDeadlineAmPm, newStatus, setNewStatus,
+    newProgress, setNewProgress, setNewKeepProgress, newPriority, setNewPriority, newNotes, setNewNotes,
+    newClientIds, setNewClientIds, newNotifyEmail, setNewNotifyEmail,
+    setPendingMeetingRecordId,
+    missingEmailModalVisible, missingEmailPeople, missingEmailDrafts, setMissingEmailDrafts,
+    confirmMissingEmailAndSave, skipMissingEmailAndSave,
+    handleAdd,
+  } = useProjectForm({ meetingRecords, projects, schedules, clients, setProjects });
 
   useEffect(() => {
     if (loading && activeTab === 'record') {
@@ -393,6 +413,298 @@ export default function MeetingScreen({ navigation }) {
     } finally {
       setWorkTopicsLoading(false);
     }
+  }
+
+  // PC에서는 "저장된 기록" 탭만 좌측 목록 + 우측 고정 상세패널(마스터-디테일)로 바뀐다.
+  // "녹음" 탭은 리스트가 아니라 단일 흐름 폼이라 마스터-디테일 대상이 아니다(폭 제한만 적용).
+  const showDetailPanel = IS_PC && activeTab === 'history';
+  const selectedRecord = meetingRecords.find((r) => r.id === expandedId) || null;
+
+  // 기록 탭 FlatList의 헤더(업무 주제 분석)·빈 상태는 모바일/PC 양쪽 FlatList가 동일하게 사용한다.
+  const historyListHeader = meetingRecords.length > 0 ? (
+    <View style={s.topicSection}>
+      <TouchableOpacity
+        style={[s.topicBtn, workTopicsLoading && s.topicBtnDisabled]}
+        onPress={analyzeWorkTopics}
+        activeOpacity={0.8}
+        disabled={workTopicsLoading}
+      >
+        {workTopicsLoading ? (
+          <ActivityIndicator color={C.gold} size="small" />
+        ) : (
+          <Text style={s.topicBtnText}>업무 주제 분석</Text>
+        )}
+      </TouchableOpacity>
+      {!!workTopics && (
+        <View style={s.topicResultBox}>
+          <View style={s.topicResultHeader}>
+            <Text style={s.topicResultLabel}>WORK TOPICS</Text>
+            <TouchableOpacity onPress={() => copyToClipboard(workTopics)} activeOpacity={0.7}>
+              <Text style={s.copyBtn}>복사</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={s.topicResultText}>{workTopics}</Text>
+        </View>
+      )}
+    </View>
+  ) : null;
+
+  const historyListEmpty = (
+    <View style={s.emptyBox}>
+      <Text style={s.emptyText}>저장된 회의록이 없습니다</Text>
+      <Text style={s.emptyHint}>{'녹음 후 "기록 저장" 버튼을 눌러 저장하세요'}</Text>
+    </View>
+  );
+
+  // 저장된 회의록 상세 렌더링(모바일 아코디언 내부 / PC 우측 패널 공용). 내용은 완전히 동일 —
+  // 바깥 컨테이너(모바일 s.historyDetail View / PC 우측 패널 ScrollView)만 호출부에서 분기한다.
+  function renderRecordDetail(item) {
+    return (
+      <>
+        {!!item.summary && (
+          <View style={s.historySection}>
+            <View style={s.historySectionHeader}>
+              <Text style={s.historySectionLabel}>SUMMARY</Text>
+              <TouchableOpacity onPress={() => copyToClipboard(item.summary)} activeOpacity={0.7}>
+                <Text style={s.copyBtn}>복사</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={s.historyBody}>{item.summary}</Text>
+          </View>
+        )}
+        {!!item.transcript && (
+          <View style={s.historySection}>
+            <View style={s.historySectionHeader}>
+              <View style={s.transcriptHeaderLeft}>
+                <Text style={s.historySectionLabel}>TRANSCRIPT</Text>
+                {!!item.diarizeSource && (
+                  <View style={[s.diarizeSourceBadge, item.diarizeSource === 'pyannote' ? s.diarizeSourceBadgePyannote : s.diarizeSourceBadgeAi]}>
+                    <Text style={[s.diarizeSourceBadgeText, item.diarizeSource === 'pyannote' ? s.diarizeSourceBadgeTextPyannote : s.diarizeSourceBadgeTextAi]}>
+                      {item.diarizeSource === 'pyannote' ? 'Pyannote 서버' : 'AI 방식'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => copyToClipboard(item.transcript)} activeOpacity={0.7}>
+                <Text style={s.copyBtn}>복사</Text>
+              </TouchableOpacity>
+            </View>
+            {(() => {
+              const segs = mergeConsecutiveSegments(parseTranscriptSegments(item.transcript));
+              if (segs.length === 0) return <Text style={[s.historyBody, s.historyBodyDim]}>{item.transcript}</Text>;
+              const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
+              return (
+                <View style={commonStyles.gap12}>
+                  {segs.map((seg, i) => {
+                    const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
+                    return (
+                      <View key={i}>
+                        <Text style={[commonStyles.speakerLabel, { color }]}>{seg.speaker}</Text>
+                        <Text style={[s.historyBody, s.historyBodyDim]}>{seg.text}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+          </View>
+        )}
+        {(() => {
+          const linked = (item.clientIds || []).map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+          return (
+            <View style={s.historySection}>
+              <View style={s.historySectionHeader}>
+                <Text style={s.historySectionLabel}>관련 인물</Text>
+                <TouchableOpacity onPress={() => openAddPersonPicker(item.id)} activeOpacity={0.7}>
+                  <Text style={s.copyBtn}>+ 추가</Text>
+                </TouchableOpacity>
+              </View>
+              {linked.map((c) => (
+                <TouchableOpacity key={c.id} style={s.linkedPersonRow} activeOpacity={0.7} onPress={() => setSelectedPersonClient(c)}>
+                  <View style={s.linkedPersonAvatar}>
+                    <Text style={s.linkedPersonAvatarText}>{c.name[0]}</Text>
+                  </View>
+                  <View style={commonStyles.flex1}>
+                    <Text style={s.linkedClientName} numberOfLines={1}>{c.name}</Text>
+                    {!!c.company && (
+                      <Text style={s.linkedClientCompany} numberOfLines={1}>
+                        {c.company}{c.role ? ` · ${c.role}` : ''}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={s.linkedPersonDeleteBtn}
+                    onPress={() => removePersonFromRecord(item.id, c.id)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={s.linkedPersonDeleteText}>×</Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              ))}
+              {linked.length === 0 && (
+                <Text style={s.emptyPersonText}>등록된 인물이 없습니다</Text>
+              )}
+            </View>
+          );
+        })()}
+        {(() => {
+          const linked = projects.filter((p) => p.meetingRecordIds?.includes(item.id));
+          if (!linked.length) return null;
+          return (
+            <View style={s.historySection}>
+              <Text style={s.historySectionLabel}>관련 프로젝트</Text>
+              {linked.map((p) => (
+                <View key={p.id} style={s.linkedProjectRow}>
+                  <View style={[s.linkedProjectDot, { backgroundColor: statusColor(p.status) }]} />
+                  <Text style={s.linkedProjectTitle} numberOfLines={1}>{p.title}</Text>
+                  <Text style={[s.linkedProjectStatus, { color: statusColor(p.status) }]}>{p.status}</Text>
+                </View>
+              ))}
+            </View>
+          );
+        })()}
+        {!!item.tasks?.length && (() => {
+          const selected = historySelectedTasks[item.id] || new Set();
+          return (
+            <View style={s.historySection}>
+              <View style={s.historySectionHeader}>
+                <Text style={s.historySectionLabel}>TASKS</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setHistorySelectedTasks((prev) => {
+                      const cur = prev[item.id] || new Set();
+                      return {
+                        ...prev,
+                        [item.id]: cur.size === item.tasks.length
+                          ? new Set()
+                          : new Set(item.tasks.map((_, i) => i)),
+                      };
+                    });
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={s.taskSelectAllText}>
+                    {selected.size === item.tasks.length ? '전체 해제' : '전체 선택'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={s.card}>
+                {item.tasks.map((task, i) => {
+                  const isSelected = selected.has(i);
+                  return (
+                    <TouchableOpacity
+                      key={i}
+                      style={[s.taskRow, i < item.tasks.length - 1 && s.taskRowBorder]}
+                      activeOpacity={0.7}
+                      onPress={() => toggleHistoryTask(item.id, i)}
+                    >
+                      <View style={[s.taskCheckbox, isSelected && s.taskCheckboxSelected]}>
+                        {isSelected && <Text style={s.taskCheckmark}>✓</Text>}
+                      </View>
+                      <View style={commonStyles.flex1}>
+                        <Text style={s.taskContent}>{task.content}</Text>
+                        <View style={s.taskMeta}>
+                          <Text style={s.taskMetaText}>{task.assignee}</Text>
+                          {task.deadline !== '미정' && (
+                            <Text style={s.taskMetaText}>· {task.deadline}</Text>
+                          )}
+                          <Text style={[s.taskPriorityLabel, { color: priorityColor(task.priority) }]}>{task.priority}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <TouchableOpacity
+                style={[s.bundleBtn, selected.size === 0 && s.bundleBtnDisabled]}
+                onPress={() => {
+                  const selectedTasks = [...selected].map((i) => item.tasks[i]);
+                  const bundled = bundleTasksToProject(selectedTasks);
+                  setNewTitle(bundled.title);
+                  setNewDeadline(bundled.deadline);
+                  setNewPriority(bundled.priority);
+                  setNewNotes(bundled.notes);
+                  setNewStatus('진행중');
+                  setNewProgress(0);
+                  setPendingMeetingRecordId(item.id);
+                  setShowAdd(true);
+                  setHistorySelectedTasks((prev) => ({ ...prev, [item.id]: new Set() }));
+                }}
+                activeOpacity={0.8}
+                disabled={selected.size === 0}
+              >
+                <Text style={s.bundleBtnText}>
+                  {selected.size > 0
+                    ? `${selected.size}개 선택 · 프로젝트로 묶기`
+                    : '태스크를 선택하세요'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
+      </>
+    );
+  }
+
+  // 저장된 기록 카드 PC 렌더링(좌측 목록 전용). 제목과 액션 버튼 7개를 같은 행에, 메타·요약
+  // 미리보기는 펼침 여부와 무관하게 항상 표시한다(PC에는 "펼침" 개념이 없고 상세는 우측 패널로 이동).
+  function renderRecordCardPC(item) {
+    const isSelected = expandedId === item.id;
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[s.historyItem, isSelected && s.cardPCActive]}
+        onPress={() => toggleExpand(item.id)}
+        activeOpacity={0.85}
+      >
+        <View style={s.historyItemPCHeader}>
+          <Text style={s.historyDate} numberOfLines={1}>{item.title || formatDateTime(item.createdAt)}</Text>
+          <View style={s.historyBtnRowPC}>
+            <TouchableOpacity style={s.editTitleBtn} onPress={() => openEditModal(item)} activeOpacity={0.7}>
+              <Text style={s.editTitleBtnText}>제목 변경</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.contentEditBtn} onPress={() => openContentEditModal(item)} activeOpacity={0.7}>
+              <Text style={s.contentEditBtnText}>내용 편집</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.speakerEditBtn} onPress={() => openSpeakerEditModal(item)} activeOpacity={0.7}>
+              <Text style={s.speakerEditBtnText}>화자 변경</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.segmentEditBtn} onPress={() => openSegmentEditModal(item)} activeOpacity={0.7}>
+              <Text style={s.segmentEditBtnText}>화자 수정</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.rediarizeBtn, (!!rediarizingId || !!fixingForeignId) && s.rediarizeBtnDisabled]}
+              onPress={() => openRediarizeModal(item)}
+              activeOpacity={0.7}
+              disabled={!!rediarizingId || !!fixingForeignId}
+            >
+              <Text style={s.rediarizeBtnText}>
+                {rediarizingId === item.id ? '재분리 중…' : '화자 재분리'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.fixForeignBtn, (!!fixingForeignId || !!rediarizingId) && s.fixForeignBtnDisabled]}
+              onPress={() => runFixForeignWords(item)}
+              activeOpacity={0.7}
+              disabled={!!fixingForeignId || !!rediarizingId}
+            >
+              <Text style={s.fixForeignBtnText}>
+                {fixingForeignId === item.id ? '수정 중…' : '외국어 수정'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.deleteBtn} onPress={() => handleDelete(item.id)} activeOpacity={0.7}>
+              <Text style={s.deleteBtnText}>삭제</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <Text style={[s.historySource, s.mt6]}>{formatDateTime(item.createdAt)} · {item.source}</Text>
+        {!!item.summary && (
+          <Text style={s.historyPreview} numberOfLines={2}>{item.summary}</Text>
+        )}
+      </TouchableOpacity>
+    );
   }
 
   return (
@@ -946,6 +1258,33 @@ export default function MeetingScreen({ navigation }) {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* "저장된 기록" 탭 TASKS 섹션의 "프로젝트로 묶기" 버튼 → 화면 전환 없이 회의록 화면 위에 뜨는
+          중앙 고정폭 팝업(fade). 폼 로직은 useProjectForm에 캡슐화되어 있고 UI는 ProjectAddPopup(PC 웹
+          팝업창)과 동일한 ProjectAddForm 컴포넌트를 재사용한다. */}
+      <Modal visible={showAdd} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowAdd(false)}>
+        <View style={[s.modalOverlay, s.modalOverlayCentered]}>
+          <View style={[s.modalBox, s.projectAddBox]}>
+            <ProjectAddForm
+              newTitle={newTitle} setNewTitle={setNewTitle} newStartDate={newStartDate} setNewStartDate={setNewStartDate}
+              newStartTime={newStartTime} setNewStartTime={setNewStartTime} newStartAmPm={newStartAmPm} setNewStartAmPm={setNewStartAmPm}
+              newDeadline={newDeadline} setNewDeadline={setNewDeadline}
+              newDeadlineTime={newDeadlineTime} setNewDeadlineTime={setNewDeadlineTime} newDeadlineAmPm={newDeadlineAmPm} setNewDeadlineAmPm={setNewDeadlineAmPm}
+              newStatus={newStatus} setNewStatus={setNewStatus}
+              newProgress={newProgress} setNewProgress={setNewProgress} setNewKeepProgress={setNewKeepProgress} newPriority={newPriority} setNewPriority={setNewPriority}
+              newNotes={newNotes} setNewNotes={setNewNotes}
+              newClientIds={newClientIds} setNewClientIds={setNewClientIds} newNotifyEmail={newNotifyEmail} setNewNotifyEmail={setNewNotifyEmail}
+              missingEmailModalVisible={missingEmailModalVisible} missingEmailPeople={missingEmailPeople}
+              missingEmailDrafts={missingEmailDrafts} setMissingEmailDrafts={setMissingEmailDrafts}
+              confirmMissingEmailAndSave={confirmMissingEmailAndSave} skipMissingEmailAndSave={skipMissingEmailAndSave}
+              handleAdd={handleAdd}
+              clients={clients}
+              peopleSearch={peopleSearch} setPeopleSearch={setPeopleSearch}
+              onCancel={() => setShowAdd(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* 상단 탭 */}
       <View style={s.topTab}>
         <TouchableOpacity
@@ -970,7 +1309,7 @@ export default function MeetingScreen({ navigation }) {
       </View>
 
       {activeTab === 'record' ? (
-        <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={[s.scrollContent, IS_PC && s.scrollContentPC]} showsVerticalScrollIndicator={false}>
 
           {/* 변환 완료 후: 파일 업로드 최상단 */}
           {!!pickedFile && (!!transcript || pickedAfterTranscript) && (
@@ -1263,46 +1602,41 @@ export default function MeetingScreen({ navigation }) {
             </View>
           )}
         </ScrollView>
+      ) : showDetailPanel ? (
+        /* 저장된 기록 탭 (PC: 좌측 목록 + 우측 고정 상세패널) */
+        <View style={s.bodyPC}>
+          <View style={s.listColumn}>
+            <FlatList
+              data={meetingRecords}
+              extraData={[meetingRecords, expandedId]}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={s.historyContent}
+              ListHeaderComponent={historyListHeader}
+              ListEmptyComponent={historyListEmpty}
+              renderItem={({ item }) => renderRecordCardPC(item)}
+            />
+          </View>
+          <View style={s.detailPanel}>
+            {selectedRecord ? (
+              <ScrollView contentContainerStyle={s.historyDetail} showsVerticalScrollIndicator={false}>
+                {renderRecordDetail(selectedRecord)}
+              </ScrollView>
+            ) : (
+              <View style={s.detailPanelEmpty}>
+                <Text style={s.detailPanelEmptyText}>회의록을 선택하세요</Text>
+              </View>
+            )}
+          </View>
+        </View>
       ) : (
-        /* 기록 탭 */
+        /* 저장된 기록 탭 (모바일) */
         <FlatList
           data={meetingRecords}
           extraData={meetingRecords}
           keyExtractor={(item) => item.id}
           contentContainerStyle={s.historyContent}
-          ListHeaderComponent={meetingRecords.length > 0 ? (
-            <View style={s.topicSection}>
-              <TouchableOpacity
-                style={[s.topicBtn, workTopicsLoading && s.topicBtnDisabled]}
-                onPress={analyzeWorkTopics}
-                activeOpacity={0.8}
-                disabled={workTopicsLoading}
-              >
-                {workTopicsLoading ? (
-                  <ActivityIndicator color={C.gold} size="small" />
-                ) : (
-                  <Text style={s.topicBtnText}>업무 주제 분석</Text>
-                )}
-              </TouchableOpacity>
-              {!!workTopics && (
-                <View style={s.topicResultBox}>
-                  <View style={s.topicResultHeader}>
-                    <Text style={s.topicResultLabel}>WORK TOPICS</Text>
-                    <TouchableOpacity onPress={() => copyToClipboard(workTopics)} activeOpacity={0.7}>
-                      <Text style={s.copyBtn}>복사</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={s.topicResultText}>{workTopics}</Text>
-                </View>
-              )}
-            </View>
-          ) : null}
-          ListEmptyComponent={
-            <View style={s.emptyBox}>
-              <Text style={s.emptyText}>저장된 회의록이 없습니다</Text>
-              <Text style={s.emptyHint}>{'녹음 후 "기록 저장" 버튼을 눌러 저장하세요'}</Text>
-            </View>
-          }
+          ListHeaderComponent={historyListHeader}
+          ListEmptyComponent={historyListEmpty}
           renderItem={({ item }) => {
             const isExpanded = expandedId === item.id;
             return (
@@ -1360,181 +1694,7 @@ export default function MeetingScreen({ navigation }) {
                 )}
                 {isExpanded && (
                   <View style={s.historyDetail}>
-                    {!!item.summary && (
-                      <View style={s.historySection}>
-                        <View style={s.historySectionHeader}>
-                          <Text style={s.historySectionLabel}>SUMMARY</Text>
-                          <TouchableOpacity onPress={() => copyToClipboard(item.summary)} activeOpacity={0.7}>
-                            <Text style={s.copyBtn}>복사</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <Text style={s.historyBody}>{item.summary}</Text>
-                      </View>
-                    )}
-                    {!!item.transcript && (
-                      <View style={s.historySection}>
-                        <View style={s.historySectionHeader}>
-                          <View style={s.transcriptHeaderLeft}>
-                            <Text style={s.historySectionLabel}>TRANSCRIPT</Text>
-                            {!!item.diarizeSource && (
-                              <View style={[s.diarizeSourceBadge, item.diarizeSource === 'pyannote' ? s.diarizeSourceBadgePyannote : s.diarizeSourceBadgeAi]}>
-                                <Text style={[s.diarizeSourceBadgeText, item.diarizeSource === 'pyannote' ? s.diarizeSourceBadgeTextPyannote : s.diarizeSourceBadgeTextAi]}>
-                                  {item.diarizeSource === 'pyannote' ? 'Pyannote 서버' : 'AI 방식'}
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                          <TouchableOpacity onPress={() => copyToClipboard(item.transcript)} activeOpacity={0.7}>
-                            <Text style={s.copyBtn}>복사</Text>
-                          </TouchableOpacity>
-                        </View>
-                        {(() => {
-                          const segs = mergeConsecutiveSegments(parseTranscriptSegments(item.transcript));
-                          if (segs.length === 0) return <Text style={[s.historyBody, { color: C.textSecondary }]}>{item.transcript}</Text>;
-                          const allSpkrs = [...new Set(segs.map((sg) => sg.speaker))];
-                          return (
-                            <View style={commonStyles.gap12}>
-                              {segs.map((seg, i) => {
-                                const color = SPEAKER_COLORS[allSpkrs.indexOf(seg.speaker) % SPEAKER_COLORS.length];
-                                return (
-                                  <View key={i}>
-                                    <Text style={[commonStyles.speakerLabel, { color }]}>{seg.speaker}</Text>
-                                    <Text style={[s.historyBody, { color: C.textSecondary }]}>{seg.text}</Text>
-                                  </View>
-                                );
-                              })}
-                            </View>
-                          );
-                        })()}
-                      </View>
-                    )}
-					{(() => {
-                      const linked = (item.clientIds || []).map((id) => clients.find((c) => c.id === id)).filter(Boolean);
-                      return (
-                        <View style={s.historySection}>
-                          <View style={s.historySectionHeader}>
-                            <Text style={s.historySectionLabel}>관련 인물</Text>
-                            <TouchableOpacity onPress={() => openAddPersonPicker(item.id)} activeOpacity={0.7}>
-                              <Text style={s.copyBtn}>+ 추가</Text>
-                            </TouchableOpacity>
-                          </View>
-                          {linked.map((c) => (
-                            <TouchableOpacity key={c.id} style={s.linkedPersonRow} activeOpacity={0.7} onPress={() => setSelectedPersonClient(c)}>
-                              <View style={s.linkedPersonAvatar}>
-                                <Text style={s.linkedPersonAvatarText}>{c.name[0]}</Text>
-                              </View>
-                              <View style={commonStyles.flex1}>
-                                <Text style={s.linkedClientName} numberOfLines={1}>{c.name}</Text>
-                                {!!c.company && (
-                                  <Text style={s.linkedClientCompany} numberOfLines={1}>
-                                    {c.company}{c.role ? ` · ${c.role}` : ''}
-                                  </Text>
-                                )}
-                              </View>
-                              <TouchableOpacity
-                                style={s.linkedPersonDeleteBtn}
-                                onPress={() => removePersonFromRecord(item.id, c.id)}
-                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                activeOpacity={0.6}
-                              >
-                                <Text style={s.linkedPersonDeleteText}>×</Text>
-                              </TouchableOpacity>
-                            </TouchableOpacity>
-                          ))}
-                          {linked.length === 0 && (
-                            <Text style={s.emptyPersonText}>등록된 인물이 없습니다</Text>
-                          )}
-                        </View>
-                      );
-                    })()}
-					{(() => {
-                      const linked = projects.filter((p) => p.meetingRecordIds?.includes(item.id));
-                      if (!linked.length) return null;
-                      return (
-                        <View style={s.historySection}>
-                          <Text style={s.historySectionLabel}>관련 프로젝트</Text>
-                          {linked.map((p) => (
-                            <View key={p.id} style={s.linkedProjectRow}>
-                              <View style={[s.linkedProjectDot, { backgroundColor: statusColor(p.status) }]} />
-                              <Text style={s.linkedProjectTitle} numberOfLines={1}>{p.title}</Text>
-                              <Text style={[s.linkedProjectStatus, { color: statusColor(p.status) }]}>{p.status}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      );
-                    })()}
-					{!!item.tasks?.length && (() => {
-                      const selected = historySelectedTasks[item.id] || new Set();
-                      return (
-                        <View style={s.historySection}>
-                          <View style={s.historySectionHeader}>
-                            <Text style={s.historySectionLabel}>TASKS</Text>
-                            <TouchableOpacity
-                              onPress={() => {
-                                setHistorySelectedTasks((prev) => {
-                                  const cur = prev[item.id] || new Set();
-                                  return {
-                                    ...prev,
-                                    [item.id]: cur.size === item.tasks.length
-                                      ? new Set()
-                                      : new Set(item.tasks.map((_, i) => i)),
-                                  };
-                                });
-                              }}
-                              activeOpacity={0.7}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Text style={s.taskSelectAllText}>
-                                {selected.size === item.tasks.length ? '전체 해제' : '전체 선택'}
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                          <View style={s.card}>
-                            {item.tasks.map((task, i) => {
-                              const isSelected = selected.has(i);
-                              return (
-                                <TouchableOpacity
-                                  key={i}
-                                  style={[s.taskRow, i < item.tasks.length - 1 && s.taskRowBorder]}
-                                  activeOpacity={0.7}
-                                  onPress={() => toggleHistoryTask(item.id, i)}
-                                >
-                                  <View style={[s.taskCheckbox, isSelected && s.taskCheckboxSelected]}>
-                                    {isSelected && <Text style={s.taskCheckmark}>✓</Text>}
-                                  </View>
-                                  <View style={commonStyles.flex1}>
-                                    <Text style={s.taskContent}>{task.content}</Text>
-                                    <View style={s.taskMeta}>
-                                      <Text style={s.taskMetaText}>{task.assignee}</Text>
-                                      {task.deadline !== '미정' && (
-                                        <Text style={s.taskMetaText}>· {task.deadline}</Text>
-                                      )}
-                                      <Text style={[s.taskPriorityLabel, { color: priorityColor(task.priority) }]}>{task.priority}</Text>
-                                    </View>
-                                  </View>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                          <TouchableOpacity
-                            style={[s.bundleBtn, selected.size === 0 && s.bundleBtnDisabled]}
-                            onPress={() => {
-                              const selectedTasks = [...selected].map((i) => item.tasks[i]);
-                              navigation.navigate('프로젝트', { addTask: bundleTasksToProject(selectedTasks), meetingRecordId: item.id });
-                              setHistorySelectedTasks((prev) => ({ ...prev, [item.id]: new Set() }));
-                            }}
-                            activeOpacity={0.8}
-                            disabled={selected.size === 0}
-                          >
-                            <Text style={s.bundleBtnText}>
-                              {selected.size > 0
-                                ? `${selected.size}개 선택 · 프로젝트로 묶기`
-                                : '태스크를 선택하세요'}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      );
-                    })()}
+                    {renderRecordDetail(item)}
                   </View>
                 )}
               </TouchableOpacity>
@@ -1590,6 +1750,8 @@ const s = StyleSheet.create({
   // 녹음 탭
   scroll: { flex: 1 },
   scrollContent: { paddingTop: 24, paddingHorizontal: 24 },
+  // PC 폭 제한(모달 480px, 팝업 560px 관례에 맞춘 중앙 정렬 고정 폭)
+  scrollContentPC: { maxWidth: 560, width: '100%', alignSelf: 'center' },
   header: { marginBottom: 32 },
   headerBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 28 },
   headerBadgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.gold },
@@ -1680,6 +1842,9 @@ const s = StyleSheet.create({
   modalBox: Platform.OS === 'web'
     ? { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16, width: '100%', maxWidth: 480 }
     : { backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 16, padding: 24, gap: 16 },
+  // ProjectAddForm은 자체 헤더/바디/푸터 패딩을 이미 갖고 있으므로 modalBox의 padding/gap을 0으로 리셋하고
+  // 크기(폭 고정·높이 상한)만 오버라이드한다. overflow:hidden으로 사각 헤더/푸터를 박스의 둥근 모서리에 맞춰 클리핑.
+  projectAddBox: { width: '100%', maxWidth: 480, maxHeight: '80%', padding: 0, gap: 0, overflow: 'hidden' },
   modalTitle: { color: C.textPrimary, fontSize: 16, fontWeight: '500', letterSpacing: 0.3 },
   modalInput: {
     backgroundColor: C.bg, borderWidth: 1, borderColor: C.borderHigh,
@@ -1812,6 +1977,13 @@ const s = StyleSheet.create({
   newClientConfirmText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   // 기록 탭
   historyContent: { padding: 16, paddingBottom: 40 },
+  // PC 마스터-디테일 레이아웃(ProjectScreen의 mineBodyPC/gridColumn/detailPanel과 동일 패턴)
+  bodyPC: { flex: 1, flexDirection: 'row' },
+  listColumn: { flex: 1 },
+  detailPanel: { width: 400, borderLeftWidth: 1, borderLeftColor: C.border, paddingHorizontal: 20, paddingTop: 12 },
+  detailPanelEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 },
+  detailPanelEmptyText: { color: C.textDim, fontSize: 13 },
+  cardPCActive: { borderColor: C.accentTeal + 'aa', backgroundColor: C.accentTeal + '0c' },
   topicSection: { marginBottom: 16, gap: 12 },
   topicBtn: {
     backgroundColor: C.gold + '22', borderWidth: 1,
@@ -1838,6 +2010,9 @@ const s = StyleSheet.create({
   historyMeta: {},
   historyMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   historyBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
+  // PC 좌측 목록 카드: 제목 + 액션 버튼 7개를 같은 행에 배치(버튼 초과 시 자체적으로 줄바꿈)
+  historyItemPCHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  historyBtnRowPC: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'flex-end', flexShrink: 1 },
   historyDate: { color: C.textPrimary, fontSize: 13, fontWeight: '500', flex: 1 },
   historySource: { color: C.textDim, fontSize: 11, letterSpacing: 0.3 },
   historyChevron: { color: C.textDim, fontSize: 12 },
@@ -1847,6 +2022,7 @@ const s = StyleSheet.create({
   historySectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   historySectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2.5, fontWeight: '600' },
   historyBody: { color: C.textPrimary, fontSize: 13, lineHeight: 22 },
+  historyBodyDim: { color: C.textSecondary },
   editTitleBtn: {
     borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 7,
     paddingVertical: 5, paddingHorizontal: 6,

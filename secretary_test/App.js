@@ -10,8 +10,16 @@ import { UserProvider, useUser } from './src/context/UserContext';
 import { ICONS, tabColor } from './src/navConfig';
 import { IS_PC } from './src/utils/deviceType';
 import PCSidebar, { PC_SIDEBAR_WIDTH } from './src/components/PCSidebar';
+import ProjectAddPopup from './src/screens/ProjectAddPopup';
+import MessageAddPopup from './src/screens/MessageAddPopup';
 
 const Tab = createBottomTabNavigator();
+
+// PC 웹에서 FAB이 window.open()으로 띄우는 실제 브라우저 팝업 창의 진입점.
+// 같은 번들이 새 창에서 그대로 재부팅되므로, URL 쿼리로 일반 탭 UI 대신 이 화면만 단독 렌더링한다.
+const POPUP_ROUTE = Platform.OS === 'web' && typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search).get('popup')
+  : null;
 
 function TabNavigator({ isCompanyAdmin }) {
   const insets = useSafeAreaInsets();
@@ -131,6 +139,26 @@ export default function App() {
       document.documentElement.style.overflowY = 'auto';
     }
   }, []);
+
+  if (POPUP_ROUTE === 'project-new') {
+    return (
+      <UserProvider>
+        <SafeAreaProvider>
+          <ProjectAddPopup />
+        </SafeAreaProvider>
+      </UserProvider>
+    );
+  }
+
+  if (POPUP_ROUTE === 'message-new') {
+    return (
+      <UserProvider>
+        <SafeAreaProvider>
+          <MessageAddPopup />
+        </SafeAreaProvider>
+      </UserProvider>
+    );
+  }
 
   return (
     <UserProvider>
