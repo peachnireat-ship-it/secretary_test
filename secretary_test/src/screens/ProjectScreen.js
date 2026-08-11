@@ -976,17 +976,24 @@ export default function ProjectScreen({ navigation, route }) {
     const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
     const allRelatedClientIds = [...new Set([...(item.clientIds || []), ...meetingClientIds])];
     const allRelatedPeople = allRelatedClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+    // 카드 높이를 일정하게 유지하기 위해 관련 인물/회의록은 일부만 보여주고 나머지는 "+N" 칩으로 축약한다.
+    const visiblePeople = allRelatedPeople.slice(0, 3);
+    const extraPeopleCount = allRelatedPeople.length - visiblePeople.length;
+    const visibleMeetings = linkedMeetings.slice(0, 2);
+    const extraMeetingsCount = linkedMeetings.length - visibleMeetings.length;
     // 프로젝트 사본(관련 인물로 태그되어 자동 생성된 다른 사람 프로젝트의 사본)은 조회
     // 전용이다 — 수정 모달로 보내지 않고, 롱프레스 삭제도 걸지 않는다.
     const isMirror = !!item.originProjectId;
     const isSelectedOnPC = IS_PC && showDetail && detailProject?.id === item.id;
     return (
-      <View key={item.id} style={[s.card, IS_PC && s.cardPC, risk && s.cardRisk, isSelectedOnPC && s.cardPCActive]}>
-        <TouchableOpacity
-          activeOpacity={0.75}
-          onPress={() => (isMirror ? openMirrorDetail(item) : openDetail(item))}
-          onLongPress={isMirror ? undefined : () => handleDelete(item.id, item.title)}
-        >
+      <TouchableOpacity
+        key={item.id}
+        style={[s.card, IS_PC && s.cardPC, risk && s.cardRisk, isSelectedOnPC && s.cardPCActive]}
+        activeOpacity={0.75}
+        onPress={() => (isMirror ? openMirrorDetail(item) : openDetail(item))}
+        onLongPress={isMirror ? undefined : () => handleDelete(item.id, item.title)}
+      >
+        <View>
           {/* 타이틀 행 */}
           <View style={s.cardTop}>
             <View style={s.cardTitleRow}>
@@ -1033,13 +1040,13 @@ export default function ProjectScreen({ navigation, route }) {
           </View>
 
           {item.notes ? <Text style={s.cardNotes} numberOfLines={1}>{item.notes}</Text> : null}
-        </TouchableOpacity>
+        </View>
 
-        {allRelatedPeople.length > 0 && (
+        {visiblePeople.length > 0 && (
           <View style={s.cardRelatedPeopleWrap}>
             <Text style={s.cardRelatedPeopleLabel}>관련 인물</Text>
             <View style={s.cardRelatedPeopleRow}>
-              {allRelatedPeople.map((c) => (
+              {visiblePeople.map((c) => (
                 <TouchableOpacity
                   key={c.id}
                   style={s.cardPersonChip}
@@ -1049,18 +1056,20 @@ export default function ProjectScreen({ navigation, route }) {
                   <View style={s.cardPersonAvatar}>
                     <Text style={s.cardPersonAvatarText}>{c.name[0]}</Text>
                   </View>
-                  <View style={commonStyles.flex1}>
-                    <Text style={s.cardPersonName} numberOfLines={1}>{c.name}</Text>
-                    {c.company ? <Text style={s.cardPersonCompany} numberOfLines={1}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text> : null}
-                  </View>
+                  <Text style={s.cardPersonName} numberOfLines={1}>{c.name}</Text>
                 </TouchableOpacity>
               ))}
+              {extraPeopleCount > 0 && (
+                <View style={s.cardMoreChip}>
+                  <Text style={s.cardMoreChipText}>+{extraPeopleCount}명</Text>
+                </View>
+              )}
             </View>
           </View>
         )}
-        {linkedMeetings.length > 0 && (
+        {visibleMeetings.length > 0 && (
           <View style={s.meetingChipRow}>
-            {linkedMeetings.map((r) => (
+            {visibleMeetings.map((r) => (
               <TouchableOpacity
                 key={r.id}
                 style={s.meetingChip}
@@ -1074,12 +1083,17 @@ export default function ProjectScreen({ navigation, route }) {
                 <Text style={s.meetingChipText} numberOfLines={1}>📋 {r.title || '회의록'}</Text>
               </TouchableOpacity>
             ))}
+            {extraMeetingsCount > 0 && (
+              <View style={s.cardMoreChip}>
+                <Text style={s.cardMoreChipText}>+{extraMeetingsCount}</Text>
+              </View>
+            )}
           </View>
         )}
         {urgency > 0 && (
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, s.urgencyBorder, { borderColor: urgencyColor, opacity: urgencyAnim }]} />
         )}
-      </View>
+      </TouchableOpacity>
     );
   }
 
@@ -2319,7 +2333,7 @@ const s = StyleSheet.create({
   emptyText: { color: C.textDim, fontSize: 14 },
   emptyHint: { color: C.textDim, fontSize: 11 },
 
-  card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 16, gap: 10 },
+  card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 16, gap: 10, height: 300, overflow: 'hidden' },
   cardRisk: { borderColor: C.gold + '55' },
   urgencyBorder: { borderRadius: 14, borderWidth: 2 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -2350,12 +2364,13 @@ const s = StyleSheet.create({
   cardNotes: { color: C.textDim, fontSize: 11, fontStyle: 'italic' },
   cardRelatedPeopleWrap: { marginTop: 10, gap: 5 },
   cardRelatedPeopleLabel: { color: C.textDim, fontSize: 10, fontWeight: '500', letterSpacing: 0.4 },
-  cardRelatedPeopleRow: { gap: 6 },
-  cardPersonChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.accentTeal + '12', borderWidth: 1, borderColor: C.accentTeal + '33', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 8 },
-  cardPersonAvatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.accentTeal + '2A', borderWidth: 1, borderColor: C.accentTeal + '44', alignItems: 'center', justifyContent: 'center' },
-  cardPersonAvatarText: { color: C.accentTeal, fontSize: 11, fontWeight: '600' },
-  cardPersonName: { color: C.textSecondary, fontSize: 12, fontWeight: '500' },
-  cardPersonCompany: { color: C.textDim, fontSize: 10, marginTop: 1 },
+  cardRelatedPeopleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  cardPersonChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.accentTeal + '12', borderWidth: 1, borderColor: C.accentTeal + '33', borderRadius: 8, paddingVertical: 5, paddingHorizontal: 8, maxWidth: 120 },
+  cardPersonAvatar: { width: 20, height: 20, borderRadius: 10, backgroundColor: C.accentTeal + '2A', borderWidth: 1, borderColor: C.accentTeal + '44', alignItems: 'center', justifyContent: 'center' },
+  cardPersonAvatarText: { color: C.accentTeal, fontSize: 10, fontWeight: '600' },
+  cardPersonName: { color: C.textSecondary, fontSize: 12, fontWeight: '500', flexShrink: 1 },
+  cardMoreChip: { backgroundColor: C.border + '55', borderWidth: 1, borderColor: C.border, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+  cardMoreChipText: { color: C.textDim, fontSize: 11, fontWeight: '500' },
   meetingChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   meetingChip: { backgroundColor: C.accentPurple + '18', borderWidth: 1, borderColor: C.accentPurple + '44', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 },
   meetingChipText: { color: C.accentPurple, fontSize: 11, fontWeight: '500' },
