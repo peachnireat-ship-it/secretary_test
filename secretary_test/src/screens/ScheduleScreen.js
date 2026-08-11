@@ -619,19 +619,133 @@ export default function ScheduleScreen({ navigation, route }) {
     setNewStartDate(defaultDate); setNewEndDate(''); setShowAdd(true);
   }
 
+  // 일정 수정 폼 필드 — 모바일 하단 모달(editMode 전환이 모달 안에서 일어남)과 PC 전용 수정 팝업이
+  // 그대로 공유한다(중복 정의 방지). renderScheduleDetailBody와 동일한 이유로 반드시 함수 호출
+  // ({renderScheduleEditFields()})로만 사용할 것 — JSX 컴포넌트(<X/>)로 쓰면 렌더마다 새 컴포넌트
+  // 타입으로 인식되어 내부 TextInput 포커스가 매 렌더 초기화된다.
+  function renderScheduleEditFields() {
+    return (
+      <>
+        <Text style={s.inputLabel}>제목</Text>
+        <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
+
+        <Text style={s.inputLabel}>시작일시</Text>
+        <TextInput style={[s.input, commonStyles.mb8]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+        <View style={s.timeRow}>
+          <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.optionActive]} onPress={() => setEditStartAmPm('오전')}>
+            <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.optionActive]} onPress={() => setEditStartAmPm('오후')}>
+            <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+          </TouchableOpacity>
+          <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+        </View>
+
+        <Text style={s.inputLabel}>마감일시 (선택)</Text>
+        <TextInput style={[s.input, commonStyles.mb8]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
+        <View style={s.timeRow}>
+          <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.optionActive]} onPress={() => setEditEndAmPm('오전')}>
+            <Text style={[s.ampmBtnText, editEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.optionActive]} onPress={() => setEditEndAmPm('오후')}>
+            <Text style={[s.ampmBtnText, editEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
+          </TouchableOpacity>
+          <TextInput style={[s.input, commonStyles.flex1]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
+        </View>
+
+        <Text style={s.inputLabel}>분류</Text>
+        <View style={s.tagRow}>
+          {TAGS.map((t) => (
+            <TouchableOpacity key={t} style={[s.tagOption, editTag === t && s.optionActive]} onPress={() => setEditTag(t)}>
+              <Text style={[s.tagOptionText, editTag === t && s.tagOptionTextActive]}>{t}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={s.inputLabel}>관련 인물 · 담당자 (선택)</Text>
+        {editClientIds.length > 0 && (
+          <View style={s.selectedPeopleRow}>
+            {editClientIds.map((id) => {
+              const c = clients.find((cl) => cl.id === id);
+              if (!c) return null;
+              return (
+                <View key={id} style={s.selectedPersonChip}>
+                  <TouchableOpacity onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
+                    <Text style={s.selectedPersonChipText}>{c.name}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setEditClientIds((prev) => prev.filter((x) => x !== id))}>
+                    <Text style={s.selectedPersonChipX}> ✕</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
+        <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(editClientIds, setEditClientIds)}>
+          <Text style={[s.pickerTriggerText, editClientIds.length > 0 && s.pickerTriggerTextActive]}>
+            {editClientIds.length > 0 ? `${editClientIds.length}명 선택됨 · 변경` : '담당자 인원 선택'}
+          </Text>
+          <Text style={s.pickerTriggerIcon}>›</Text>
+        </TouchableOpacity>
+
+        <Text style={s.inputLabel}>관련 프로젝트 (선택)</Text>
+        <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(editProjectId, (id) => { setEditProjectId(id); applyProjectClientIds(id, setEditClientIds); })}>
+          <Text style={[s.pickerTriggerText, editProjectId && s.pickerTriggerTextActive]}>
+            {editProjectId ? (projects.find((p) => p.id === editProjectId)?.title || '선택된 프로젝트') : '프로젝트 선택'}
+          </Text>
+          <Text style={s.pickerTriggerIcon}>›</Text>
+        </TouchableOpacity>
+
+        <Text style={s.inputLabel}>메모 (선택)</Text>
+        <TextInput style={[s.input, s.h72]} value={editNotes} onChangeText={setEditNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
+
+        {/* 알림 메일 발송 여부 */}
+        <TouchableOpacity
+          style={s.notifyEmailRow}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (editClientIds.length === 0) {
+              Alert.alert('안내', '선택된 관련 인물이 없습니다.');
+              return;
+            }
+            setEditNotifyEmail((prev) => !prev);
+          }}
+        >
+          <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
+            {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
+          </View>
+          <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
+        </TouchableOpacity>
+
+        <View style={s.modalBtns}>
+          <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
+            <Text style={s.modalCancelText}>취소</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
+            <Text style={s.modalConfirmText}>저장</Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  }
+
   // 일정 상세(보기/편집) 콘텐츠 — 모바일 하단 모달과 PC 우측 인라인 상세 패널이 그대로 공유한다
   // (중복 정의 방지). 반드시 함수 호출({renderScheduleDetailBody()})로만 사용할 것 — JSX
   // 컴포넌트(<X/>)로 사용하면 렌더마다 새 컴포넌트 타입으로 인식되어 내부 TextInput 포커스가
   // 매 렌더 초기화된다. isInline=true(PC 인라인 패널)일 때만 ScrollView에 flex:1(s.detailScroll)을
   // 줘서 고정 높이의 detailPanel 안에서 스크롤되게 한다. 모바일 바텀시트는 원래 style prop이
   // 전혀 없던 콘텐츠 기준 auto 높이(80% 상한)라 flex:1을 주면 안 됨 — 반드시 style prop 없이 렌더.
+  // isInline=true(PC 인라인 패널)일 때는 editMode state와 무관하게 항상 "보기" 콘텐츠만 렌더링한다 —
+  // PC에서 "수정"을 누르면 별도의 PC 전용 수정 팝업(renderScheduleEditFields 재사용)이 뜨므로,
+  // 인라인 패널 자체는 보기/수정 콘텐츠 길이 차이로 크기가 출렁이지 않는다.
   function renderScheduleDetailBody(isInline = false) {
     if (!viewSchedule) return null;
+    const showEditFields = editMode && !isInline;
     return (
       <ScrollView style={isInline ? s.detailScroll : undefined} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={s.modalTitleRow}>
           <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>
-            {editMode ? '일정 수정' : viewSchedule.title}
+            {showEditFields ? '일정 수정' : viewSchedule.title}
           </Text>
           <View style={s.titleActionRow}>
             <TouchableOpacity onPress={() => { setShowScheduleView(false); setEditMode(false); }}>
@@ -640,109 +754,8 @@ export default function ScheduleScreen({ navigation, route }) {
           </View>
         </View>
 
-        {editMode ? (
-          <>
-            <Text style={s.inputLabel}>제목</Text>
-            <TextInput style={s.input} value={editTitle} onChangeText={setEditTitle} placeholder="일정 제목" placeholderTextColor={C.textDim} />
-
-            <Text style={s.inputLabel}>시작일시</Text>
-            <TextInput style={[s.input, commonStyles.mb8]} value={editStartDate} onChangeText={(t) => setEditStartDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-            <View style={s.timeRow}>
-              <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오전' && s.optionActive]} onPress={() => setEditStartAmPm('오전')}>
-                <Text style={[s.ampmBtnText, editStartAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.ampmBtn, editStartAmPm === '오후' && s.optionActive]} onPress={() => setEditStartAmPm('오후')}>
-                <Text style={[s.ampmBtnText, editStartAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
-              </TouchableOpacity>
-              <TextInput style={[s.input, commonStyles.flex1]} value={editStartTime} onChangeText={(t) => setEditStartTime(fmtTime12(t))} placeholder="09:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
-            </View>
-
-            <Text style={s.inputLabel}>마감일시 (선택)</Text>
-            <TextInput style={[s.input, commonStyles.mb8]} value={editEndDate} onChangeText={(t) => setEditEndDate(fmtDate(t))} placeholder="YYYY-MM-DD" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={10} />
-            <View style={s.timeRow}>
-              <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오전' && s.optionActive]} onPress={() => setEditEndAmPm('오전')}>
-                <Text style={[s.ampmBtnText, editEndAmPm === '오전' && s.ampmBtnTextActive]}>오전</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.ampmBtn, editEndAmPm === '오후' && s.optionActive]} onPress={() => setEditEndAmPm('오후')}>
-                <Text style={[s.ampmBtnText, editEndAmPm === '오후' && s.ampmBtnTextActive]}>오후</Text>
-              </TouchableOpacity>
-              <TextInput style={[s.input, commonStyles.flex1]} value={editEndTime} onChangeText={(t) => setEditEndTime(fmtTime12(t))} placeholder="06:00" placeholderTextColor={C.textDim} keyboardType="numeric" maxLength={5} />
-            </View>
-
-            <Text style={s.inputLabel}>분류</Text>
-            <View style={s.tagRow}>
-              {TAGS.map((t) => (
-                <TouchableOpacity key={t} style={[s.tagOption, editTag === t && s.optionActive]} onPress={() => setEditTag(t)}>
-                  <Text style={[s.tagOptionText, editTag === t && s.tagOptionTextActive]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={s.inputLabel}>관련 인물 · 담당자 (선택)</Text>
-            {editClientIds.length > 0 && (
-              <View style={s.selectedPeopleRow}>
-                {editClientIds.map((id) => {
-                  const c = clients.find((cl) => cl.id === id);
-                  if (!c) return null;
-                  return (
-                    <View key={id} style={s.selectedPersonChip}>
-                      <TouchableOpacity onPress={() => { setViewPerson(c); setShowPersonView(true); }}>
-                        <Text style={s.selectedPersonChipText}>{c.name}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => setEditClientIds((prev) => prev.filter((x) => x !== id))}>
-                        <Text style={s.selectedPersonChipX}> ✕</Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-            {/* eslint-disable-next-line react-hooks/refs -- openClientPicker는 pickerCallback ref를 onPress 핸들러 내부(이벤트 콜백)에서만 쓴다. renderScheduleDetailBody가 함수 호출로 인라인되면서 정적 분석이 렌더 중 접근으로 오탐하는 기존 패턴과 동일 */}
-            <TouchableOpacity style={s.pickerTrigger} onPress={() => openClientPicker(editClientIds, setEditClientIds)}>
-              <Text style={[s.pickerTriggerText, editClientIds.length > 0 && s.pickerTriggerTextActive]}>
-                {editClientIds.length > 0 ? `${editClientIds.length}명 선택됨 · 변경` : '담당자 인원 선택'}
-              </Text>
-              <Text style={s.pickerTriggerIcon}>›</Text>
-            </TouchableOpacity>
-
-            <Text style={s.inputLabel}>관련 프로젝트 (선택)</Text>
-            <TouchableOpacity style={s.pickerTrigger} onPress={() => openProjectPicker(editProjectId, (id) => { setEditProjectId(id); applyProjectClientIds(id, setEditClientIds); })}>
-              <Text style={[s.pickerTriggerText, editProjectId && s.pickerTriggerTextActive]}>
-                {editProjectId ? (projects.find((p) => p.id === editProjectId)?.title || '선택된 프로젝트') : '프로젝트 선택'}
-              </Text>
-              <Text style={s.pickerTriggerIcon}>›</Text>
-            </TouchableOpacity>
-
-            <Text style={s.inputLabel}>메모 (선택)</Text>
-            <TextInput style={[s.input, s.h72]} value={editNotes} onChangeText={setEditNotes} placeholder="추가 메모" placeholderTextColor={C.textDim} multiline />
-
-            {/* 알림 메일 발송 여부 */}
-            <TouchableOpacity
-              style={s.notifyEmailRow}
-              activeOpacity={0.7}
-              onPress={() => {
-                if (editClientIds.length === 0) {
-                  Alert.alert('안내', '선택된 관련 인물이 없습니다.');
-                  return;
-                }
-                setEditNotifyEmail((prev) => !prev);
-              }}
-            >
-              <View style={[s.notifyEmailCheckbox, editNotifyEmail && s.notifyEmailCheckboxChecked]}>
-                {editNotifyEmail && <Text style={s.notifyEmailCheckmark}>✓</Text>}
-              </View>
-              <Text style={s.notifyEmailLabel}>관련 인물에게 알림 메일 발송</Text>
-            </TouchableOpacity>
-
-            <View style={s.modalBtns}>
-              <TouchableOpacity style={s.modalCancel} onPress={() => setEditMode(false)}>
-                <Text style={s.modalCancelText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalConfirm} onPress={handleEditSave}>
-                <Text style={s.modalConfirmText}>저장</Text>
-              </TouchableOpacity>
-            </View>
-          </>
+        {showEditFields ? (
+          renderScheduleEditFields()
         ) : (
           <>
             <Text style={s.modalDateLabel}>{formatDateKo(viewSchedule.date)}</Text>
@@ -1508,6 +1521,33 @@ export default function ScheduleScreen({ navigation, route }) {
       </Modal>
       )}
 
+      {/* ── 일정 수정 팝업(PC 전용): 우측 인라인 상세 패널(s.detailPanel)은 renderScheduleDetailBody(true)가
+          editMode와 무관하게 항상 "보기" 콘텐츠만 렌더링하도록 되어 있어(위 IS_PC && (...) 블록), 패널 자체
+          크기는 고정된다. PC에서 "수정"을 누르면 대신 이 별도 팝업을 띄워 그 안에서 편집한다. 콘텐츠는
+          renderScheduleEditFields()로 모바일 하단 모달(editMode 분기)과 공유한다. 저장(handleEditSave→
+          saveEditedSchedule)이 성공 시 setEditMode(false)를 호출하므로 팝업이 자동으로 닫힌다. 다른 모달들과
+          달리 하단에 붙는 바텀시트(s.modalOverlay/s.sheetBase)가 아니라, 화면 중앙에 사면 모두 둥근 별도
+          창처럼 뜨는 s.editPopupOverlay/s.editPopupCard를 전용으로 쓴다 ── */}
+      {IS_PC && editMode && showScheduleView && (
+      <Modal visible transparent animationType="fade" onRequestClose={() => setEditMode(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.editPopupOverlay}>
+          <View style={[s.editPopupCard, commonStyles.maxH80pct]}>
+            <View style={s.modalTitleRow}>
+              <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>일정 수정</Text>
+              <View style={s.titleActionRow}>
+                <TouchableOpacity onPress={() => setEditMode(false)}>
+                  <Text style={s.closeBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {renderScheduleEditFields()}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      )}
+
       {/* ── 프로젝트 보기 모달(모바일 전용, 일정 상세 모달보다 뒤에 선언해 그 위에 겹쳐 뜨도록 함):
           PC는 모달 대신 우측 인라인 상세 패널을 사용한다 — 콘텐츠는 renderProjectDetailBody()로
           공유하므로 중복 없음 ── */}
@@ -1990,6 +2030,16 @@ const s = StyleSheet.create({
     ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, width: '100%', maxWidth: 480 }
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   modalSheet: { paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
+  // 일정 수정 팝업(PC 전용) 전용 스타일 — 다른 모달들처럼 하단에 붙는 바텀시트가 아니라 화면
+  // 중앙에 사면 모두 둥근 별도 창처럼 띄우기 위해 sheetBase/modalOverlay 대신 사용한다.
+  editPopupOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },
+  editPopupCard: {
+    backgroundColor: C.surfaceHigh, borderRadius: 20, width: '100%', maxWidth: 480,
+    paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24,
+    ...(Platform.OS === 'web' ? { boxShadow: '0 12px 40px rgba(0,0,0,0.45)' } : {
+      shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 12,
+    }),
+  },
   modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2 },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
