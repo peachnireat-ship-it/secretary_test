@@ -480,6 +480,42 @@ export default function MessageScreen() {
     );
   }
 
+  // 받은/보낸함 탭(모바일 상단 전체 폭 / PC는 좌측 목록 컬럼 안에서 공용으로 재사용).
+  function renderBoxTabs() {
+    return (
+      <View style={s.boxRow}>
+        {BOXES.map((b) => (
+          <TouchableOpacity
+            key={b.key}
+            style={[s.boxTab, box === b.key && s.boxTabActive]}
+            onPress={() => { setBox(b.key); setFilter('전체'); setShowDetail(false); setDetailMsg(null); setEditMode(false); setReplyMode(false); }}
+          >
+            <Text style={[s.boxText, box === b.key && s.boxTextActive]}>{b.label}</Text>
+            {b.key === 'received' && unreadCount > 0 && (
+              <View style={s.badge}><Text style={s.badgeText}>{unreadCount}</Text></View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  }
+
+  // 상태 필터 탭(모바일 상단 전체 폭 / PC는 좌측 목록 컬럼 안에서 공용으로 재사용).
+  function renderFilterTabs() {
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterWrap} contentContainerStyle={s.filterRow}>
+        {FILTERS.map((f) => (
+          <TouchableOpacity key={f} style={[s.filterTab, filter === f && s.filterTabActive]} onPress={() => setFilter(f)}>
+            <Text style={[s.filterText, filter === f && s.filterTextActive]}>{f}</Text>
+            {f === '미확인' && unreadCount > 0 && (
+              <View style={s.badge}><Text style={s.badgeText}>{unreadCount}</Text></View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    );
+  }
+
   // 메세지 카드 렌더링(모바일 세로 목록 / PC 좌측 컬럼 공용). PC에서 선택된 항목에는
   // cardPCActive 강조가 추가로 붙는다(모바일에서는 IS_PC가 false라 무효 — byte-동일 동작).
   function renderMessageCard(item) {
@@ -529,38 +565,17 @@ export default function MessageScreen() {
         </View>
       </View>
 
-      {/* 받은/보낸 박스 탭 */}
-      <View style={s.boxRow}>
-        {BOXES.map((b) => (
-          <TouchableOpacity
-            key={b.key}
-            style={[s.boxTab, box === b.key && s.boxTabActive]}
-            onPress={() => { setBox(b.key); setFilter('전체'); setShowDetail(false); setDetailMsg(null); setEditMode(false); setReplyMode(false); }}
-          >
-            <Text style={[s.boxText, box === b.key && s.boxTextActive]}>{b.label}</Text>
-            {b.key === 'received' && unreadCount > 0 && (
-              <View style={s.badge}><Text style={s.badgeText}>{unreadCount}</Text></View>
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* 필터 탭 */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterWrap} contentContainerStyle={s.filterRow}>
-        {FILTERS.map((f) => (
-          <TouchableOpacity key={f} style={[s.filterTab, filter === f && s.filterTabActive]} onPress={() => setFilter(f)}>
-            <Text style={[s.filterText, filter === f && s.filterTextActive]}>{f}</Text>
-            {f === '미확인' && unreadCount > 0 && (
-              <View style={s.badge}><Text style={s.badgeText}>{unreadCount}</Text></View>
-            )}
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* 모바일: 받은/보낸 박스 탭 + 필터 탭이 전체 폭 상단에 놓인다. PC는 아래 좌측 목록
+          컬럼(listColumn) 안으로 옮겨 목록 카드와 한 영역으로 묶고, 남은 폭 전체를 상세 패널이 쓴다. */}
+      {!showDetailPanel && renderBoxTabs()}
+      {!showDetailPanel && renderFilterTabs()}
 
       {/* 메세지 목록 (PC: 좌측 목록+우측 상세패널 / 모바일: 세로 목록+하단시트) */}
       {showDetailPanel ? (
         <View style={s.bodyPC}>
           <View style={s.listColumn}>
+            {renderBoxTabs()}
+            {renderFilterTabs()}
             <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
               {filtered.length === 0 ? (
                 <View style={s.emptyWrap}>
@@ -737,10 +752,12 @@ const s = StyleSheet.create({
   emptyText: { color: C.textDim, fontSize: 14 },
   emptyHint: { color: C.textDim, fontSize: 11 },
 
-  // PC 마스터-디테일 레이아웃(ProjectScreen의 mineBodyPC/gridColumn/detailPanel과 동일 패턴)
+  // PC 마스터-디테일 레이아웃. 받은/보낸 탭 + 필터 + 목록 카드를 좌측 고정폭 컬럼 하나로
+  // 묶어 폭을 줄이고, 남은 공간 전체를 상세 패널이 차지한다(ProjectScreen 등과 달리 목록보다
+  // 상세를 더 넓게 쓰는 편지함형 레이아웃).
   bodyPC: { flex: 1, flexDirection: 'row' },
-  listColumn: { flex: 1 },
-  detailPanel: { width: 400, borderLeftWidth: 1, borderLeftColor: C.border, paddingHorizontal: 20, paddingTop: 12 },
+  listColumn: { width: 380, borderRightWidth: 1, borderRightColor: C.border },
+  detailPanel: { flex: 1, paddingHorizontal: 24, paddingTop: 16 },
   detailPanelEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 },
   detailPanelEmptyText: { color: C.textDim, fontSize: 13 },
 
