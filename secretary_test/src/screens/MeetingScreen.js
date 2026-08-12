@@ -4,6 +4,7 @@ import {
   Modal, TextInput, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
 import { Alert } from '../utils/alertCompat';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -109,6 +110,7 @@ export default function MeetingScreen({ navigation }) {
   const {
     elapsed, loading, loadingMsg, transcript, summary, transcriptSource, errorMsg,
     pickedFile, recording, saved, tasks, tasksLoading, selectedTaskIndices, pickedAfterTranscript,
+    recordedUri,
     setTranscript, setSummary, setSaved, setErrorMsg, setSelectedTaskIndices,
     startRecording, stopAndTranscribe, pickFile, transcribeFile, toggleTaskSelect, runExtractTasks,
   } = useAudioRecording({
@@ -117,6 +119,50 @@ export default function MeetingScreen({ navigation }) {
     onFileReplace: () => { scrollToTopOnPickRef.current = true; },
     onError: (e) => handleApiError(e),
   });
+
+  // 재생 대상 우선순위: 직접 녹음 직후엔 recordedUri, 파일을 새로 고르면 pickedFile.uri
+  // (useAudioRecording이 startRecording/pickFile 시점에 서로를 정리하므로 여기서는 단순 우선순위 판단만 함)
+  const playbackUri = recordedUri || pickedFile?.uri || null;
+  const showAudioPlayback = !!playbackUri && !recording;
+  const audioPlayer = useAudioPlayer(playbackUri);
+  const audioPlayerStatus = useAudioPlayerStatus(audioPlayer);
+
+  async function handleToggleAudioPlay() {
+    if (audioPlayerStatus.playing) {
+      audioPlayer.pause();
+      return;
+    }
+    // expo-audio는 재생 종료 후 위치를 자동으로 되감지 않으므로 다시 듣기 전 되감기 필요
+    if (audioPlayerStatus.didJustFinish) {
+      await audioPlayer.seekTo(0);
+    }
+    audioPlayer.play();
+  }
+
+  function renderAudioPlaybackCard() {
+    if (!showAudioPlayback) return null;
+    const curSec = Math.max(0, Math.floor(audioPlayerStatus.currentTime || 0));
+    const durSec = Math.max(0, Math.floor(audioPlayerStatus.duration || 0));
+    const progressPct = durSec > 0 ? Math.min(100, (curSec / durSec) * 100) : 0;
+    return (
+      <View style={s.section}>
+        <Text style={s.sectionLabel}>AUDIO PLAYBACK</Text>
+        <View style={s.card}>
+          <View style={s.audioPlaybackRow}>
+            <TouchableOpacity style={s.audioPlayBtn} onPress={handleToggleAudioPlay} activeOpacity={0.8}>
+              <Text style={s.audioPlayBtnText}>{audioPlayerStatus.playing ? '❚❚' : '▶'}</Text>
+            </TouchableOpacity>
+            <View style={commonStyles.flex1}>
+              <View style={s.audioProgressBarBg}>
+                <View style={[s.audioProgressBarFill, { width: `${progressPct}%` }]} />
+              </View>
+              <Text style={s.audioTimeText}>{formatTime(curSec)} / {formatTime(durSec)}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   const swipeNewClient = useSwipeClose(() => setShowNewClientModal(false), showNewClientModal);
   const swipePerson = useSwipeClose(() => setSelectedPersonClient(null), !!selectedPersonClient);
@@ -1337,6 +1383,9 @@ export default function MeetingScreen({ navigation }) {
             </View>
           )}
 
+          {/* 변환 완료 후에도 원본 녹음/업로드 오디오를 다시 들을 수 있도록 표시 */}
+          {!!transcript && renderAudioPlaybackCard()}
+
           {/* 변환 전: 헤더, 녹음, 파일 업로드 */}
           {!transcript && (
             <>
@@ -1399,12 +1448,14 @@ export default function MeetingScreen({ navigation }) {
                           <View style={s.recordDot} />
                         </TouchableOpacity>
                         <Text style={s.recordHint}>버튼을 눌러 녹음을 시작하세요</Text>
-                        <Text style={s.recordInfo}>녹음 파일은 저장되지 않으며{'\n'}중지 후 바로 텍스트로 변환됩니다</Text>
+                        <Text style={s.recordInfo}>녹음 파일은 서버에 저장되지 않으며{'\n'}중지 후 바로 텍스트로 변환됩니다</Text>
                       </>
                     )}
                   </View>
                 </View>
               </View>
+
+              {renderAudioPlaybackCard()}
 
               {/* 파일 업로드 */}
               <View style={s.section}>
@@ -1801,6 +1852,16 @@ const s = StyleSheet.create({
   },
   transcribeBtnDisabled: { opacity: 0.4 },
   transcribeBtnText: { color: C.accentBlue, fontSize: 14, fontWeight: '500' },
+  audioPlaybackRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18 },
+  audioPlayBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: C.accentTeal + '22', borderWidth: 1, borderColor: C.accentTeal + '55',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  audioPlayBtnText: { color: C.accentTeal, fontSize: 15 },
+  audioProgressBarBg: { height: 4, borderRadius: 2, backgroundColor: C.border, overflow: 'hidden', marginBottom: 8 },
+  audioProgressBarFill: { height: 4, borderRadius: 2, backgroundColor: C.accentTeal },
+  audioTimeText: { color: C.textDim, fontSize: 11, letterSpacing: 0.3 },
   loadingBox: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20, justifyContent: 'center' },
   loadingText: { color: C.textSecondary, fontSize: 13 },
   errorBox: { backgroundColor: C.red + '18', borderWidth: 1, borderColor: C.red + '44', borderRadius: 10, padding: 14, marginBottom: 20 },

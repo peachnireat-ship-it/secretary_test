@@ -34,6 +34,7 @@ export function useAudioRecording({ diarize, resetDiarization, onFileReplace, on
   const [pickedFile, setPickedFile] = useState(null);
   const [recording, setRecording] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [recordedUri, setRecordedUri] = useState(null);
 
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
@@ -55,6 +56,7 @@ export function useAudioRecording({ diarize, resetDiarization, onFileReplace, on
     setSummary('');
     setTranscriptSource('');
     setSaved(false);
+    setRecordedUri(null);
     const perm = await AudioModule.requestRecordingPermissionsAsync();
     if (!perm.granted) {
       setErrorMsg('마이크 권한이 필요합니다.');
@@ -83,6 +85,7 @@ export function useAudioRecording({ diarize, resetDiarization, onFileReplace, on
       setErrorMsg('녹음 파일을 찾을 수 없습니다.');
       return;
     }
+    setRecordedUri(uri);
     await runTranscribe(uri, 'audio/m4a', '직접 녹음');
   }
 
@@ -97,6 +100,7 @@ export function useAudioRecording({ diarize, resetDiarization, onFileReplace, on
       setErrorMsg('오디오 파일을 선택해 주세요.');
       return;
     }
+    setRecordedUri(null);
     if (transcript) {
       setTranscript('');
       setSummary('');
@@ -216,6 +220,7 @@ export function useAudioRecording({ diarize, resetDiarization, onFileReplace, on
   return {
     elapsed, loading, loadingMsg, transcript, summary, transcriptSource, errorMsg,
     pickedFile, recording, saved, tasks, tasksLoading, selectedTaskIndices, pickedAfterTranscript,
+    recordedUri,
     setTranscript, setSummary, setSaved, setErrorMsg, setSelectedTaskIndices,
     startRecording, stopAndTranscribe, pickFile, transcribeFile, toggleTaskSelect, runExtractTasks,
   };
