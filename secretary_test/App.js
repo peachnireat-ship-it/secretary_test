@@ -12,6 +12,7 @@ import { IS_PC } from './src/utils/deviceType';
 import PCSidebar, { PC_SIDEBAR_WIDTH } from './src/components/PCSidebar';
 import ProjectAddPopup from './src/screens/ProjectAddPopup';
 import MessageAddPopup from './src/screens/MessageAddPopup';
+import ScheduleAddPopup from './src/screens/ScheduleAddPopup';
 
 const Tab = createBottomTabNavigator();
 
@@ -155,6 +156,16 @@ export default function App() {
       <UserProvider>
         <SafeAreaProvider>
           <MessageAddPopup />
+        </SafeAreaProvider>
+      </UserProvider>
+    );
+  }
+
+  if (POPUP_ROUTE === 'schedule-new') {
+    return (
+      <UserProvider>
+        <SafeAreaProvider>
+          <ScheduleAddPopup />
         </SafeAreaProvider>
       </UserProvider>
     );

@@ -447,24 +447,24 @@ export default function MessageScreen() {
               </TouchableOpacity>
             </>
           ) : !editMode ? (
-            <>
-              <TouchableOpacity style={s.cancelBtn} onPress={() => Alert.alert('삭제', `"${detailMsg.subject}" 메세지를 삭제할까요?`, [
+            <View style={s.pairRow}>
+              {detailMsg.direction === 'received' && (
+                <TouchableOpacity style={[s.pairBtn, s.pairBtnTeal]} onPress={() => startReply(detailMsg)}>
+                  <Text style={s.confirmText}>답장</Text>
+                </TouchableOpacity>
+              )}
+              {detailMsg.direction === 'sent' && (
+                <TouchableOpacity style={[s.pairBtn, s.pairBtnPurple]} onPress={() => startEdit(detailMsg)}>
+                  <Text style={s.confirmText}>수정</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={[s.pairBtn, s.pairBtnOutline]} onPress={() => Alert.alert('삭제', `"${detailMsg.subject}" 메세지를 삭제할까요?`, [
                 { text: '취소', style: 'cancel' },
                 { text: '삭제', style: 'destructive', onPress: async () => { setMessages(await deleteMessage(detailMsg.id)); setShowDetail(false); } },
               ])}>
                 <Text style={[s.cancelText, s.textRed]}>삭제</Text>
               </TouchableOpacity>
-              {detailMsg.direction === 'received' && (
-                <TouchableOpacity style={[s.confirmBtn, s.confirmBtnTeal]} onPress={() => startReply(detailMsg)}>
-                  <Text style={s.confirmText}>답장</Text>
-                </TouchableOpacity>
-              )}
-              {detailMsg.direction === 'sent' && (
-                <TouchableOpacity style={s.confirmBtn} onPress={() => startEdit(detailMsg)}>
-                  <Text style={s.confirmText}>수정</Text>
-                </TouchableOpacity>
-              )}
-            </>
+            </View>
           ) : (
             <>
               <TouchableOpacity style={s.cancelBtn} onPress={() => setEditMode(false)}>
@@ -752,11 +752,9 @@ const s = StyleSheet.create({
   emptyText: { color: C.textDim, fontSize: 14 },
   emptyHint: { color: C.textDim, fontSize: 11 },
 
-  // PC 마스터-디테일 레이아웃. 받은/보낸 탭 + 필터 + 목록 카드를 좌측 고정폭 컬럼 하나로
-  // 묶어 폭을 줄이고, 남은 공간 전체를 상세 패널이 차지한다(ProjectScreen 등과 달리 목록보다
-  // 상세를 더 넓게 쓰는 편지함형 레이아웃).
+  // PC 마스터-디테일 레이아웃. 목록/상세를 동일한 폭(flex:1)으로 절반씩 나눈다.
   bodyPC: { flex: 1, flexDirection: 'row' },
-  listColumn: { width: 380, borderRightWidth: 1, borderRightColor: C.border },
+  listColumn: { flex: 1, borderRightWidth: 1, borderRightColor: C.border },
   detailPanel: { flex: 1, paddingHorizontal: 24, paddingTop: 16 },
   detailPanelEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 },
   detailPanelEmptyText: { color: C.textDim, fontSize: 13 },
@@ -817,6 +815,12 @@ const s = StyleSheet.create({
   cancelText: { color: C.textSecondary, fontSize: 14 },
   confirmBtn: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentPurple, alignItems: 'center' },
   confirmText: { color: '#ECEAF5', fontSize: 14, fontWeight: '600' },
+  // 상세 패널 보기 모드의 답장/수정·삭제 버튼: 폭을 고정 동일값으로 맞추고 패널 기준 가운데 정렬
+  pairRow: { flex: 1, flexDirection: 'row', gap: 12, justifyContent: 'center' },
+  pairBtn: { width: 140, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  pairBtnOutline: { borderWidth: 1, borderColor: C.border },
+  pairBtnTeal: { backgroundColor: C.accentTeal },
+  pairBtnPurple: { backgroundColor: C.accentPurple },
 
   closeBtn: { color: C.textSecondary, fontSize: 18, padding: 4 },
 
@@ -830,5 +834,4 @@ const s = StyleSheet.create({
   h120: { height: 120 },
   h100: { height: 100 },
   textRed: { color: C.red },
-  confirmBtnTeal: { backgroundColor: C.accentTeal },
 });

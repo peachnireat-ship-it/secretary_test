@@ -296,6 +296,11 @@ export default function ProjectScreen({ navigation, route }) {
     if (target) {
       if (target.originProjectId) {
         openMirrorDetail(target);
+      } else if (IS_PC) {
+        // PC는 마스터-디테일 레이아웃(showDetailPanel)이라 "내 프로젝트" 뷰에서 상세 패널로 바로 연다.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setViewMode('mine');
+        openDetail(target);
       } else {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setViewProject(target);
@@ -1195,23 +1200,41 @@ export default function ProjectScreen({ navigation, route }) {
       </>
       ) : (
       <>
-      {/* ── 필터 탭 ── */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterWrap} contentContainerStyle={s.filterRow}>
-        {FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[s.filterTab, filter === f && s.filterTabActive]}
-            onPress={() => setFilter(f)}
-          >
-            <Text style={[s.filterText, filter === f && s.filterTextActive]}>{f}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* ── 필터 탭 (모바일: FAB 그대로 / PC: 그리드 헤더에서 추가 버튼과 한 줄로 표시) ── */}
+      {!showDetailPanel && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterWrap} contentContainerStyle={s.filterRow}>
+          {FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f}
+              style={[s.filterTab, filter === f && s.filterTabActive]}
+              onPress={() => setFilter(f)}
+            >
+              <Text style={[s.filterText, filter === f && s.filterTextActive]}>{f}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {/* ── 프로젝트 목록 (PC: 그리드+우측 상세패널 / 모바일: 세로 목록+하단시트) ── */}
       {showDetailPanel ? (
         <View style={s.mineBodyPC}>
           <View style={s.gridColumn}>
+            <View style={s.gridHeaderRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterWrapPC} contentContainerStyle={s.filterRow}>
+                {FILTERS.map((f) => (
+                  <TouchableOpacity
+                    key={f}
+                    style={[s.filterTab, filter === f && s.filterTabActive]}
+                    onPress={() => setFilter(f)}
+                  >
+                    <Text style={[s.filterText, filter === f && s.filterTextActive]}>{f}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity style={s.addBtnPC} onPress={handleAddPress}>
+                <Text style={s.addBtnPCText}>+ 새 프로젝트</Text>
+              </TouchableOpacity>
+            </View>
             <ScrollView style={s.gridList} contentContainerStyle={s.gridListContent} showsVerticalScrollIndicator={false}>
               {filtered.length === 0 ? (
                 <View style={s.emptyWrap}>
@@ -1222,9 +1245,6 @@ export default function ProjectScreen({ navigation, route }) {
                 filtered.map(renderMineCard)
               )}
             </ScrollView>
-            <TouchableOpacity style={s.fab} onPress={handleAddPress}>
-              <Text style={s.fabText}>+</Text>
-            </TouchableOpacity>
           </View>
           <View style={s.detailPanel}>
             {showDetail && detailProject ? renderDetailFields() : (
@@ -2312,6 +2332,10 @@ const s = StyleSheet.create({
   // 기존 list/listContent/card를 그대로 쓰고 이 스타일들은 참조하지 않는다.
   mineBodyPC: { flex: 1, flexDirection: 'row' },
   gridColumn: { flex: 1 },
+  gridHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, paddingRight: 20 },
+  filterWrapPC: { flex: 1, maxHeight: 44 },
+  addBtnPC: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: C.gold + '22', borderWidth: 1, borderColor: C.gold + '55', borderRadius: 20 },
+  addBtnPCText: { color: C.gold, fontSize: 12, fontWeight: '600' },
   gridList: { flex: 1 },
   gridListContent: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100, gap: 14 },
   cardPC: { width: 320 },
@@ -2335,7 +2359,7 @@ const s = StyleSheet.create({
 
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 16, gap: 10, height: 300, overflow: 'hidden' },
   cardRisk: { borderColor: C.gold + '55' },
-  urgencyBorder: { borderRadius: 14, borderWidth: 2 },
+  urgencyBorder: { borderRadius: 14, borderWidth: 3 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 },

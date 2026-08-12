@@ -61,6 +61,9 @@ function formatDateKo(str) {
 
 const TODAY_STR = dateStr(new Date());
 
+// window.open() 창 이름을 호출마다 고유하게 만들기 위한 카운터 (이유는 MessageScreen.js 참고)
+let popupSeq = 0;
+
 function buildMonthGrid(year, month) {
   // month: 1-based
   const firstDay = new Date(year, month - 1, 1).getDay();
@@ -85,6 +88,11 @@ export default function ScheduleScreen({ navigation, route }) {
   // PC 전용 "등록된 일정·프로젝트" 목록 높이를 달력 그리드 높이와 맞추기 위한 실측값. 그리드 행 수는
   // 월마다 5~6행으로 달라져 고정값을 둘 수 없으므로, 그리드 실제 렌더 높이를 onLayout으로 읽어 저장한다.
   const [gridHeight, setGridHeight] = useState(null);
+  // PC 전용: 달력의 "그리드 위쪽 영역"(월 네비게이션+요일 헤더) 실측 높이. 프로젝트 패널의
+  // "목록 위쪽 영역"(AI/추가 버튼 행+타이틀)에 동일한 높이를 줘서, 달력 그리드와 일정·프로젝트
+  // 목록이 같은 y좌표에서 시작하도록 맞춘다(gridHeight와 동일한 이유로 폰트 렌더링에 따라 고정값을
+  // 둘 수 없어 onLayout 실측 필요).
+  const [calHeaderHeight, setCalHeaderHeight] = useState(null);
 
   const [copyTarget, setCopyTarget] = useState(null);
   const [copyTitleInput, setCopyTitleInput] = useState('');
@@ -240,6 +248,18 @@ export default function ScheduleScreen({ navigation, route }) {
   }, [newClientIds, showAdd]);
 
   useFocusEffect(useCallback(() => { load(); }, []));
+
+  // PC 웹은 "새 일정"을 실제 브라우저 새 창(팝업)으로 띄운다. 저장 완료 시 팝업이 postMessage로
+  // 알려오면 아래 message 리스너가 목록을 새로고침한다. 팝업 차단 등으로 open이 실패하면 기존 모달로 대체.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    function handleMessage(e) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === 'secretary:schedule-created') load();
+    }
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const monthPrefix = `${calYear}-${String(calMonth).padStart(2, '0')}`;
   const monthEnd = `${monthPrefix}-${String(new Date(calYear, calMonth, 0).getDate()).padStart(2, '0')}`;
@@ -612,7 +632,14 @@ export default function ScheduleScreen({ navigation, route }) {
   }
 
   // 모바일 FAB와 PC actionColumn 추가 버튼이 공유하는 핸들러(중복 정의 방지)
+  // PC 웹은 실제 브라우저 새 창(팝업)으로 띄운다. 팝업 차단 등으로 open이 실패하면 기존 모달로 대체.
   function openAddSheet() {
+    if (IS_PC && Platform.OS === 'web') {
+      // 창 이름을 매번 고유하게 줘야 브라우저가 기존에 열려 있던(혹은 사용자가 리사이즈한) 같은 이름의
+      // 창을 재사용하지 않고 매번 지정한 크기로 새로 연다.
+      const popup = window.open('?popup=schedule-new', `secretary-schedule-new-${++popupSeq}`, 'width=560,height=880,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
+      if (popup) return;
+    }
     const defaultDate = selectedDate || (calYear === today.getFullYear() && calMonth === today.getMonth() + 1
       ? TODAY_STR
       : `${calYear}-${String(calMonth).padStart(2, '0')}-01`);
@@ -961,6 +988,10 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 달력(월 네비게이션+요일 헤더+그리드): PC는 넓은 화면에 그리드 칸이 과도하게 커지지 않도록
           모바일 기준 너비로 줄여서 가운데 정렬한다 ── */}
       <View style={s.calendarWrap}>
+      {/* ── 월 네비게이션 + 요일 헤더(달력 그리드 위쪽 영역): 실제 렌더 높이를 onLayout으로 재서
+          calHeaderHeight에 저장 — 우측 프로젝트 패널의 목록 위쪽 영역(pcPanelBtnRow+타이틀)이
+          이 높이를 그대로 받아 달력 그리드와 목록이 같은 y좌표에서 시작하도록 맞춘다 ── */}
+      <View onLayout={IS_PC ? (e) => setCalHeaderHeight(e.nativeEvent.layout.height) : undefined}>
       {/* ── 월 네비게이션 ── */}
       <View style={s.monthNav}>
         <TouchableOpacity onPress={() => moveMonth(-1)} style={s.monthArrow}>
@@ -979,6 +1010,7 @@ export default function ScheduleScreen({ navigation, route }) {
         {DAYS.map((d) => (
           <Text key={d} style={[s.weekDay, d === '일' && { color: '#C45B5B' }, d === '토' && { color: C.accentBlue }]}>{d}</Text>
         ))}
+      </View>
       </View>
 
       {/* ── 캘린더 그리드 ── */}
@@ -1075,18 +1107,23 @@ export default function ScheduleScreen({ navigation, route }) {
           같은 폭(projectPanel의 실제 렌더 폭) 기준으로 우측 끝이 맞도록 한다 ── */}
       {IS_PC && (
         <View style={s.projectPanel}>
-          <TouchableOpacity style={[s.aiBtn, s.pcPanelAiBtn]} onPress={() => setShowAI(true)}>
-            <Text style={s.aiBtnText}>✦ AI</Text>
-          </TouchableOpacity>
-          <Text style={s.projectPanelTitle}>등록된 일정 · 프로젝트</Text>
+          {/* calHeaderHeight(달력 위쪽 영역 실측값, 인라인 유지 — gridHeight와 동일한 이유)를 그대로
+              적용해, 아래 목록이 달력 그리드와 동일한 y좌표에서 시작하도록 맞춘다. 내부 버튼 행+타이틀은
+              justifyContent:'flex-start'로 상단 정렬한다. */}
+          <View style={[s.projectPanelHeader, calHeaderHeight ? { height: calHeaderHeight } : null]}>
+            <View style={s.pcPanelBtnRow}>
+              <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+                <Text style={s.aiBtnText}>✦ AI</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.pcAddBtnInline} onPress={openAddSheet}>
+                <Text style={s.pcAddBtnInlineText}>+ 새 일정</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={s.projectPanelTitle}>등록된 일정 · 프로젝트</Text>
+          </View>
           {dayProjects.length === 0 && daySchedules.length === 0 ? (
             <Text style={s.projectPanelEmpty}>등록된 일정·프로젝트가 없습니다</Text>
           ) : (
-            // gridHeight는 좌측 달력 그리드(gridClip)의 onLayout 실측값 — 월별 5~6행 차이로
-            // StyleSheet 고정값을 둘 수 없어 인라인으로 유지. flex:0은 RN(Yoga)에서
-            // flexBasis:0%로 변환되어 flex-basis가 main-axis(세로, 부모가 column)의 height를
-            // 덮어써 버려 목록이 0px로 찌그러지는 버그가 있었다 — flexBasis:'auto'를 명시해
-            // height가 실제로 적용되도록 해야 한다.
             <ScrollView
               nativeID="schedule-project-panel-list"
               style={[s.projectPanelList, gridHeight ? [s.projectPanelListMeasured, { height: gridHeight }] : null]}
@@ -1156,9 +1193,6 @@ export default function ScheduleScreen({ navigation, route }) {
               })}
             </ScrollView>
           )}
-          <TouchableOpacity style={[s.pcAddBtn, s.pcPanelAddBtn]} onPress={openAddSheet}>
-            <Text style={s.fabText}>+</Text>
-          </TouchableOpacity>
         </View>
       )}
 
@@ -1815,7 +1849,7 @@ export default function ScheduleScreen({ navigation, route }) {
   );
 }
 
-function to24h(ampm, time12) {
+export function to24h(ampm, time12) {
   const parts = time12.split(':');
   let h = parseInt(parts[0], 10) || 0;
   const m = parseInt(parts[1], 10) || 0;
@@ -1861,7 +1895,7 @@ function formatStartDateTime(schedule) {
   return formatDateTimeKo(`${datePart} ${schedule.time || '00:00'}`);
 }
 
-function fmtTime12(text) {
+export function fmtTime12(text) {
   const d = text.replace(/\D/g, '').slice(0, 4);
   if (d.length <= 1) return d;
   const hRaw = parseInt(d.slice(0, 2), 10);
@@ -1874,7 +1908,7 @@ function fmtTime12(text) {
   return `${hStr}:${String(Math.min(mRaw, 59)).padStart(2, '0')}`;
 }
 
-function fmtDate(text) {
+export function fmtDate(text) {
   const d = text.replace(/\D/g, '').slice(0, 8);
   if (d.length <= 4) return d;
   if (d.length <= 6) return `${d.slice(0, 4)}-${d.slice(4)}`;
@@ -1931,6 +1965,9 @@ const s = StyleSheet.create({
   // calendarRow가 row일 때 align-items 기본값(stretch)으로 캘린더와 높이가 맞춰져, 내부
   // ScrollView(flex:1)가 유효한 높이를 가지고 스크롤할 수 있게 된다.
   projectPanel: { flex: 1 },
+  // 목록 위쪽 영역(버튼 행+타이틀) 컨테이너: calHeaderHeight를 인라인으로 받아 달력 위쪽 영역과
+  // 높이를 맞추고, flex-start로 상단 정렬해 버튼 행이 위쪽에 위치하게 한다.
+  projectPanelHeader: { justifyContent: 'flex-start' },
   projectPanelTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '600', letterSpacing: 0.5, marginBottom: 12 },
   projectPanelList: { flex: 1 },
   // gridHeight(달력 그리드 실측 높이, 인라인 유지) 적용 시 함께 켜지는 정적 부분만 분리.
@@ -1939,13 +1976,11 @@ const s = StyleSheet.create({
   projectPanelListMeasured: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
   projectPanelListContent: { gap: 10, paddingBottom: 24 },
   projectPanelEmpty: { color: C.textDim, fontSize: 12 },
-  // AI 버튼: projectPanel(flex:1) 안에서 alignSelf:'flex-end'로 우측 끝을 패널 폭 기준에 정확히
-  // 맞추고, "등록된 일정 · 프로젝트" 텍스트 위에 오도록 아래쪽에 여백을 둔다.
-  pcPanelAiBtn: { alignSelf: 'flex-end', marginBottom: 12 },
-  pcAddBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentBlue, alignItems: 'center', justifyContent: 'center' },
-  // 추가 버튼: 마찬가지로 패널 우측 끝에 맞추되, 목록(ScrollView/빈 상태 텍스트) 아래에 오도록
-  // 위쪽에 여백을 둔다.
-  pcPanelAddBtn: { alignSelf: 'flex-end', marginTop: 12 },
+  // AI/추가 버튼 행: projectPanel(flex:1) 안에서 alignSelf:'flex-end'로 우측 끝을 패널 폭 기준에
+  // 정확히 맞추고, "등록된 일정 · 프로젝트" 텍스트 위에 오도록 아래쪽에 여백을 둔다.
+  pcPanelBtnRow: { flexDirection: 'row', alignSelf: 'flex-end', gap: 8, marginBottom: 12 },
+  pcAddBtnInline: { paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 20 },
+  pcAddBtnInlineText: { color: C.accentBlue, fontSize: 12, fontWeight: '600' },
   // 상세 보기 패널(PC 전용 3번째 칼럼): projectPanel과 동일하게 flex:1로 calendarRow의 stretch
   // 정렬을 받아 캘린더 높이에 맞춰진다. 모달(sheetBase+modalSheet)과 달리 바텀시트가 아니라
   // 상시 노출되는 카드형 패널이라 자체 배경/모서리/여백을 둔다.

@@ -5,10 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
 import HomeMapCard from '../components/HomeMapCard';
-import { getSchedules, getClients, getProjects } from '../services/storage';
+import { getSchedules, getProjects, getMessages, getMeetingRecords } from '../services/storage';
 import { watchLocation } from '../services/location';
 import { statusColor, tagColor } from '../utils/colors';
-import { todayStr } from '../utils/dateUtils';
+import { todayStr, formatDate } from '../utils/dateUtils';
 import { useUser } from '../context/UserContext';
 import { IS_PC } from '../utils/deviceType';
 
@@ -22,6 +22,18 @@ function useNow() {
     return () => clearInterval(id);
   }, []);
   return now;
+}
+
+function timeAgo(ms) {
+  if (!ms) return '';
+  const min = Math.floor((Date.now() - ms) / 60000);
+  if (min < 1) return '방금 전';
+  if (min < 60) return `${min}분 전`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour}시간 전`;
+  const day = Math.floor(hour / 24);
+  if (day < 7) return `${day}일 전`;
+  return formatDate(ms);
 }
 
 function greeting(h) {
@@ -50,11 +62,12 @@ export default function HomeScreen({ navigation }) {
   const { user } = useUser();
 
   const [todaySchedules, setTodaySchedules] = useState([]);
-  const [clientCount, setClientCount] = useState(0);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [activeProjectCount, setActiveProjectCount] = useState(0);
   const [delayedProjectCount, setDelayedProjectCount] = useState(0);
   const [activeProjects, setActiveProjects] = useState([]);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [recentActivity, setRecentActivity] = useState([]);
   const [locationText, setLocationText] = useState('위치 확인 중...');
   const [coords, setCoords] = useState(null);
 
@@ -86,10 +99,11 @@ export default function HomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       async function load() {
-        const [schedules, clients, projects] = await Promise.all([
+        const [schedules, projects, messages, meetingRecords] = await Promise.all([
           getSchedules(),
-          getClients(),
           getProjects(),
+          getMessages(),
+          getMeetingRecords(),
         ]);
         const today = todayStr();
         const todays = schedules
@@ -103,20 +117,47 @@ export default function HomeScreen({ navigation }) {
           })
           .sort((a, b) => a.time.localeCompare(b.time));
         setTodaySchedules(todays);
-        setClientCount(clients.length);
         const active = projects.filter((p) => p.status !== '완료' && p.status !== '취소');
         setActiveProjectCount(active.length);
         setActiveProjects(active);
         setDelayedProjectCount(projects.filter((p) => p.status === '지연' || p.status === '위험').length);
+        setUnreadMessageCount(messages.filter((m) =>
+          (m.direction || 'received') === 'received' &&
+          m.status === '미확인' &&
+          m.toId === user?.id
+        ).length);
+
+        const activities = [
+          ...schedules.map((sc) => ({
+            id: `schedule-${sc.id}`, icon: C.accentBlue, label: '일정 등록',
+            title: sc.title, time: sc.createdAt, tab: '일정',
+          })),
+          ...projects.map((p) => ({
+            id: `project-${p.id}`, icon: statusColor(p.status),
+            label: p.updatedAt && p.updatedAt !== p.createdAt ? '프로젝트 수정' : '프로젝트 등록',
+            title: p.title, time: p.updatedAt || p.createdAt, tab: '프로젝트', params: { openProjectId: p.id },
+          })),
+          ...messages
+            .filter((m) => (m.direction || 'received') === 'received' && m.toId === user?.id)
+            .map((m) => ({
+              id: `message-${m.id}`, icon: C.accentPurple, label: '메세지 수신',
+              title: m.subject, time: m.createdAt, tab: '메세지',
+            })),
+          ...meetingRecords.map((r) => ({
+            id: `meeting-${r.id}`, icon: C.accentTeal, label: '회의록 저장',
+            title: r.title, time: r.createdAt, tab: '회의록',
+          })),
+        ].sort((a, b) => (b.time || 0) - (a.time || 0));
+        setRecentActivity(activities.slice(0, 6));
       }
       load();
-    }, [])
+    }, [user?.id])
   );
 
   const STATS = [
     { label: '오늘 일정', value: String(todaySchedules.length), unit: '건', color: C.accentBlue, tab: '일정' },
     { label: '프로젝트', value: String(activeProjectCount), unit: '건', color: C.accentPurple, tab: '프로젝트' },
-    { label: '담당자', value: String(clientCount), unit: '곳', color: C.accentTeal, tab: '거래처' },
+    { label: '미확인 메세지', value: String(unreadMessageCount), unit: '건', color: unreadMessageCount > 0 ? C.accentPurple : C.textSecondary, tab: '메세지' },
     { label: '지연·위험', value: String(delayedProjectCount), unit: '건', color: delayedProjectCount > 0 ? C.red : C.textSecondary, tab: '프로젝트' },
   ];
 
@@ -156,11 +197,11 @@ export default function HomeScreen({ navigation }) {
               style={s.statCard}
               onPress={() => item.tab && navigation.navigate(item.tab)}
             >
+              <Text style={s.statLabel}>{item.label}</Text>
               <View style={s.statValueRow}>
                 <Text style={[s.statValue, { color: item.color }]}>{item.value}</Text>
                 <Text style={s.statUnit}>{item.unit}</Text>
               </View>
-              <Text style={s.statLabel}>{item.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -201,41 +242,72 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* ── 진행중 프로젝트 ── */}
+      {/* ── 진행중 프로젝트 / 최근 활동 ── */}
       <View style={s.section}>
-        <Text style={s.sectionLabel}>ACTIVE PROJECTS</Text>
-        <View style={s.card}>
-          {activeProjects.length === 0 ? (
-            <View style={s.agendaEmpty}>
-              <Text style={s.agendaEmptyText}>진행중인 프로젝트가 없습니다</Text>
+        <View style={IS_PC ? s.twoColRow : s.twoColStack}>
+          <View style={IS_PC ? s.twoCol : undefined}>
+            <Text style={s.sectionLabel}>ACTIVE PROJECTS</Text>
+            <View style={s.card}>
+              {activeProjects.length === 0 ? (
+                <View style={s.agendaEmpty}>
+                  <Text style={s.agendaEmptyText}>진행중인 프로젝트가 없습니다</Text>
+                </View>
+              ) : (
+                activeProjects.slice(0, 3).map((item, i) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    activeOpacity={0.7}
+                    style={[s.projectRow, i < Math.min(activeProjects.length, 3) - 1 && s.agendaRowBorder]}
+                    onPress={() => navigation.navigate('프로젝트', { openProjectId: item.id })}
+                  >
+                    <View style={[s.projectStatusDot, { backgroundColor: statusColor(item.status) }]} />
+                    <View style={s.projectMiddle}>
+                      <Text style={s.projectTitle} numberOfLines={1}>{item.title}</Text>
+                      <View style={s.progressBarBg}>
+                        <View style={[s.progressBarFill, { width: `${item.progress}%`, backgroundColor: statusColor(item.status) }]} />
+                      </View>
+                    </View>
+                    <View style={s.projectRight}>
+                      <Text style={[s.projectStatus, { color: statusColor(item.status) }]}>{item.status}</Text>
+                      <Text style={s.projectDeadline}>{item.deadline}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+              {activeProjects.length > 3 && (
+                <TouchableOpacity style={s.agendaMore} onPress={() => navigation.navigate('프로젝트')}>
+                  <Text style={s.agendaMoreText}>+{activeProjects.length - 3}건 더 보기</Text>
+                </TouchableOpacity>
+              )}
             </View>
-          ) : (
-            activeProjects.slice(0, 3).map((item, i) => (
-              <TouchableOpacity
-                key={item.id}
-                activeOpacity={0.7}
-                style={[s.projectRow, i < Math.min(activeProjects.length, 3) - 1 && s.agendaRowBorder]}
-                onPress={() => navigation.navigate('프로젝트')}
-              >
-                <View style={[s.projectStatusDot, { backgroundColor: statusColor(item.status) }]} />
-                <View style={s.projectMiddle}>
-                  <Text style={s.projectTitle} numberOfLines={1}>{item.title}</Text>
-                  <View style={s.progressBarBg}>
-                    <View style={[s.progressBarFill, { width: `${item.progress}%`, backgroundColor: statusColor(item.status) }]} />
-                  </View>
+          </View>
+
+          <View style={IS_PC ? s.twoCol : undefined}>
+            <Text style={s.sectionLabel}>RECENT ACTIVITY</Text>
+            <View style={s.card}>
+              {recentActivity.length === 0 ? (
+                <View style={s.agendaEmpty}>
+                  <Text style={s.agendaEmptyText}>최근 활동이 없습니다</Text>
                 </View>
-                <View style={s.projectRight}>
-                  <Text style={[s.projectStatus, { color: statusColor(item.status) }]}>{item.status}</Text>
-                  <Text style={s.projectDeadline}>{item.deadline}</Text>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-          {activeProjects.length > 3 && (
-            <TouchableOpacity style={s.agendaMore} onPress={() => navigation.navigate('프로젝트')}>
-              <Text style={s.agendaMoreText}>+{activeProjects.length - 3}건 더 보기</Text>
-            </TouchableOpacity>
-          )}
+              ) : (
+                recentActivity.map((item, i) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    activeOpacity={0.7}
+                    style={[s.activityRow, i < recentActivity.length - 1 && s.agendaRowBorder]}
+                    onPress={() => item.tab && navigation.navigate(item.tab, item.params)}
+                  >
+                    <View style={[s.activityDot, { backgroundColor: item.icon }]} />
+                    <View style={s.activityMiddle}>
+                      <Text style={s.activityTitle} numberOfLines={1}>{item.title || '(제목 없음)'}</Text>
+                      <Text style={s.activityLabel}>{item.label}</Text>
+                    </View>
+                    <Text style={s.activityTime}>{timeAgo(item.time)}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          </View>
         </View>
       </View>
 
@@ -366,7 +438,7 @@ const s = StyleSheet.create({
   statValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
   statValue: { fontSize: 22, fontWeight: '300' },
   statUnit: { color: C.textDim, fontSize: 10 },
-  statLabel: { color: C.textSecondary, fontSize: 11, marginTop: 2 },
+  statLabel: { color: C.textSecondary, fontSize: 11, marginBottom: 2 },
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, overflow: 'hidden' },
   agendaRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   agendaRowBorder: { borderBottomWidth: 1, borderBottomColor: C.border },
@@ -419,4 +491,13 @@ const s = StyleSheet.create({
   projectRight: { alignItems: 'flex-end', gap: 3 },
   projectStatus: { fontSize: 10, fontWeight: '600', letterSpacing: 0.5 },
   projectDeadline: { color: C.textDim, fontSize: 10 },
+  twoColRow: { flexDirection: 'row', gap: 16 },
+  twoColStack: { gap: 32 },
+  twoCol: { flex: 1 },
+  activityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+  activityDot: { width: 8, height: 8, borderRadius: 4 },
+  activityMiddle: { flex: 1, gap: 3 },
+  activityTitle: { color: C.textPrimary, fontSize: 13 },
+  activityLabel: { color: C.textDim, fontSize: 10 },
+  activityTime: { color: C.textDim, fontSize: 10 },
 });
