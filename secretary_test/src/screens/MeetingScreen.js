@@ -729,20 +729,20 @@ export default function MeetingScreen({ navigation }) {
             <Text style={s.segmentEditBtnText}>화자 수정</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[s.rediarizeBtn, (!!rediarizingId || !!fixingForeignId) && s.rediarizeBtnDisabled]}
+            style={[s.rediarizeBtn, (rediarizingId === item.id || fixingForeignId === item.id) && s.rediarizeBtnDisabled]}
             onPress={() => openRediarizeModal(item)}
             activeOpacity={0.7}
-            disabled={!!rediarizingId || !!fixingForeignId}
+            disabled={rediarizingId === item.id || fixingForeignId === item.id}
           >
             <Text style={s.rediarizeBtnText}>
               {rediarizingId === item.id ? '재분리 중…' : '화자 재분리'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[s.fixForeignBtn, (!!fixingForeignId || !!rediarizingId) && s.fixForeignBtnDisabled]}
+            style={[s.fixForeignBtn, (fixingForeignId === item.id || rediarizingId === item.id) && s.fixForeignBtnDisabled]}
             onPress={() => runFixForeignWords(item)}
             activeOpacity={0.7}
-            disabled={!!fixingForeignId || !!rediarizingId}
+            disabled={fixingForeignId === item.id || rediarizingId === item.id}
           >
             <Text style={s.fixForeignBtnText}>
               {fixingForeignId === item.id ? '수정 중…' : '외국어 수정'}
@@ -1741,20 +1741,20 @@ export default function MeetingScreen({ navigation }) {
                       <Text style={s.segmentEditBtnText}>화자 수정</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[s.rediarizeBtn, (!!rediarizingId || !!fixingForeignId) && s.rediarizeBtnDisabled]}
+                      style={[s.rediarizeBtn, (rediarizingId === item.id || fixingForeignId === item.id) && s.rediarizeBtnDisabled]}
                       onPress={() => openRediarizeModal(item)}
                       activeOpacity={0.7}
-                      disabled={!!rediarizingId || !!fixingForeignId}
+                      disabled={rediarizingId === item.id || fixingForeignId === item.id}
                     >
                       <Text style={s.rediarizeBtnText}>
                         {rediarizingId === item.id ? '재분리 중…' : '화자 재분리'}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[s.fixForeignBtn, (!!fixingForeignId || !!rediarizingId) && s.fixForeignBtnDisabled]}
+                      style={[s.fixForeignBtn, (fixingForeignId === item.id || rediarizingId === item.id) && s.fixForeignBtnDisabled]}
                       onPress={() => runFixForeignWords(item)}
                       activeOpacity={0.7}
-                      disabled={!!fixingForeignId || !!rediarizingId}
+                      disabled={fixingForeignId === item.id || rediarizingId === item.id}
                     >
                       <Text style={s.fixForeignBtnText}>
                         {fixingForeignId === item.id ? '수정 중…' : '외국어 수정'}
