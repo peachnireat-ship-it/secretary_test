@@ -180,6 +180,9 @@ export default function MeetingScreen({ navigation }) {
 
   useFocusEffect(useCallback(() => {
     if (activeTab === 'history' || IS_PC) loadRecords();
+    // 화면을 벗어날 때 선택(조회) 중이던 회의록을 초기화한다 — 다른 메뉴로 갔다가 돌아왔을 때
+    // 이전 세션에서 보던 요약이 상세 패널(PC)/펼침(모바일)에 그대로 남아있지 않도록 한다.
+    return () => setExpandedId(null);
   }, [activeTab, loadRecords]));
 
   useEffect(() => {
@@ -697,8 +700,11 @@ export default function MeetingScreen({ navigation }) {
     );
   }
 
-  // 저장된 기록 카드 PC 렌더링(좌측 목록 전용). 제목과 액션 버튼 7개를 같은 행에, 메타·요약
-  // 미리보기는 펼침 여부와 무관하게 항상 표시한다(PC에는 "펼침" 개념이 없고 상세는 우측 패널로 이동).
+  // 저장된 기록 카드 PC 렌더링(좌측 목록 전용). 제목은 액션 버튼과 한 행에서 폭을 다투지 않도록
+  // 자체 행에 전체 폭으로 표시하고, 액션 버튼 7개는 그 아래 별도 행(줄바꿈 가능)에 배치한다
+  // (모바일 historyMetaRow/historyBtnRow와 동일한 "제목 분리" 패턴 — 목록 폭이 좁아져도 제목이
+  // 안 보이게 되는 문제를 방지한다). 메타·요약 미리보기는 펼침 여부와 무관하게 항상 표시한다
+  // (PC에는 "펼침" 개념이 없고 상세는 우측 패널로 이동).
   function renderRecordCardPC(item) {
     const isSelected = expandedId === item.id;
     return (
@@ -708,45 +714,43 @@ export default function MeetingScreen({ navigation }) {
         onPress={() => toggleExpand(item.id)}
         activeOpacity={0.85}
       >
-        <View style={s.historyItemPCHeader}>
-          <Text style={s.historyDate} numberOfLines={1}>{item.title || formatDateTime(item.createdAt)}</Text>
-          <View style={s.historyBtnRowPC}>
-            <TouchableOpacity style={s.editTitleBtn} onPress={() => openEditModal(item)} activeOpacity={0.7}>
-              <Text style={s.editTitleBtnText}>제목 변경</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.contentEditBtn} onPress={() => openContentEditModal(item)} activeOpacity={0.7}>
-              <Text style={s.contentEditBtnText}>내용 편집</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.speakerEditBtn} onPress={() => openSpeakerEditModal(item)} activeOpacity={0.7}>
-              <Text style={s.speakerEditBtnText}>화자 변경</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.segmentEditBtn} onPress={() => openSegmentEditModal(item)} activeOpacity={0.7}>
-              <Text style={s.segmentEditBtnText}>화자 수정</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.rediarizeBtn, (!!rediarizingId || !!fixingForeignId) && s.rediarizeBtnDisabled]}
-              onPress={() => openRediarizeModal(item)}
-              activeOpacity={0.7}
-              disabled={!!rediarizingId || !!fixingForeignId}
-            >
-              <Text style={s.rediarizeBtnText}>
-                {rediarizingId === item.id ? '재분리 중…' : '화자 재분리'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.fixForeignBtn, (!!fixingForeignId || !!rediarizingId) && s.fixForeignBtnDisabled]}
-              onPress={() => runFixForeignWords(item)}
-              activeOpacity={0.7}
-              disabled={!!fixingForeignId || !!rediarizingId}
-            >
-              <Text style={s.fixForeignBtnText}>
-                {fixingForeignId === item.id ? '수정 중…' : '외국어 수정'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.deleteBtn} onPress={() => handleDelete(item.id)} activeOpacity={0.7}>
-              <Text style={s.deleteBtnText}>삭제</Text>
-            </TouchableOpacity>
-          </View>
+        <Text style={s.historyDate} numberOfLines={1}>{item.title || formatDateTime(item.createdAt)}</Text>
+        <View style={[s.historyBtnRowPC, s.mt6]}>
+          <TouchableOpacity style={s.editTitleBtn} onPress={() => openEditModal(item)} activeOpacity={0.7}>
+            <Text style={s.editTitleBtnText}>제목 변경</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.contentEditBtn} onPress={() => openContentEditModal(item)} activeOpacity={0.7}>
+            <Text style={s.contentEditBtnText}>내용 편집</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.speakerEditBtn} onPress={() => openSpeakerEditModal(item)} activeOpacity={0.7}>
+            <Text style={s.speakerEditBtnText}>화자 변경</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.segmentEditBtn} onPress={() => openSegmentEditModal(item)} activeOpacity={0.7}>
+            <Text style={s.segmentEditBtnText}>화자 수정</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.rediarizeBtn, (!!rediarizingId || !!fixingForeignId) && s.rediarizeBtnDisabled]}
+            onPress={() => openRediarizeModal(item)}
+            activeOpacity={0.7}
+            disabled={!!rediarizingId || !!fixingForeignId}
+          >
+            <Text style={s.rediarizeBtnText}>
+              {rediarizingId === item.id ? '재분리 중…' : '화자 재분리'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.fixForeignBtn, (!!fixingForeignId || !!rediarizingId) && s.fixForeignBtnDisabled]}
+            onPress={() => runFixForeignWords(item)}
+            activeOpacity={0.7}
+            disabled={!!fixingForeignId || !!rediarizingId}
+          >
+            <Text style={s.fixForeignBtnText}>
+              {fixingForeignId === item.id ? '수정 중…' : '외국어 수정'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.deleteBtn} onPress={() => handleDelete(item.id)} activeOpacity={0.7}>
+            <Text style={s.deleteBtnText}>삭제</Text>
+          </TouchableOpacity>
         </View>
         <Text style={[s.historySource, s.mt6]}>{formatDateTime(item.createdAt)} · {item.source}</Text>
         {!!item.summary && (
@@ -1639,28 +1643,31 @@ export default function MeetingScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* 상단 탭 */}
-      <View style={s.topTab}>
-        <TouchableOpacity
-          style={[s.topTabBtn, activeTab === 'record' && s.topTabBtnActive]}
-          onPress={() => setActiveTab('record')}
-          activeOpacity={0.7}
-        >
-          <Text style={[s.topTabText, activeTab === 'record' && s.topTabTextActive]}>녹음</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.topTabBtn, activeTab === 'history' && s.topTabBtnActive]}
-          onPress={() => setActiveTab('history')}
-          activeOpacity={0.7}
-        >
-          <Text style={[s.topTabText, activeTab === 'history' && s.topTabTextActive]}>저장된 기록</Text>
-          {meetingRecords.length > 0 && activeTab !== 'history' && (
-            <View style={s.countBadge}>
-              <Text style={s.countBadgeText}>{meetingRecords.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
+      {/* 상단 탭: PC는 녹음/저장된 기록이 항상 동시에 보여 전환 기능이 필요 없으므로 탭 바 자체를 숨긴다
+          (activeTab state는 모바일 전용으로만 쓰인다). 모바일은 기존처럼 탭으로 전환한다. */}
+      {!IS_PC && (
+        <View style={s.topTab}>
+          <TouchableOpacity
+            style={[s.topTabBtn, activeTab === 'record' && s.topTabBtnActive]}
+            onPress={() => setActiveTab('record')}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.topTabText, activeTab === 'record' && s.topTabTextActive]}>녹음</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.topTabBtn, activeTab === 'history' && s.topTabBtnActive]}
+            onPress={() => setActiveTab('history')}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.topTabText, activeTab === 'history' && s.topTabTextActive]}>저장된 기록</Text>
+            {meetingRecords.length > 0 && activeTab !== 'history' && (
+              <View style={s.countBadge}>
+                <Text style={s.countBadgeText}>{meetingRecords.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
 
       {showDetailPanel ? (
         /* PC: 녹음 폼(좌) + 저장된 기록 마스터-디테일(우) 동시 노출. 상단 탭(activeTab)은 하이라이트 표시만
@@ -1684,7 +1691,7 @@ export default function MeetingScreen({ navigation }) {
               </View>
               <View style={s.detailPanel}>
                 {selectedRecord ? (
-                  <ScrollView contentContainerStyle={s.historyDetail} showsVerticalScrollIndicator={false}>
+                  <ScrollView style={commonStyles.flex1} contentContainerStyle={s.historyDetail} showsVerticalScrollIndicator={false}>
                     {renderRecordDetail(selectedRecord)}
                   </ScrollView>
                 ) : (
@@ -2059,13 +2066,17 @@ const s = StyleSheet.create({
   // 주의: flex 비율은 ScrollView 자신이 아니라 이를 감싸는 순수 View에 줘야 한다 — react-native-web에서
   // ScrollView style에 숫자 flex shorthand를 직접 주면 내부 기본 flexGrow/flexShrink 롱핸드와 충돌해
   // 폭이 거의 0으로 찌그러지는 버그가 있다(실측 확인됨). ScrollView 자체는 항상 s.scroll(flex:1)만 유지.
+  // 녹음 폼은 카드형 콘텐츠라 필요한 만큼의 고정 폭만 차지하고(모달 480px 관례에 맞춤),
+  // 저장된 기록(목록+상세 마스터-디테일)은 나머지 공간을 전부 가져가 자기 내용에 맞게 넓어진다.
   pcSplitRow: { flex: 1, flexDirection: 'row' },
-  recordColumnPC: { flex: 35 },
-  historyColumnPC: { flex: 65 },
-  // PC 마스터-디테일 레이아웃(ProjectScreen의 mineBodyPC/gridColumn/detailPanel과 동일 패턴)
+  recordColumnPC: { width: 480, borderRightWidth: 1, borderRightColor: C.border },
+  historyColumnPC: { flex: 1 },
+  // PC 마스터-디테일 레이아웃(ProjectScreen의 mineBodyPC/gridColumn/detailPanel과 유사 패턴이나,
+  // 이 화면은 좌측에 녹음 폼 컬럼과 폭을 나눠 써야 해서 남는 폭이 더 좁다 — 목록과 상세 패널이
+  // 남는 폭을 절반씩 동일하게 나눠 갖는다(버튼 줄은 historyBtnRowPC에 flexWrap 처리돼 있어 안전).
   bodyPC: { flex: 1, flexDirection: 'row' },
-  listColumn: { flex: 1 },
-  detailPanel: { width: 400, borderLeftWidth: 1, borderLeftColor: C.border, paddingHorizontal: 20, paddingTop: 12 },
+  listColumn: { flex: 1, borderRightWidth: 1, borderRightColor: C.border },
+  detailPanel: { flex: 1, paddingHorizontal: 20, paddingTop: 12 },
   detailPanelEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 },
   detailPanelEmptyText: { color: C.textDim, fontSize: 13 },
   cardPCActive: { borderColor: C.accentTeal + 'aa', backgroundColor: C.accentTeal + '0c' },
@@ -2095,14 +2106,14 @@ const s = StyleSheet.create({
   historyMeta: {},
   historyMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   historyBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
-  // PC 좌측 목록 카드: 제목 + 액션 버튼 7개를 같은 행에 배치(버튼 초과 시 자체적으로 줄바꿈)
-  historyItemPCHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  historyBtnRowPC: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'flex-end', flexShrink: 1 },
+  // PC 좌측 목록 카드: 제목은 자체 행(historyDate)에 전체 폭으로, 액션 버튼 7개는 그 아래 별도
+  // 행에 배치(초과 시 자체적으로 줄바꿈) — 목록 폭이 좁아져도 제목이 버튼에 밀려 안 보이지 않는다.
+  historyBtnRowPC: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   historyDate: { color: C.textPrimary, fontSize: 13, fontWeight: '500', flex: 1 },
   historySource: { color: C.textDim, fontSize: 11, letterSpacing: 0.3 },
   historyChevron: { color: C.textDim, fontSize: 12 },
   historyPreview: { color: C.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 10 },
-  historyDetail: { marginTop: 16, gap: 16 },
+  historyDetail: { marginTop: 16, gap: 16, paddingBottom: 40 },
   historySection: { gap: 8 },
   historySectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   historySectionLabel: { color: C.textDim, fontSize: 10, letterSpacing: 2.5, fontWeight: '600' },
