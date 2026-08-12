@@ -173,12 +173,13 @@ export default function MeetingScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
+    // PC는 "저장된 기록" 패널이 activeTab과 무관하게 항상 보이므로 함께 로드한다.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (activeTab === 'history') loadRecords();
+    if (activeTab === 'history' || IS_PC) loadRecords();
   }, [activeTab, loadRecords]);
 
   useFocusEffect(useCallback(() => {
-    if (activeTab === 'history') loadRecords();
+    if (activeTab === 'history' || IS_PC) loadRecords();
   }, [activeTab, loadRecords]));
 
   useEffect(() => {
@@ -214,7 +215,8 @@ export default function MeetingScreen({ navigation }) {
   } = useProjectForm({ meetingRecords, projects, schedules, clients, setProjects });
 
   useEffect(() => {
-    if (loading && activeTab === 'record') {
+    // PC는 activeTab과 무관하게 녹음 컬럼이 항상 보이므로 showDetailPanel도 함께 확인해야 한다.
+    if (loading && (showDetailPanel || activeTab === 'record')) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [loading]);
@@ -461,9 +463,10 @@ export default function MeetingScreen({ navigation }) {
     }
   }
 
-  // PC에서는 "저장된 기록" 탭만 좌측 목록 + 우측 고정 상세패널(마스터-디테일)로 바뀐다.
-  // "녹음" 탭은 리스트가 아니라 단일 흐름 폼이라 마스터-디테일 대상이 아니다(폭 제한만 적용).
-  const showDetailPanel = IS_PC && activeTab === 'history';
+  // PC에서는 activeTab과 무관하게 좌측(녹음 폼) + 우측(저장된 기록 마스터-디테일)이 항상 동시에 노출된다.
+  // 상단 탭 버튼은 activeTab 하이라이트 표시(순수 장식)만 담당하고, 콘텐츠 노출/숨김에는 관여하지 않는다.
+  // 모바일은 기존과 동일하게 activeTab에 따라 한쪽만 배타적으로 표시된다.
+  const showDetailPanel = IS_PC;
   const selectedRecord = meetingRecords.find((r) => r.id === expandedId) || null;
 
   // 기록 탭 FlatList의 헤더(업무 주제 분석)·빈 상태는 모바일/PC 양쪽 FlatList가 동일하게 사용한다.
@@ -750,6 +753,311 @@ export default function MeetingScreen({ navigation }) {
           <Text style={s.historyPreview} numberOfLines={2}>{item.summary}</Text>
         )}
       </TouchableOpacity>
+    );
+  }
+
+  // 녹음 탭 콘텐츠. PC에서는 저장된 기록과 좌우로 동시 노출되고, 모바일에서는 activeTab==='record'일 때만
+  // 단독으로 표시된다(두 경우 모두 동일한 내용을 재사용하기 위해 함수로 분리).
+  function renderRecordTab() {
+    return (
+      <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {/* 변환 완료 후: 파일 업로드 최상단 */}
+        {!!pickedFile && (!!transcript || pickedAfterTranscript) && (
+          <View style={s.section}>
+            <Text style={s.sectionLabel}>FILE UPLOAD</Text>
+            <View style={s.card}>
+              <TouchableOpacity style={s.filePickBtn} onPress={pickFile} activeOpacity={0.7} disabled={loading}>
+                <Text style={s.filePickIcon}>◈</Text>
+                <Text style={s.filePickText}>파일 다시 선택</Text>
+              </TouchableOpacity>
+              <View style={s.fileInfo}>
+                <View style={s.fileDivider} />
+                <Text style={s.fileInfoLabel}>선택된 파일</Text>
+                <Text style={s.fileInfoName} numberOfLines={2}>{pickedFile.name}</Text>
+                <TouchableOpacity
+                  style={[s.transcribeBtn, loading && s.transcribeBtnDisabled]}
+                  onPress={transcribeFile}
+                  activeOpacity={0.8}
+                  disabled={loading}
+                >
+                  <Text style={s.transcribeBtnText}>변환하기</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* 변환 완료 후에도 원본 녹음/업로드 오디오를 다시 들을 수 있도록 표시 */}
+        {!!transcript && renderAudioPlaybackCard()}
+
+        {/* 변환 전: 헤더, 녹음, 파일 업로드 */}
+        {!transcript && (
+          <>
+            <View style={s.header}>
+              <View style={s.headerBadge}>
+                <View style={s.headerBadgeDot} />
+                <Text style={s.headerBadgeText}>MEETING</Text>
+              </View>
+              <Text style={s.title}>회의 녹음</Text>
+              <Text style={s.subtitle}>음성을 텍스트로 변환합니다</Text>
+            </View>
+
+            <View style={s.rule} />
+
+            {/* 참석자 수 힌트 */}
+            <View style={s.speakerCountRow}>
+              <Text style={s.speakerCountLabel}>참석자 수</Text>
+              <View style={s.speakerCountRight}>
+                <TouchableOpacity
+                  style={[s.speakerCountBtn, !speakerCount && commonStyles.opacity40]}
+                  onPress={() => setSpeakerCount((prev) => (prev && prev > 2 ? prev - 1 : null))}
+                  activeOpacity={0.7}
+                  disabled={!speakerCount}
+                >
+                  <Text style={s.speakerCountBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={s.speakerCountValue}>{speakerCount ? `${speakerCount}명` : '자동'}</Text>
+                <TouchableOpacity
+                  style={s.speakerCountBtn}
+                  onPress={() => setSpeakerCount((prev) => Math.min(10, (prev || 1) + 1))}
+                  activeOpacity={0.7}
+                >
+                  <Text style={s.speakerCountBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* 직접 녹음 */}
+            <View style={s.section}>
+              <Text style={s.sectionLabel}>RECORDING</Text>
+              <View style={s.card}>
+                <View style={s.recordCenter}>
+                  {recording ? (
+                    <>
+                      <View style={s.recBadge}>
+                        <View style={s.recBadgeDot} />
+                        <Text style={s.recBadgeText}>녹음 중</Text>
+                      </View>
+                      <Text style={[s.timerText, s.timerActive]}>{formatTime(elapsed)}</Text>
+                      <TouchableOpacity style={s.stopBtn} onPress={stopAndTranscribe} activeOpacity={0.8}>
+                        <View style={s.stopSquare} />
+                        <Text style={s.stopBtnText}>녹음 중지</Text>
+                      </TouchableOpacity>
+                      <Text style={s.recordHint}>중지하면 텍스트 변환이 자동으로 시작됩니다</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={s.timerText}>{formatTime(elapsed)}</Text>
+                      <TouchableOpacity style={s.recordBtn} onPress={startRecording} activeOpacity={0.8}>
+                        <View style={s.recordDot} />
+                      </TouchableOpacity>
+                      <Text style={s.recordHint}>버튼을 눌러 녹음을 시작하세요</Text>
+                      <Text style={s.recordInfo}>녹음 파일은 서버에 저장되지 않으며{'\n'}중지 후 바로 텍스트로 변환됩니다</Text>
+                    </>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {renderAudioPlaybackCard()}
+
+            {/* 파일 업로드 */}
+            <View style={s.section}>
+              <Text style={s.sectionLabel}>FILE UPLOAD</Text>
+              <View style={s.card}>
+                <TouchableOpacity style={s.filePickBtn} onPress={pickFile} activeOpacity={0.7} disabled={loading}>
+                  <Text style={s.filePickIcon}>◈</Text>
+                  <Text style={s.filePickText}>
+                    {pickedFile ? '파일 다시 선택' : '오디오 파일 선택'}
+                  </Text>
+                </TouchableOpacity>
+                {pickedFile && (
+                  <View style={s.fileInfo}>
+                    <View style={s.fileDivider} />
+                    <Text style={s.fileInfoLabel}>선택된 파일</Text>
+                    <Text style={s.fileInfoName} numberOfLines={2}>{pickedFile.name}</Text>
+                    <TouchableOpacity
+                      style={[s.transcribeBtn, loading && s.transcribeBtnDisabled]}
+                      onPress={transcribeFile}
+                      activeOpacity={0.8}
+                      disabled={loading}
+                    >
+                      <Text style={s.transcribeBtnText}>변환하기</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* 로딩 */}
+        {loading && (
+          <View style={s.loadingBox}>
+            <ActivityIndicator color={C.accentBlue} size="small" />
+            <Text style={s.loadingText}>{loadingMsg || '처리 중…'}</Text>
+          </View>
+        )}
+
+        {/* 에러 */}
+        {!!errorMsg && (
+          <View style={s.errorBox}>
+            <Text style={s.errorText}>{errorMsg}</Text>
+          </View>
+        )}
+
+        {/* 요약 결과 */}
+        {!!summary && (
+          <View style={[s.section, s.mb16]}>
+            <View style={s.transcriptHeader}>
+              <View>
+                <Text style={s.sectionLabel}>SUMMARY</Text>
+                {!!transcriptSource && (
+                  <Text style={s.transcriptSource}>{transcriptSource}</Text>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => copyToClipboard(summary)} activeOpacity={0.7}>
+                <Text style={s.copyBtn}>복사</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={s.card}>
+              <Text style={s.transcriptText}>{summary}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* 원본 텍스트 */}
+        {!!transcript && (
+          <View style={[s.section, s.mb16]}>
+            <View style={s.transcriptHeader}>
+              <View style={s.transcriptHeaderLeft}>
+                <Text style={[s.sectionLabel, commonStyles.mb0]}>TRANSCRIPT</Text>
+                {!!diarizeSource && (
+                  <View style={[s.diarizeSourceBadge, diarizeSource === 'pyannote' ? s.diarizeSourceBadgePyannote : s.diarizeSourceBadgeAi]}>
+                    <Text style={[s.diarizeSourceBadgeText, diarizeSource === 'pyannote' ? s.diarizeSourceBadgeTextPyannote : s.diarizeSourceBadgeTextAi]}>
+                      {diarizeSource === 'pyannote' ? 'Pyannote 서버' : 'AI 방식'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => copyToClipboard(transcript)} activeOpacity={0.7}>
+                <Text style={s.copyBtn}>복사</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={s.card}>
+              <Text style={[s.transcriptText, { color: C.textSecondary }]}>{transcript}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* 태스크 목록 */}
+        {!!transcript && !loading && (tasks.length > 0 || tasksLoading) && (
+          <View style={[s.section, s.mb16]}>
+            <View style={s.taskHeader}>
+              <Text style={[s.sectionLabel, commonStyles.mb0]}>TASKS</Text>
+              {tasks.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (selectedTaskIndices.size === tasks.length) {
+                      setSelectedTaskIndices(new Set());
+                    } else {
+                      setSelectedTaskIndices(new Set(tasks.map((_, i) => i)));
+                    }
+                  }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={s.taskSelectAllText}>
+                    {selectedTaskIndices.size === tasks.length ? '전체 해제' : '전체 선택'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {tasksLoading && (
+              <View style={s.loadingBox}>
+                <ActivityIndicator color={C.accentPurple} size="small" />
+                <Text style={s.loadingText}>태스크 추출 중…</Text>
+              </View>
+            )}
+            {tasks.length > 0 && (
+              <View style={s.card}>
+                {tasks.map((task, i) => {
+                  const selected = selectedTaskIndices.has(i);
+                  return (
+                    <TouchableOpacity
+                      key={i}
+                      style={[s.taskRow, i < tasks.length - 1 && s.taskRowBorder]}
+                      activeOpacity={0.7}
+                      onPress={() => toggleTaskSelect(i)}
+                    >
+                      <View style={[s.taskCheckbox, selected && s.taskCheckboxSelected]}>
+                        {selected && <Text style={s.taskCheckmark}>✓</Text>}
+                      </View>
+                      <View style={commonStyles.flex1}>
+                        <Text style={s.taskContent}>{task.content}</Text>
+                        <View style={s.taskMeta}>
+                          <Text style={s.taskMetaText}>{task.assignee}</Text>
+                          {task.deadline !== '미정' && (
+                            <Text style={s.taskMetaText}>· {task.deadline}</Text>
+                          )}
+                          <Text style={[s.taskPriorityLabel, { color: priorityColor(task.priority) }]}>{task.priority}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+            {tasks.length > 0 && (
+              <TouchableOpacity
+                style={[s.bundleBtn, selectedTaskIndices.size === 0 && s.bundleBtnDisabled]}
+                onPress={() => {
+                  const selected = [...selectedTaskIndices].map((i) => tasks[i]);
+                  navigation.navigate('프로젝트', { addTask: bundleTasksToProject(selected) });
+                  setSelectedTaskIndices(new Set());
+                }}
+                activeOpacity={0.8}
+                disabled={selectedTaskIndices.size === 0}
+              >
+                <Text style={s.bundleBtnText}>
+                  {selectedTaskIndices.size > 0
+                    ? `${selectedTaskIndices.size}개 선택 · 프로젝트로 묶기`
+                    : '태스크를 선택하세요'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* 태스크 추출 + 저장 버튼 */}
+        {(!!summary || !!transcript) && !loading && (
+          <View style={[s.saveRow, s.mb48]}>
+            {saved ? (
+              <View style={s.savedBadge}>
+                <Text style={s.savedText}>✓ 기록에 저장됨</Text>
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={[s.actionBtn, s.taskExtractBtn, tasksLoading && s.actionBtnDisabled]}
+                  onPress={() => runExtractTasks(transcript)}
+                  activeOpacity={0.8}
+                  disabled={tasksLoading}
+                >
+                  {tasksLoading
+                    ? <ActivityIndicator color={C.accentPurple} size="small" />
+                    : <Text style={s.taskExtractBtnText}>{tasks.length > 0 ? '다시 추출' : '태스크 추출'}</Text>
+                  }
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.actionBtn, s.saveBtnNew]} onPress={openSaveModal} activeOpacity={0.8}>
+                  <Text style={s.saveBtnText}>기록 저장</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+      </ScrollView>
     );
   }
 
@@ -1354,331 +1662,42 @@ export default function MeetingScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'record' ? (
-        <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={[s.scrollContent, IS_PC && s.scrollContentPC]} showsVerticalScrollIndicator={false}>
-
-          {/* 변환 완료 후: 파일 업로드 최상단 */}
-          {!!pickedFile && (!!transcript || pickedAfterTranscript) && (
-            <View style={s.section}>
-              <Text style={s.sectionLabel}>FILE UPLOAD</Text>
-              <View style={s.card}>
-                <TouchableOpacity style={s.filePickBtn} onPress={pickFile} activeOpacity={0.7} disabled={loading}>
-                  <Text style={s.filePickIcon}>◈</Text>
-                  <Text style={s.filePickText}>파일 다시 선택</Text>
-                </TouchableOpacity>
-                <View style={s.fileInfo}>
-                  <View style={s.fileDivider} />
-                  <Text style={s.fileInfoLabel}>선택된 파일</Text>
-                  <Text style={s.fileInfoName} numberOfLines={2}>{pickedFile.name}</Text>
-                  <TouchableOpacity
-                    style={[s.transcribeBtn, loading && s.transcribeBtnDisabled]}
-                    onPress={transcribeFile}
-                    activeOpacity={0.8}
-                    disabled={loading}
-                  >
-                    <Text style={s.transcribeBtnText}>변환하기</Text>
-                  </TouchableOpacity>
-                </View>
+      {showDetailPanel ? (
+        /* PC: 녹음 폼(좌) + 저장된 기록 마스터-디테일(우) 동시 노출. 상단 탭(activeTab)은 하이라이트 표시만
+           담당하며 콘텐츠 노출/숨김에는 관여하지 않는다. */
+        <View style={s.pcSplitRow}>
+          <View style={s.recordColumnPC}>
+            {renderRecordTab()}
+          </View>
+          <View style={s.historyColumnPC}>
+            <View style={s.bodyPC}>
+              <View style={s.listColumn}>
+                <FlatList
+                  data={meetingRecords}
+                  extraData={[meetingRecords, expandedId]}
+                  keyExtractor={(item) => item.id}
+                  contentContainerStyle={s.historyContent}
+                  ListHeaderComponent={historyListHeader}
+                  ListEmptyComponent={historyListEmpty}
+                  renderItem={({ item }) => renderRecordCardPC(item)}
+                />
               </View>
-            </View>
-          )}
-
-          {/* 변환 완료 후에도 원본 녹음/업로드 오디오를 다시 들을 수 있도록 표시 */}
-          {!!transcript && renderAudioPlaybackCard()}
-
-          {/* 변환 전: 헤더, 녹음, 파일 업로드 */}
-          {!transcript && (
-            <>
-              <View style={s.header}>
-                <View style={s.headerBadge}>
-                  <View style={s.headerBadgeDot} />
-                  <Text style={s.headerBadgeText}>MEETING</Text>
-                </View>
-                <Text style={s.title}>회의 녹음</Text>
-                <Text style={s.subtitle}>음성을 텍스트로 변환합니다</Text>
-              </View>
-
-              <View style={s.rule} />
-
-              {/* 참석자 수 힌트 */}
-              <View style={s.speakerCountRow}>
-                <Text style={s.speakerCountLabel}>참석자 수</Text>
-                <View style={s.speakerCountRight}>
-                  <TouchableOpacity
-                    style={[s.speakerCountBtn, !speakerCount && commonStyles.opacity40]}
-                    onPress={() => setSpeakerCount((prev) => (prev && prev > 2 ? prev - 1 : null))}
-                    activeOpacity={0.7}
-                    disabled={!speakerCount}
-                  >
-                    <Text style={s.speakerCountBtnText}>−</Text>
-                  </TouchableOpacity>
-                  <Text style={s.speakerCountValue}>{speakerCount ? `${speakerCount}명` : '자동'}</Text>
-                  <TouchableOpacity
-                    style={s.speakerCountBtn}
-                    onPress={() => setSpeakerCount((prev) => Math.min(10, (prev || 1) + 1))}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={s.speakerCountBtnText}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* 직접 녹음 */}
-              <View style={s.section}>
-                <Text style={s.sectionLabel}>RECORDING</Text>
-                <View style={s.card}>
-                  <View style={s.recordCenter}>
-                    {recording ? (
-                      <>
-                        <View style={s.recBadge}>
-                          <View style={s.recBadgeDot} />
-                          <Text style={s.recBadgeText}>녹음 중</Text>
-                        </View>
-                        <Text style={[s.timerText, s.timerActive]}>{formatTime(elapsed)}</Text>
-                        <TouchableOpacity style={s.stopBtn} onPress={stopAndTranscribe} activeOpacity={0.8}>
-                          <View style={s.stopSquare} />
-                          <Text style={s.stopBtnText}>녹음 중지</Text>
-                        </TouchableOpacity>
-                        <Text style={s.recordHint}>중지하면 텍스트 변환이 자동으로 시작됩니다</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={s.timerText}>{formatTime(elapsed)}</Text>
-                        <TouchableOpacity style={s.recordBtn} onPress={startRecording} activeOpacity={0.8}>
-                          <View style={s.recordDot} />
-                        </TouchableOpacity>
-                        <Text style={s.recordHint}>버튼을 눌러 녹음을 시작하세요</Text>
-                        <Text style={s.recordInfo}>녹음 파일은 서버에 저장되지 않으며{'\n'}중지 후 바로 텍스트로 변환됩니다</Text>
-                      </>
-                    )}
+              <View style={s.detailPanel}>
+                {selectedRecord ? (
+                  <ScrollView contentContainerStyle={s.historyDetail} showsVerticalScrollIndicator={false}>
+                    {renderRecordDetail(selectedRecord)}
+                  </ScrollView>
+                ) : (
+                  <View style={s.detailPanelEmpty}>
+                    <Text style={s.detailPanelEmptyText}>회의록을 선택하세요</Text>
                   </View>
-                </View>
-              </View>
-
-              {renderAudioPlaybackCard()}
-
-              {/* 파일 업로드 */}
-              <View style={s.section}>
-                <Text style={s.sectionLabel}>FILE UPLOAD</Text>
-                <View style={s.card}>
-                  <TouchableOpacity style={s.filePickBtn} onPress={pickFile} activeOpacity={0.7} disabled={loading}>
-                    <Text style={s.filePickIcon}>◈</Text>
-                    <Text style={s.filePickText}>
-                      {pickedFile ? '파일 다시 선택' : '오디오 파일 선택'}
-                    </Text>
-                  </TouchableOpacity>
-                  {pickedFile && (
-                    <View style={s.fileInfo}>
-                      <View style={s.fileDivider} />
-                      <Text style={s.fileInfoLabel}>선택된 파일</Text>
-                      <Text style={s.fileInfoName} numberOfLines={2}>{pickedFile.name}</Text>
-                      <TouchableOpacity
-                        style={[s.transcribeBtn, loading && s.transcribeBtnDisabled]}
-                        onPress={transcribeFile}
-                        activeOpacity={0.8}
-                        disabled={loading}
-                      >
-                        <Text style={s.transcribeBtnText}>변환하기</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </>
-          )}
-
-          {/* 로딩 */}
-          {loading && (
-            <View style={s.loadingBox}>
-              <ActivityIndicator color={C.accentBlue} size="small" />
-              <Text style={s.loadingText}>{loadingMsg || '처리 중…'}</Text>
-            </View>
-          )}
-
-          {/* 에러 */}
-          {!!errorMsg && (
-            <View style={s.errorBox}>
-              <Text style={s.errorText}>{errorMsg}</Text>
-            </View>
-          )}
-
-          {/* 요약 결과 */}
-          {!!summary && (
-            <View style={[s.section, s.mb16]}>
-              <View style={s.transcriptHeader}>
-                <View>
-                  <Text style={s.sectionLabel}>SUMMARY</Text>
-                  {!!transcriptSource && (
-                    <Text style={s.transcriptSource}>{transcriptSource}</Text>
-                  )}
-                </View>
-                <TouchableOpacity onPress={() => copyToClipboard(summary)} activeOpacity={0.7}>
-                  <Text style={s.copyBtn}>복사</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={s.card}>
-                <Text style={s.transcriptText}>{summary}</Text>
-              </View>
-            </View>
-          )}
-
-          {/* 원본 텍스트 */}
-          {!!transcript && (
-            <View style={[s.section, s.mb16]}>
-              <View style={s.transcriptHeader}>
-                <View style={s.transcriptHeaderLeft}>
-                  <Text style={[s.sectionLabel, commonStyles.mb0]}>TRANSCRIPT</Text>
-                  {!!diarizeSource && (
-                    <View style={[s.diarizeSourceBadge, diarizeSource === 'pyannote' ? s.diarizeSourceBadgePyannote : s.diarizeSourceBadgeAi]}>
-                      <Text style={[s.diarizeSourceBadgeText, diarizeSource === 'pyannote' ? s.diarizeSourceBadgeTextPyannote : s.diarizeSourceBadgeTextAi]}>
-                        {diarizeSource === 'pyannote' ? 'Pyannote 서버' : 'AI 방식'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <TouchableOpacity onPress={() => copyToClipboard(transcript)} activeOpacity={0.7}>
-                  <Text style={s.copyBtn}>복사</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={s.card}>
-                <Text style={[s.transcriptText, { color: C.textSecondary }]}>{transcript}</Text>
-              </View>
-            </View>
-          )}
-
-          {/* 태스크 목록 */}
-          {!!transcript && !loading && (tasks.length > 0 || tasksLoading) && (
-            <View style={[s.section, s.mb16]}>
-              <View style={s.taskHeader}>
-                <Text style={[s.sectionLabel, commonStyles.mb0]}>TASKS</Text>
-                {tasks.length > 0 && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (selectedTaskIndices.size === tasks.length) {
-                        setSelectedTaskIndices(new Set());
-                      } else {
-                        setSelectedTaskIndices(new Set(tasks.map((_, i) => i)));
-                      }
-                    }}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={s.taskSelectAllText}>
-                      {selectedTaskIndices.size === tasks.length ? '전체 해제' : '전체 선택'}
-                    </Text>
-                  </TouchableOpacity>
                 )}
               </View>
-              {tasksLoading && (
-                <View style={s.loadingBox}>
-                  <ActivityIndicator color={C.accentPurple} size="small" />
-                  <Text style={s.loadingText}>태스크 추출 중…</Text>
-                </View>
-              )}
-              {tasks.length > 0 && (
-                <View style={s.card}>
-                  {tasks.map((task, i) => {
-                    const selected = selectedTaskIndices.has(i);
-                    return (
-                      <TouchableOpacity
-                        key={i}
-                        style={[s.taskRow, i < tasks.length - 1 && s.taskRowBorder]}
-                        activeOpacity={0.7}
-                        onPress={() => toggleTaskSelect(i)}
-                      >
-                        <View style={[s.taskCheckbox, selected && s.taskCheckboxSelected]}>
-                          {selected && <Text style={s.taskCheckmark}>✓</Text>}
-                        </View>
-                        <View style={commonStyles.flex1}>
-                          <Text style={s.taskContent}>{task.content}</Text>
-                          <View style={s.taskMeta}>
-                            <Text style={s.taskMetaText}>{task.assignee}</Text>
-                            {task.deadline !== '미정' && (
-                              <Text style={s.taskMetaText}>· {task.deadline}</Text>
-                            )}
-                            <Text style={[s.taskPriorityLabel, { color: priorityColor(task.priority) }]}>{task.priority}</Text>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-              {tasks.length > 0 && (
-                <TouchableOpacity
-                  style={[s.bundleBtn, selectedTaskIndices.size === 0 && s.bundleBtnDisabled]}
-                  onPress={() => {
-                    const selected = [...selectedTaskIndices].map((i) => tasks[i]);
-                    navigation.navigate('프로젝트', { addTask: bundleTasksToProject(selected) });
-                    setSelectedTaskIndices(new Set());
-                  }}
-                  activeOpacity={0.8}
-                  disabled={selectedTaskIndices.size === 0}
-                >
-                  <Text style={s.bundleBtnText}>
-                    {selectedTaskIndices.size > 0
-                      ? `${selectedTaskIndices.size}개 선택 · 프로젝트로 묶기`
-                      : '태스크를 선택하세요'}
-                  </Text>
-                </TouchableOpacity>
-              )}
             </View>
-          )}
-
-          {/* 태스크 추출 + 저장 버튼 */}
-          {(!!summary || !!transcript) && !loading && (
-            <View style={[s.saveRow, s.mb48]}>
-              {saved ? (
-                <View style={s.savedBadge}>
-                  <Text style={s.savedText}>✓ 기록에 저장됨</Text>
-                </View>
-              ) : (
-                <>
-                  <TouchableOpacity
-                    style={[s.actionBtn, s.taskExtractBtn, tasksLoading && s.actionBtnDisabled]}
-                    onPress={() => runExtractTasks(transcript)}
-                    activeOpacity={0.8}
-                    disabled={tasksLoading}
-                  >
-                    {tasksLoading
-                      ? <ActivityIndicator color={C.accentPurple} size="small" />
-                      : <Text style={s.taskExtractBtnText}>{tasks.length > 0 ? '다시 추출' : '태스크 추출'}</Text>
-                    }
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[s.actionBtn, s.saveBtnNew]} onPress={openSaveModal} activeOpacity={0.8}>
-                    <Text style={s.saveBtnText}>기록 저장</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          )}
-        </ScrollView>
-      ) : showDetailPanel ? (
-        /* 저장된 기록 탭 (PC: 좌측 목록 + 우측 고정 상세패널) */
-        <View style={s.bodyPC}>
-          <View style={s.listColumn}>
-            <FlatList
-              data={meetingRecords}
-              extraData={[meetingRecords, expandedId]}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={s.historyContent}
-              ListHeaderComponent={historyListHeader}
-              ListEmptyComponent={historyListEmpty}
-              renderItem={({ item }) => renderRecordCardPC(item)}
-            />
-          </View>
-          <View style={s.detailPanel}>
-            {selectedRecord ? (
-              <ScrollView contentContainerStyle={s.historyDetail} showsVerticalScrollIndicator={false}>
-                {renderRecordDetail(selectedRecord)}
-              </ScrollView>
-            ) : (
-              <View style={s.detailPanelEmpty}>
-                <Text style={s.detailPanelEmptyText}>회의록을 선택하세요</Text>
-              </View>
-            )}
           </View>
         </View>
+      ) : activeTab === 'record' ? (
+        renderRecordTab()
       ) : (
         /* 저장된 기록 탭 (모바일) */
         <FlatList
@@ -1801,8 +1820,6 @@ const s = StyleSheet.create({
   // 녹음 탭
   scroll: { flex: 1 },
   scrollContent: { paddingTop: 24, paddingHorizontal: 24 },
-  // PC 폭 제한(모달 480px, 팝업 560px 관례에 맞춘 중앙 정렬 고정 폭)
-  scrollContentPC: { maxWidth: 560, width: '100%', alignSelf: 'center' },
   header: { marginBottom: 32 },
   headerBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 28 },
   headerBadgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.gold },
@@ -2038,6 +2055,13 @@ const s = StyleSheet.create({
   newClientConfirmText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   // 기록 탭
   historyContent: { padding: 16, paddingBottom: 40 },
+  // PC: 녹음 폼(좌)과 저장된 기록(우)을 동시에 나란히 배치하는 상위 컨테이너.
+  // 주의: flex 비율은 ScrollView 자신이 아니라 이를 감싸는 순수 View에 줘야 한다 — react-native-web에서
+  // ScrollView style에 숫자 flex shorthand를 직접 주면 내부 기본 flexGrow/flexShrink 롱핸드와 충돌해
+  // 폭이 거의 0으로 찌그러지는 버그가 있다(실측 확인됨). ScrollView 자체는 항상 s.scroll(flex:1)만 유지.
+  pcSplitRow: { flex: 1, flexDirection: 'row' },
+  recordColumnPC: { flex: 35 },
+  historyColumnPC: { flex: 65 },
   // PC 마스터-디테일 레이아웃(ProjectScreen의 mineBodyPC/gridColumn/detailPanel과 동일 패턴)
   bodyPC: { flex: 1, flexDirection: 'row' },
   listColumn: { flex: 1 },
