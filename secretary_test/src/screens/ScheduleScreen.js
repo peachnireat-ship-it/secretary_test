@@ -768,8 +768,11 @@ export default function ScheduleScreen({ navigation, route }) {
   function renderScheduleDetailBody(isInline = false) {
     if (!viewSchedule) return null;
     const showEditFields = editMode && !isInline;
+    // isInline(PC 인라인 패널)일 때만 스크롤바를 보여준다 — 상세 내용이 고정 높이를 넘겨도
+    // 스크롤바가 안 보이면 사용자가 아래쪽 내용이 더 있다는 걸 모르고 지나칠 수 있다. 모바일
+    // 하단 시트는 기존처럼 숨김 유지(제스처로 스크롤하는 시트라 인디케이터 없는 게 기존 패턴)
     return (
-      <ScrollView style={isInline ? s.detailScroll : undefined} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView style={isInline ? s.detailScroll : undefined} showsVerticalScrollIndicator={isInline} keyboardShouldPersistTaps="handled">
         <View style={s.modalTitleRow}>
           <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>
             {showEditFields ? '일정 수정' : viewSchedule.title}
@@ -898,8 +901,9 @@ export default function ScheduleScreen({ navigation, route }) {
     const meetingClientIds = [...new Set(linkedMeetings.flatMap((r) => r.clientIds || []))];
     const allRelatedClientIds = [...new Set([...(viewProject.clientIds || []), ...meetingClientIds])];
     const relatedPeople = allRelatedClientIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean);
+    // isInline(PC 인라인 패널)일 때만 스크롤바 표시 — renderScheduleDetailBody와 동일한 이유
     return (
-      <ScrollView style={isInline ? s.detailScroll : undefined} showsVerticalScrollIndicator={false}>
+      <ScrollView style={isInline ? s.detailScroll : undefined} showsVerticalScrollIndicator={isInline}>
         <View style={s.modalTitleRow}>
           <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>{viewProject.title}</Text>
           <TouchableOpacity onPress={() => setShowProjectView(false)} style={commonStyles.ml12}>
@@ -978,6 +982,30 @@ export default function ScheduleScreen({ navigation, route }) {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* ── PC 전용 AI/새 일정 버튼 행: 등록된 일정·프로젝트 목록(가운데 칼럼) 위, 달력보다 살짝 높은
+          위치에 둔다. calendarRow와 동일한 3칼럼 폭 구조(캘린더 폭 스페이서 + 목록 칼럼 + 상세 칼럼
+          스페이서)를 그대로 재사용해 버튼이 목록 칼럼 우측 끝 위에 정확히 오도록 맞춘다. 이렇게
+          분리한 이유는 아래 목록 패널의 top/height를 달력 그리드와 정확히 일치시키기 위해서다 —
+          버튼 행이 목록 패널 안에 있으면 그 높이만큼 목록 top이 그리드보다 아래로 밀린다 ── */}
+      {IS_PC && (
+        <View style={s.pcTopBarOuter}>
+          <View style={s.pcTopBar}>
+            <View style={s.calendarWrap} />
+            <View style={s.pcTopBarBtnCol}>
+              <View style={s.pcPanelBtnRow}>
+                <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+                  <Text style={s.aiBtnText}>✦ AI</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.pcAddBtnInline} onPress={openAddSheet}>
+                  <Text style={s.pcAddBtnInlineText}>+ 새 일정</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={commonStyles.flex1} />
+          </View>
+        </View>
+      )}
 
       {/* ── 달력 + 프로젝트 패널(PC 전용): PC는 넓은 화면을 활용해 캘린더 좌측 + 등록된 프로젝트를
           우측에 가로로 나란히 배치한다. 모바일은 프로젝트 패널을 렌더링하지 않아 기존과 동일하게
@@ -1103,22 +1131,13 @@ export default function ScheduleScreen({ navigation, route }) {
 
       {/* ── 등록된 일정/프로젝트 패널(PC 전용): dayProjects·daySchedules를 그대로 재사용, 카드 클릭 시
           아래 일정 목록과 동일한 상세 모달을 띄운다(아래쪽 목록과의 중복 표시는 의도된 동작).
-          AI/추가 버튼은 별도 칼럼이 아니라 이 패널 안에 alignSelf:'flex-end'로 넣어, 패널과 정확히
-          같은 폭(projectPanel의 실제 렌더 폭) 기준으로 우측 끝이 맞도록 한다 ── */}
+          AI/새 일정 버튼은 위쪽 별도 행(pcTopBar)으로 옮겨졌으므로 여기는 목록(제목+카드)만 남는다 ── */}
       {IS_PC && (
         <View style={s.projectPanel}>
-          {/* calHeaderHeight(달력 위쪽 영역 실측값, 인라인 유지 — gridHeight와 동일한 이유)를 그대로
-              적용해, 아래 목록이 달력 그리드와 동일한 y좌표에서 시작하도록 맞춘다. 내부 버튼 행+타이틀은
-              justifyContent:'flex-start'로 상단 정렬한다. */}
+          {/* 제목 영역: calHeaderHeight(달력 위쪽 영역 실측값)를 그대로 적용해 달력의 월 네비게이션+
+              요일 헤더와 같은 y좌표·높이를 차지하게 한다 — 타이틀이 달력 타이틀과 같은 줄에서
+              시작하도록 맞추기 위함. */}
           <View style={[s.projectPanelHeader, calHeaderHeight ? { height: calHeaderHeight } : null]}>
-            <View style={s.pcPanelBtnRow}>
-              <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
-                <Text style={s.aiBtnText}>✦ AI</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.pcAddBtnInline} onPress={openAddSheet}>
-                <Text style={s.pcAddBtnInlineText}>+ 새 일정</Text>
-              </TouchableOpacity>
-            </View>
             <Text style={s.projectPanelTitle}>등록된 일정 · 프로젝트</Text>
           </View>
           {dayProjects.length === 0 && daySchedules.length === 0 ? (
@@ -1202,7 +1221,17 @@ export default function ScheduleScreen({ navigation, route }) {
           변경 없음), PC에서는 Modal 렌더링 대신 이 View 표시 여부 조건으로만 쓰인다. 콘텐츠는
           renderScheduleDetailBody()/renderProjectDetailBody()로 모달과 완전히 공유한다 ── */}
       {IS_PC && (
-        <View style={s.detailPanel}>
+        // detailPanel의 세로 높이를 calHeaderHeight+gridHeight(달력 칼럼 실측 높이)로 고정한다.
+        // detailPanel은 calendarRow(flexDirection:'row')의 직계 항목이라 이 축의 main axis는
+        // 가로다 — projectPanelList(세로 컨테이너 안, flexBasis가 세로에 적용)와 달리 여기서는
+        // flexGrow/flexShrink/flexBasis를 건드리지 않고 height만 직접 지정해도 가로 폭(flex:1)
+        // 계산과 전혀 충돌하지 않는다(실제로 flexGrow/flexShrink:0을 같이 주면 이 항목의 flex-basis
+        // 축이 가로가 되어 폭 자체가 내용물 크기로 결정돼버려 선택 항목마다 폭이 들쑥날쑥해지는
+        // 회귀가 있었다). flex:1(row stretch)만으로는 상세 내용이 길 때 이 칼럼의 콘텐츠 높이가
+        // 캘린더보다 커져 화면(App.js가 전역으로 켜 둔 document.body 스크롤) 전체 높이가 뷰포트를
+        // 넘고, 그때 나타나는 브라우저 스크롤바가 가로 폭을 갉아먹는 문제도 있어 높이 고정이
+        // 필요하다 — 내부 ScrollView(detailScroll)가 넘치는 내용만 스크롤한다.
+        <View style={[s.detailPanel, calHeaderHeight && gridHeight ? { height: calHeaderHeight + gridHeight } : null]}>
           {showScheduleView && viewSchedule ? (
             renderScheduleDetailBody(true)
           ) : showProjectView && viewProject ? (
@@ -1965,8 +1994,8 @@ const s = StyleSheet.create({
   // calendarRow가 row일 때 align-items 기본값(stretch)으로 캘린더와 높이가 맞춰져, 내부
   // ScrollView(flex:1)가 유효한 높이를 가지고 스크롤할 수 있게 된다.
   projectPanel: { flex: 1 },
-  // 목록 위쪽 영역(버튼 행+타이틀) 컨테이너: calHeaderHeight를 인라인으로 받아 달력 위쪽 영역과
-  // 높이를 맞추고, flex-start로 상단 정렬해 버튼 행이 위쪽에 위치하게 한다.
+  // 제목 영역(버튼 행은 pcTopBar로 이동해 이제 타이틀만 남음): calHeaderHeight를 인라인으로 받아
+  // 달력 위쪽 영역(월 네비게이션+요일 헤더)과 같은 y좌표·높이를 차지하도록 맞춘다.
   projectPanelHeader: { justifyContent: 'flex-start' },
   projectPanelTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '600', letterSpacing: 0.5, marginBottom: 12 },
   projectPanelList: { flex: 1 },
@@ -1976,15 +2005,22 @@ const s = StyleSheet.create({
   projectPanelListMeasured: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
   projectPanelListContent: { gap: 10, paddingBottom: 24 },
   projectPanelEmpty: { color: C.textDim, fontSize: 12 },
-  // AI/추가 버튼 행: projectPanel(flex:1) 안에서 alignSelf:'flex-end'로 우측 끝을 패널 폭 기준에
-  // 정확히 맞추고, "등록된 일정 · 프로젝트" 텍스트 위에 오도록 아래쪽에 여백을 둔다.
-  pcPanelBtnRow: { flexDirection: 'row', alignSelf: 'flex-end', gap: 8, marginBottom: 12 },
+  // PC 전용 AI/새 일정 버튼 행이 놓이는 상단 바: calendarRow와 동일한 3칼럼 폭 구조(캘린더 폭
+  // 스페이서 + 목록 칼럼 + 상세 칼럼 스페이서)를 재사용해 버튼이 목록 칼럼 위에 오도록 맞추고,
+  // marginBottom으로 달력/목록보다 위쪽에 위치하게 한다.
+  pcTopBarOuter: { alignItems: 'center' },
+  pcTopBar: { flexDirection: 'row', width: '100%', maxWidth: 1400, gap: 24, marginBottom: 12 },
+  pcTopBarBtnCol: { flex: 1, alignItems: 'flex-end' },
+  pcPanelBtnRow: { flexDirection: 'row', gap: 8 },
   pcAddBtnInline: { paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 20 },
   pcAddBtnInlineText: { color: C.accentBlue, fontSize: 12, fontWeight: '600' },
   // 상세 보기 패널(PC 전용 3번째 칼럼): projectPanel과 동일하게 flex:1로 calendarRow의 stretch
   // 정렬을 받아 캘린더 높이에 맞춰진다. 모달(sheetBase+modalSheet)과 달리 바텀시트가 아니라
   // 상시 노출되는 카드형 패널이라 자체 배경/모서리/여백을 둔다.
-  detailPanel: { flex: 1, backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 20 },
+  // minWidth:0 — 웹 flexbox는 flex item의 min-width 기본값이 'auto'(내용 크기)라, 선택한 일정/
+  // 프로젝트의 메모 등에 줄바꿈 없는 긴 텍스트가 있으면 flex:1 계산 폭보다 이 칼럼이 넓어져 선택
+  // 항목에 따라 폭이 들쑥날쑥해질 수 있다. 0으로 명시해 항상 flex 비율대로만 폭이 고정되게 한다.
+  detailPanel: { flex: 1, minWidth: 0, backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 20 },
   // renderScheduleDetailBody/renderProjectDetailBody가 PC 인라인 패널(isInline=true)에서만 쓰는
   // ScrollView 스타일 — detailPanel(flex:1로 stretch된 고정 높이) 안에서 실제로 스크롤되려면
   // flex:1이 필요하다. 모바일 바텀시트는 원래 style prop 없이 콘텐츠 기준 auto 높이(모달의
