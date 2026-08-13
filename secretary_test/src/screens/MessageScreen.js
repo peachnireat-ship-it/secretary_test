@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
-import { getMessages, addMessage, addMessageForUser, updateMessage, updateMessageForUser, deleteMessage, getTestAccounts, getClients } from '../services/storage';
+import { getMessages, addMessage, addMessageForUser, updateMessage, updateMessageForUser, deleteMessage, getClients } from '../services/storage';
 import { useUser } from '../context/UserContext';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { IS_PC } from '../utils/deviceType';
@@ -21,11 +21,6 @@ const BOXES = [
 ];
 const SUBJECT_MAX_LENGTH = 200;
 const CONTENT_MAX_LENGTH = 2000;
-
-// window.open()의 창 이름을 호출마다 고유하게 만들기 위한 카운터. 이름이 고정돼 있으면 두 번째
-// open()부터는 기존에 열려 있던(혹은 사용자가 리사이즈한) 같은 이름의 창을 재사용해 width/height가
-// 무시된다 — Date.now() 등 impure global 대신 순수한 모듈 카운터로 매번 새 이름을 만든다.
-let popupSeq = 0;
 
 function priorityColor(p) {
   return { 긴급: C.red, 일반: C.accentBlue, 낮음: C.textDim }[p] || C.textDim;
@@ -59,10 +54,10 @@ export default function MessageScreen() {
   const [newContent, setNewContent] = useState('');
   const [newPriority, setNewPriority] = useState('일반');
   const [newStatus, setNewStatus] = useState('미확인');
-  const [newDirection, setNewDirection] = useState('sent');
-  const [newToId, setNewToId] = useState(null);
+  // 'self' 토큰(나) 또는 클라이언트(담당자) id로 이루어진 다중 수신자 선택.
+  const [newRecipientIds, setNewRecipientIds] = useState([]);
+  const [recipientSearch, setRecipientSearch] = useState('');
   const [clients, setClients] = useState([]);
-  const internalAccounts = getTestAccounts().filter((a) => a.id !== user?.id);
 
   const [showDetail, setShowDetail] = useState(false);
   const [detailMsg, setDetailMsg] = useState(null);
@@ -77,7 +72,6 @@ export default function MessageScreen() {
   const [replySubject, setReplySubject] = useState('');
   const [replyContent, setReplyContent] = useState('');
 
-  const swipeAdd = useSwipeClose(() => setShowAdd(false), showAdd);
   const swipeDetail = useSwipeClose(() => { setShowDetail(false); setEditMode(false); setReplyMode(false); }, showDetail);
 
   async function load() {
@@ -87,28 +81,7 @@ export default function MessageScreen() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); getClients().then(setClients); }, []);
 
-  // PC 웹은 메세지 추가를 실제 브라우저 새 창(팝업)으로 띄운다. 저장이 완료되면
-  // 팝업이 postMessage로 알려오고, 여기서 목록을 새로고침한다. 팝업 차단 시 기존 모달로 대체.
-  // (상세는 더 이상 팝업이 아니라 PC 우측 패널/모바일 모달로 처리되지만, message-updated 타입
-  // 리스너는 과거 상세 팝업이 보내던 이벤트라 무해하게 남겨둔다.)
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    function handleMessage(e) {
-      if (e.origin !== window.location.origin) return;
-      if (e.data?.type === 'secretary:message-created' || e.data?.type === 'secretary:message-updated') load();
-    }
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
-
   function handleAddPress() {
-    if (IS_PC && Platform.OS === 'web') {
-      // 창 이름을 매번 고유하게 줘야 브라우저가 기존에 열려 있던(혹은 사용자가 리사이즈한) 같은 이름의
-      // 창을 재사용하지 않고 매번 지정한 크기로 새로 연다. 이름이 고정돼 있으면 두 번째 open()부터는
-      // width/height가 무시되고 기존 창이 그대로 포커스만 된다.
-      const popup = window.open('?popup=message-new', `secretary-message-new-${++popupSeq}`, 'width=360,height=540,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
-      if (popup) return;
-    }
     setShowAdd(true);
   }
 
@@ -136,7 +109,11 @@ export default function MessageScreen() {
   ).length;
 
   async function handleAdd() {
-    if (!newSender.trim() || !newSubject.trim()) return;
+    if (!newSender.trim()) {
+      Alert.alert('입력 필요', '수신자를 한 명 이상 선택해주세요.');
+      return;
+    }
+    if (!newSubject.trim()) return;
     if (newSubject.trim().length > SUBJECT_MAX_LENGTH) {
       Alert.alert('입력 길이 초과', `제목은 최대 ${SUBJECT_MAX_LENGTH}자까지 입력 가능합니다.`);
       return;
@@ -146,11 +123,21 @@ export default function MessageScreen() {
       return;
     }
     const ts = Date.now();
+    const selfSelected = newRecipientIds.includes('self');
+    const selectedClients = clients.filter((c) => newRecipientIds.includes(c.id));
+    // 앱 계정(linkedProfileId)이 연결된 수신자만 실제 받은메세지함 사본을 받는다.
+    // 연결 안 된 담당자는 수신자 이름 표기에만 포함되고 실제 전달은 없다.
+    const deliverTargets = [
+      ...(selfSelected ? [user?.id] : []),
+      ...selectedClients.filter((c) => c.linkedProfileId).map((c) => c.linkedProfileId),
+    ].filter(Boolean);
+    const uniqueTargets = [...new Set(deliverTargets)];
+    const primaryTarget = uniqueTargets[0];
     const sentMsgId = String(ts);
-    const receivedMsgId = (newDirection === 'sent' && newToId) ? String(ts + 1) : undefined;
+    const receivedMsgId = primaryTarget ? String(ts + 1) : undefined;
     const base = {
       id: sentMsgId,
-      direction: newDirection,
+      direction: 'sent',
       sender: newSender.trim(),
       company: newCompany.trim(),
       subject: newSubject.trim(),
@@ -158,13 +145,14 @@ export default function MessageScreen() {
       priority: newPriority,
       status: newStatus,
       fromId: user?.id,
-      toId: newDirection === 'received' ? user?.id : (newToId || undefined),
+      toId: primaryTarget || undefined,
       linkedReceivedId: receivedMsgId,
     };
     await addMessage(base);
-    if (newDirection === 'sent' && newToId && receivedMsgId) {
-      await addMessageForUser(newToId, {
-        id: receivedMsgId,
+    for (let i = 0; i < uniqueTargets.length; i++) {
+      const targetId = uniqueTargets[i];
+      await addMessageForUser(targetId, {
+        id: i === 0 ? receivedMsgId : String(ts + 2 + i),
         direction: 'received',
         sender: user?.name || newSender.trim(),
         company: '내부',
@@ -173,17 +161,44 @@ export default function MessageScreen() {
         priority: newPriority,
         status: '미확인',
         fromId: user?.id,
-        toId: newToId,
+        toId: targetId,
       });
     }
     setMessages(await getMessages());
     setShowAdd(false);
-    setBox(newDirection);
+    setBox(selfSelected ? 'received' : 'sent');
     setFilter('전체');
     setNewSender(''); setNewCompany(''); setNewSubject('');
     setNewContent(''); setNewPriority('일반'); setNewStatus('미확인');
-    setNewDirection('sent'); setNewToId(null);
+    setNewRecipientIds([]); setRecipientSearch('');
   }
+
+  function recipientLabel(id) {
+    if (id === 'self') return user?.name || '나';
+    return clients.find((c) => c.id === id)?.name || '';
+  }
+
+  // 선택 즉시 수신자 표시 필드(이름/회사)를 재계산해 자동으로 채운다. 회사는 1명만
+  // 선택됐을 때만 의미가 있어 자동 채우고, 0명/다중 선택 시에는 수동 입력에 맡긴다.
+  function toggleRecipient(id) {
+    setNewRecipientIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      setNewSender(next.map(recipientLabel).filter(Boolean).join(', '));
+      if (next.length === 1) {
+        const only = next[0];
+        setNewCompany(only === 'self' ? (user?.team || '') : (clients.find((c) => c.id === only)?.company || ''));
+      } else {
+        // 0명(초기화) 또는 2명 이상(단일 회사로 표시 불가)일 때는 값을 비워 수동 입력에 맡긴다.
+        setNewCompany('');
+      }
+      return next;
+    });
+  }
+
+  const recipientSearchQ = recipientSearch.trim();
+  const filteredClients = recipientSearchQ
+    ? clients.filter((c) => c.name.includes(recipientSearchQ) || (c.company || '').includes(recipientSearchQ))
+    : clients;
 
   function openDetail(msg) {
     setDetailMsg(msg);
@@ -574,7 +589,12 @@ export default function MessageScreen() {
       {showDetailPanel ? (
         <View style={s.bodyPC}>
           <View style={s.listColumn}>
-            {renderBoxTabs()}
+            <View style={s.boxRowPC}>
+              <View style={s.boxRowPCBoxes}>{renderBoxTabs()}</View>
+              <TouchableOpacity style={s.addBtnPC} onPress={handleAddPress}>
+                <Text style={s.addBtnPCText}>+ 새 메세지</Text>
+              </TouchableOpacity>
+            </View>
             {renderFilterTabs()}
             <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
               {filtered.length === 0 ? (
@@ -586,9 +606,6 @@ export default function MessageScreen() {
                 filtered.map(renderMessageCard)
               )}
             </ScrollView>
-            <TouchableOpacity style={s.fab} onPress={handleAddPress}>
-              <Text style={s.fabText}>+</Text>
-            </TouchableOpacity>
           </View>
           <View style={s.detailPanel}>
             {showDetail && detailMsg ? renderDetailFields() : (
@@ -611,8 +628,8 @@ export default function MessageScreen() {
             )}
           </ScrollView>
 
-          {/* FAB */}
-          <TouchableOpacity style={s.fab} onPress={handleAddPress}>
+          {/* FAB: 받은/보낸 메세지함 탭 바로 위에 떠 있도록 헤더 영역 안쪽에 배치 */}
+          <TouchableOpacity style={[s.fab, { top: insets.top + 16 }]} onPress={handleAddPress}>
             <Text style={s.fabText}>+</Text>
           </TouchableOpacity>
         </>
@@ -630,60 +647,52 @@ export default function MessageScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 추가 모달 */}
-      <Modal visible={showAdd} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.overlay}>
-          <Animated.View style={[s.sheet, swipeAdd.animStyle]}>
-            <View style={s.handleWrap} {...swipeAdd.panHandlers}>
-              <View style={s.handle} />
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={s.modalTitle}>메세지 추가</Text>
-
-              <View style={s.directionRow}>
-                {BOXES.map((b) => (
-                  <TouchableOpacity
-                    key={b.key}
-                    style={[s.directionBtn, newDirection === b.key && s.directionBtnActive]}
-                    onPress={() => setNewDirection(b.key)}
-                  >
-                    <Text style={[s.directionText, newDirection === b.key && s.directionTextActive]}>{b.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {newDirection === 'sent' && internalAccounts.length > 0 && (
-                <>
-                  <Text style={s.inputLabel}>내부 수신자 (선택)</Text>
-                  <View style={s.optionRow}>
-                    <TouchableOpacity
-                      style={[s.optionBtn, !newToId && { borderColor: C.accentPurple + '88', backgroundColor: C.accentPurple + '18' }]}
-                      onPress={() => { setNewToId(null); setNewSender(''); setNewCompany(''); }}
-                    >
-                      <Text style={[s.optionText, !newToId && { color: C.accentPurple }]}>외부</Text>
+      {/* 추가 모달 (담당자 추가 팝업과 동일한 중앙 카드형) */}
+      <Modal visible={showAdd} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.centerModalOverlay}>
+          <View style={[s.centerModalCard, commonStyles.maxH90pct]}>
+            <Text style={s.modalTitle}>새 메세지</Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
+              <Text style={s.inputLabel}>수신자 선택 (담당자 목록, 다중 선택)</Text>
+              {newRecipientIds.length > 0 && (
+                <View style={s.selectedPeopleRow}>
+                  {newRecipientIds.map((id) => (
+                    <TouchableOpacity key={id} style={s.selectedPersonChip} onPress={() => toggleRecipient(id)}>
+                      <Text style={s.selectedPersonChipText}>{recipientLabel(id)}</Text>
+                      <Text style={s.selectedPersonChipX}> ✕</Text>
                     </TouchableOpacity>
-                    {internalAccounts.map((a) => (
-                      <TouchableOpacity
-                        key={a.id}
-                        style={[s.optionBtn, newToId === a.id && { borderColor: C.accentPurple + '88', backgroundColor: C.accentPurple + '18' }]}
-                        onPress={() => {
-                          const client = clients.find((c) => c.name === a.name);
-                          setNewToId(a.id);
-                          setNewSender(a.name);
-                          setNewCompany(client?.company || a.team || '내부');
-                        }}
-                      >
-                        <Text style={[s.optionText, newToId === a.id && { color: C.accentPurple }]}>{a.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
+                  ))}
+                </View>
               )}
-              <Text style={s.inputLabel}>{newDirection === 'sent' ? '수신자 *' : '발신자 *'}</Text>
-              <TextInput style={s.input} value={newSender} onChangeText={setNewSender} placeholder="이름" placeholderTextColor={C.textDim} />
-
-              <Text style={s.inputLabel}>회사 (선택)</Text>
-              <TextInput style={s.input} value={newCompany} onChangeText={setNewCompany} placeholder="회사명" placeholderTextColor={C.textDim} />
+              <TextInput style={s.input} value={recipientSearch} onChangeText={setRecipientSearch} placeholder="이름 또는 회사로 검색" placeholderTextColor={C.textDim} />
+              <ScrollView style={s.peopleList} nestedScrollEnabled>
+                {!recipientSearch.trim() && (
+                  <TouchableOpacity style={[s.peopleRow, newRecipientIds.includes('self') && s.peopleRowSelected]} onPress={() => toggleRecipient('self')}>
+                    <View style={[s.peopleCheckbox, newRecipientIds.includes('self') && s.peopleCheckboxChecked]}>
+                      {newRecipientIds.includes('self') && <Text style={s.peopleCheckmark}>✓</Text>}
+                    </View>
+                    <Text style={[s.peopleRowName, newRecipientIds.includes('self') && s.peopleRowNameSelected]} numberOfLines={1}>나 ({user?.name})</Text>
+                    <Text style={s.peopleRowCompany} numberOfLines={1}>{user?.team || ''}</Text>
+                  </TouchableOpacity>
+                )}
+                {filteredClients.length === 0 ? (
+                  <Text style={s.peopleEmpty}>검색 결과가 없습니다</Text>
+                ) : (
+                  filteredClients.slice(0, 50).map((c) => {
+                    const selected = newRecipientIds.includes(c.id);
+                    return (
+                      <TouchableOpacity key={c.id} style={[s.peopleRow, selected && s.peopleRowSelected]} onPress={() => toggleRecipient(c.id)}>
+                        <View style={[s.peopleCheckbox, selected && s.peopleCheckboxChecked]}>
+                          {selected && <Text style={s.peopleCheckmark}>✓</Text>}
+                        </View>
+                        <Text style={[s.peopleRowName, selected && s.peopleRowNameSelected]} numberOfLines={1}>{c.name}</Text>
+                        <Text style={s.peopleRowCompany} numberOfLines={1}>{c.company}</Text>
+                        {!c.linkedProfileId && <Text style={s.peopleRowExternal}>연락처만</Text>}
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </ScrollView>
 
               <Text style={s.inputLabel}>제목 *</Text>
               <TextInput style={s.input} value={newSubject} onChangeText={setNewSubject} placeholder="메세지 제목" placeholderTextColor={C.textDim} />
@@ -708,17 +717,16 @@ export default function MessageScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-
-              <View style={s.modalBtns}>
-                <TouchableOpacity style={s.cancelBtn} onPress={() => setShowAdd(false)}>
-                  <Text style={s.cancelText}>취소</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.confirmBtn} onPress={handleAdd}>
-                  <Text style={s.confirmText}>추가</Text>
-                </TouchableOpacity>
-              </View>
             </ScrollView>
-          </Animated.View>
+            <View style={s.addModalBtns}>
+              <TouchableOpacity style={s.addModalConfirm} onPress={handleAdd}>
+                <Text style={s.addModalConfirmText}>전송</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.addModalCancel} onPress={() => setShowAdd(false)}>
+                <Text style={s.addModalCancelText}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -736,6 +744,11 @@ const s = StyleSheet.create({
   boxTabActive: { borderBottomColor: C.accentPurple },
   boxText: { color: C.textDim, fontSize: 13, fontWeight: '500' },
   boxTextActive: { color: C.accentPurple, fontWeight: '600' },
+
+  boxRowPC: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, paddingRight: 20 },
+  boxRowPCBoxes: { flex: 1 },
+  addBtnPC: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: C.accentPurple + '22', borderWidth: 1, borderColor: C.accentPurple + '55', borderRadius: 20 },
+  addBtnPCText: { color: C.accentPurple, fontSize: 12, fontWeight: '600' },
 
   filterWrap: { maxHeight: 44 },
   filterRow: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
@@ -776,7 +789,7 @@ const s = StyleSheet.create({
   cardPreview: { color: C.textDim, fontSize: 11, flex: 1, marginRight: 8 },
   cardTime: { color: C.textDim, fontSize: 10 },
 
-  fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentPurple, alignItems: 'center', justifyContent: 'center' },
+  fab: { position: 'absolute', right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentPurple, alignItems: 'center', justifyContent: 'center' },
   fabText: { color: '#09090E', fontSize: 26, lineHeight: 30, fontWeight: '300' },
 
   // 웹에서 Modal은 document.body로 포탈되어 App.js의 480px 폭 제한을 벗어나므로 여기서 다시 맞춘다
@@ -790,11 +803,18 @@ const s = StyleSheet.create({
   handleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 12 },
 
-  directionRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
-  directionBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: C.border, alignItems: 'center', backgroundColor: C.surface },
-  directionBtnActive: { borderColor: C.accentPurple + '88', backgroundColor: C.accentPurple + '18' },
-  directionText: { color: C.textDim, fontSize: 13 },
-  directionTextActive: { color: C.accentPurple, fontWeight: '600' },
+  // 메세지 추가 팝업 전용 (담당자 추가 팝업과 동일한 중앙 카드형 — 다른 모달의 overlay/sheet에는 영향 없음)
+  centerModalOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' }
+    : { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 20 },
+  centerModalCard: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxWidth: 480, maxHeight: '85%' }
+    : { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxHeight: '85%' },
+  addModalBtns: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  addModalConfirm: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentPurple, alignItems: 'center' },
+  addModalConfirmText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  addModalCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  addModalCancelText: { color: C.textSecondary, fontSize: 14 },
 
   detailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 },
   detailSender: { color: C.textPrimary, fontSize: 15, fontWeight: '500' },
@@ -809,6 +829,23 @@ const s = StyleSheet.create({
   optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   optionText: { color: C.textDim, fontSize: 12 },
+
+  // 새 메세지 수신자 다중 선택 콤보박스(ProjectAddForm의 관련 인물 선택과 동일 패턴)
+  selectedPeopleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  selectedPersonChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, backgroundColor: C.accentPurple + '22', borderWidth: 1, borderColor: C.accentPurple + '55', borderRadius: 12 },
+  selectedPersonChipText: { color: C.accentPurple, fontSize: 12, fontWeight: '500' },
+  selectedPersonChipX: { color: C.accentPurple, fontSize: 11 },
+  peopleList: { maxHeight: 160, marginTop: 8, borderWidth: 1, borderColor: C.border, borderRadius: 10, backgroundColor: C.surface },
+  peopleEmpty: { color: C.textDim, fontSize: 12, padding: 14, textAlign: 'center' },
+  peopleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+  peopleRowSelected: { backgroundColor: C.accentPurple + '14' },
+  peopleCheckbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  peopleCheckboxChecked: { backgroundColor: C.accentPurple, borderColor: C.accentPurple },
+  peopleCheckmark: { color: '#fff', fontSize: 11, fontWeight: '700', lineHeight: 13 },
+  peopleRowName: { color: C.textSecondary, fontSize: 13, flexShrink: 1 },
+  peopleRowNameSelected: { color: C.accentPurple, fontWeight: '600' },
+  peopleRowCompany: { color: C.textDim, fontSize: 11, marginLeft: 'auto' },
+  peopleRowExternal: { color: C.textDim, fontSize: 9, marginLeft: 6 },
 
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 24, justifyContent: 'center' },
   cancelBtn: { flex: 0, minWidth: 120, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },

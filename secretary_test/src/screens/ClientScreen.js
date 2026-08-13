@@ -1066,6 +1066,9 @@ export default function ClientScreen({ navigation, route }) {
       <>
         <View style={s.searchWrap}>
           <TextInput style={s.searchInput} value={search} onChangeText={setSearch} placeholder="담당자 또는 회사명 검색" placeholderTextColor={C.textDim} />
+          <TouchableOpacity style={s.searchAddBtn} onPress={() => setShowSourcePicker(true)}>
+            <Text style={s.searchAddBtnText}>+</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={s.tabRow}>
@@ -1113,10 +1116,6 @@ export default function ClientScreen({ navigation, route }) {
             <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
               {filteredClients.map(renderClientCard)}
             </ScrollView>
-
-            <TouchableOpacity style={s.fab} onPress={() => setShowSourcePicker(true)}>
-              <Text style={s.fabText}>+</Text>
-            </TouchableOpacity>
           </View>
 
           <View style={s.detailPanel}>
@@ -1135,20 +1134,13 @@ export default function ClientScreen({ navigation, route }) {
           <ScrollView style={s.list} contentContainerStyle={s.listContent} showsVerticalScrollIndicator={false}>
             {filteredClients.map(renderClientCard)}
           </ScrollView>
-
-          {/* ── 추가 버튼 ── */}
-          <TouchableOpacity style={s.fab} onPress={() => setShowSourcePicker(true)}>
-            <Text style={s.fabText}>+</Text>
-          </TouchableOpacity>
         </>
       )}
 
       {/* ── 입력 방식 선택 ── */}
-      <Modal visible={showSourcePicker} animationType="fade" transparent>
-        <View style={s.modalOverlay}>
-          <TouchableOpacity style={commonStyles.flex1} activeOpacity={1} onPress={() => setShowSourcePicker(false)} />
-          <View style={s.sourceSheet}>
-            <View style={s.modalHandle} />
+      <Modal visible={showSourcePicker} animationType="fade" transparent onRequestClose={() => setShowSourcePicker(false)}>
+        <View style={s.centerModalOverlay}>
+          <View style={s.centerModalCard}>
             <View style={s.chatHeader}>
               <Text style={s.modalTitle}>담당자 추가</Text>
               <TouchableOpacity onPress={() => setShowSourcePicker(false)}>
@@ -1369,10 +1361,9 @@ export default function ClientScreen({ navigation, route }) {
       )}
 
       {/* ── 담당자 추가 모달 ── */}
-      <Modal visible={showAddClient} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
-          <View style={[s.modalSheet, commonStyles.maxH90pct]}>
-            <View style={s.modalHandle} />
+      <Modal visible={showAddClient} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.centerModalOverlay}>
+          <View style={[s.centerModalCard, commonStyles.maxH90pct]}>
             <Text style={s.modalTitle}>담당자 추가</Text>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.scrollPB8}>
               <View style={s.inputLabelRow}>
@@ -1402,11 +1393,11 @@ export default function ClientScreen({ navigation, route }) {
               <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
             </ScrollView>
             <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalConfirmEqual} onPress={handleAddClient}>
+                <Text style={s.modalConfirmText}>저장</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={s.modalCancel} onPress={() => setShowAddClient(false)}>
                 <Text style={s.modalCancelText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalConfirm} onPress={handleAddClient}>
-                <Text style={s.modalConfirmText}>추가</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1711,8 +1702,10 @@ const s = StyleSheet.create({
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
   aiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentTeal + '22', borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 20 },
   aiBtnText: { color: C.accentTeal, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
-  searchWrap: { paddingHorizontal: 24, paddingBottom: 12 },
-  searchInput: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, color: C.textPrimary, fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 24, paddingBottom: 12 },
+  searchInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, color: C.textPrimary, fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 },
+  searchAddBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: C.accentTeal, alignItems: 'center', justifyContent: 'center' },
+  searchAddBtnText: { color: '#fff', fontSize: 22, lineHeight: 26 },
   list: { flex: 1 },
   listContent: { paddingHorizontal: 24, paddingBottom: 100, gap: 10 },
   clientCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
@@ -1741,8 +1734,6 @@ const s = StyleSheet.create({
   sortBtnActive: { borderColor: C.accentTeal + '88', backgroundColor: C.accentTeal + '22' },
   sortBtnText: { color: C.textDim, fontSize: 12 },
   sortBtnTextActive: { color: C.accentTeal, fontWeight: '600' },
-  fab: { position: 'absolute', bottom: 30, right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentTeal, alignItems: 'center', justifyContent: 'center' },
-  fabText: { color: '#fff', fontSize: 26, lineHeight: 30 },
   sourceSheet: Platform.OS === 'web'
     ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, width: '100%', maxWidth: 480 }
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
@@ -1767,6 +1758,13 @@ const s = StyleSheet.create({
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
   modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
   modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
+  // 담당자 추가 입력 방식 선택 / 실제 입력 폼 모달 전용 (중앙 카드형 팝업 — 다른 모달의 modalOverlay/modalSheet에는 영향 없음)
+  centerModalOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' }
+    : { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 20 },
+  centerModalCard: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxWidth: 480, maxHeight: '85%' }
+    : { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxHeight: '85%' },
   // 프로젝트 상세 팝업(PC 전용) 전용 스타일 — 다른 모달들처럼 하단에 붙는 바텀시트가 아니라 화면
   // 중앙에 사면 모두 둥근 별도 창처럼 띄우기 위해 modalOverlay/modalSheet 대신 사용한다.
   editPopupOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },
@@ -1848,6 +1846,9 @@ const s = StyleSheet.create({
   modalCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
   modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentTeal, alignItems: 'center' },
+  // 담당자 추가 모달 전용 — 취소 버튼과 크기를 동일하게 맞추기 위해 flex만 1로 낮춘 modalConfirm 변형.
+  // modalConfirm은 담당자 수정/텍스트로 가져오기 모달에서도 공유하므로 직접 수정하지 않는다.
+  modalConfirmEqual: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentTeal, alignItems: 'center' },
   modalConfirmText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 
   // AI Chat

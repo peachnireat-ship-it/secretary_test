@@ -11,7 +11,6 @@ import { ICONS, tabColor } from './src/navConfig';
 import { IS_PC } from './src/utils/deviceType';
 import PCSidebar, { PC_SIDEBAR_WIDTH } from './src/components/PCSidebar';
 import ProjectAddPopup from './src/screens/ProjectAddPopup';
-import MessageAddPopup from './src/screens/MessageAddPopup';
 import ScheduleAddPopup from './src/screens/ScheduleAddPopup';
 
 const Tab = createBottomTabNavigator();
@@ -146,16 +145,6 @@ export default function App() {
       <UserProvider>
         <SafeAreaProvider>
           <ProjectAddPopup />
-        </SafeAreaProvider>
-      </UserProvider>
-    );
-  }
-
-  if (POPUP_ROUTE === 'message-new') {
-    return (
-      <UserProvider>
-        <SafeAreaProvider>
-          <MessageAddPopup />
         </SafeAreaProvider>
       </UserProvider>
     );
