@@ -294,6 +294,12 @@ export default function ClientScreen({ navigation, route }) {
   // 않는다 — clients.contact는 not null이지만 빈 문자열은 허용된다.
   async function selectMemberResult(member) {
     if (memberAddLoading) return;
+    // 검색 결과에는 이미 담당자로 등록된 회원도 그대로 나타날 수 있어(재검색 등), 다시 선택해도
+    // 중복 담당자가 생기지 않도록 linkedProfileId 기준으로 먼저 걸러낸다.
+    if (clients.some((c) => c.linkedProfileId === member.id)) {
+      Alert.alert('이미 등록됨', `${member.name}님은 이미 담당자로 등록되어 있습니다.`);
+      return;
+    }
     setMemberAddLoading(true);
     try {
       const updated = await addClient({
@@ -703,11 +709,11 @@ export default function ClientScreen({ navigation, route }) {
         <TextInput style={s.input} value={newNotes} onChangeText={setNewNotes} placeholder="특이사항" placeholderTextColor={C.textDim} />
 
         <View style={s.modalBtns}>
+          <TouchableOpacity style={s.modalConfirmEqual} onPress={handleEditClient}>
+            <Text style={s.modalConfirmText}>저장</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={s.modalCancel} onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes(''); }}>
             <Text style={s.modalCancelText}>취소</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.modalConfirm} onPress={handleEditClient}>
-            <Text style={s.modalConfirmText}>저장</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -1213,10 +1219,9 @@ export default function ClientScreen({ navigation, route }) {
       </Modal>
 
       {/* ── 텍스트 붙여넣기로 가져오기 모달 (웹 전용 진입점) ── */}
-      <Modal visible={showPasteContacts} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
-          <View style={[s.modalSheet, s.h80pct]}>
-            <View style={s.modalHandle} />
+      <Modal visible={showPasteContacts} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.centerModalOverlay}>
+          <View style={[s.centerModalCard, commonStyles.maxH90pct]}>
             <View style={s.chatHeader}>
               <Text style={s.modalTitle}>텍스트로 가져오기</Text>
               <TouchableOpacity onPress={() => { setShowPasteContacts(false); setPasteText(''); }}>
@@ -1249,10 +1254,9 @@ export default function ClientScreen({ navigation, route }) {
       </Modal>
 
       {/* ── 기존 회원 검색 모달 ── */}
-      <Modal visible={showMemberSearch} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
-          <View style={[s.modalSheet, s.h80pct]}>
-            <View style={s.modalHandle} />
+      <Modal visible={showMemberSearch} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.centerModalOverlay}>
+          <View style={[s.centerModalCard, commonStyles.maxH90pct]}>
             <View style={s.chatHeader}>
               <Text style={s.modalTitle}>기존 회원 검색</Text>
               <TouchableOpacity onPress={closeMemberSearch}>
@@ -1287,22 +1291,31 @@ export default function ClientScreen({ navigation, route }) {
               <Text style={[s.emptyText, s.mt24]}>검색 결과가 없습니다.{'\n'}상대방이 검색 노출을 허용하지 않았을 수 있습니다.</Text>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
-                {memberSearchResults.map((member) => (
-                  <TouchableOpacity
-                    key={member.id}
-                    style={[s.contactItem, memberAddLoading && commonStyles.opacity40]}
-                    onPress={() => selectMemberResult(member)}
-                    disabled={memberAddLoading}
-                  >
-                    <View style={s.clientAvatar}>
-                      <Text style={s.clientAvatarText}>{member.name?.[0] || '?'}</Text>
-                    </View>
-                    <View style={commonStyles.flex1}>
-                      <Text style={s.clientName}>{member.name}</Text>
-                      <Text style={s.clientRole}>{member.team}{member.role ? ` · ${member.role}` : ''}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                {memberSearchResults.map((member) => {
+                  // 이미 담당자로 등록된 회원인지 linkedProfileId로 판별 — 배지 표시 및 흐림 처리에 사용
+                  const alreadyRegistered = clients.some((c) => c.linkedProfileId === member.id);
+                  return (
+                    <TouchableOpacity
+                      key={member.id}
+                      style={[s.contactItem, (memberAddLoading || alreadyRegistered) && commonStyles.opacity40]}
+                      onPress={() => selectMemberResult(member)}
+                      disabled={memberAddLoading}
+                    >
+                      <View style={s.clientAvatar}>
+                        <Text style={s.clientAvatarText}>{member.name?.[0] || '?'}</Text>
+                      </View>
+                      <View style={commonStyles.flex1}>
+                        <Text style={s.clientName}>{member.name}</Text>
+                        <Text style={s.clientRole}>{member.team}{member.role ? ` · ${member.role}` : ''}</Text>
+                      </View>
+                      {alreadyRegistered && (
+                        <View style={s.memberRegisteredBadge}>
+                          <Text style={s.memberRegisteredBadgeText}>등록됨</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             )}
           </View>
@@ -1330,7 +1343,7 @@ export default function ClientScreen({ navigation, route }) {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
           <View style={[s.modalSheet, commonStyles.maxH90pct]}>
             <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>담당자 수정</Text>
+            <Text style={s.modalTitle}>담당자 정보 수정</Text>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.scrollPB8}>
               {renderClientEditFields()}
             </ScrollView>
@@ -1347,7 +1360,7 @@ export default function ClientScreen({ navigation, route }) {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.editPopupOverlay}>
           <View style={[s.editPopupCard, commonStyles.maxH80pct]}>
             <View style={s.modalTitleRow}>
-              <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>담당자 수정</Text>
+              <Text style={[s.modalTitle, commonStyles.flex1]} numberOfLines={2}>담당자 정보 수정</Text>
               <TouchableOpacity onPress={() => { setShowEditClient(false); setNewName(''); setNewCompany(''); setNewRole(''); setNewContact(''); setNewWorkContact(''); setNewEmail(''); setNewSns(''); setNewNotes(''); }}>
                 <Text style={s.closeBtn}>✕</Text>
               </TouchableOpacity>
@@ -1742,6 +1755,8 @@ const s = StyleSheet.create({
   sourceIcon: { fontSize: 20, width: 28, textAlign: 'center' },
   sourceOptionText: { color: C.textPrimary, fontSize: 16 },
   contactItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  memberRegisteredBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: C.accentTeal + '55', backgroundColor: C.accentTeal + '18' },
+  memberRegisteredBadgeText: { color: C.accentTeal, fontSize: 11, fontWeight: '600' },
   pasteHint: { color: C.textDim, fontSize: 11, lineHeight: 16, marginBottom: 12 },
   pasteInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.textPrimary, fontSize: 14, paddingHorizontal: 14, paddingVertical: 12, minHeight: 180 },
   memberSearchRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },

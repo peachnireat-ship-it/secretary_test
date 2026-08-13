@@ -431,11 +431,11 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── 히스토리 수정 모달 ── */}
-      <Modal visible={!!editingHistory} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHandle} />
+      {/* ── 히스토리 수정 모달 (히스토리 추가 모달과 동일한 중앙 카드형 팝업) ── */}
+      <Modal visible={!!editingHistory} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.centerModalOverlay}>
+          <View style={s.centerModalCard}>
+            <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={s.modalTitle}>히스토리 수정</Text>
             <Text style={s.modalSubTitle}>{client?.company} — {client?.name}</Text>
 
@@ -466,13 +466,14 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
             <SharedToggleRow visible={isLinked} value={hShared} onToggle={setHShared} />
 
             <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalConfirmEqual} onPress={handleEditHistory}>
+                <Text style={s.modalConfirmText}>저장</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={s.modalCancel} onPress={() => { setEditingHistory(null); resetHistoryForm(); }}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.modalConfirm} onPress={handleEditHistory}>
-                <Text style={s.modalConfirmText}>저장</Text>
-              </TouchableOpacity>
             </View>
+          </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
