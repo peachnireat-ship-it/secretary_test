@@ -9,8 +9,8 @@ const STATUSES = ['진행중', '위험', '지연', '완료', '취소'];
 const PRIORITIES = ['높음', '보통', '낮음'];
 
 // 프로젝트 추가 폼 UI. useProjectForm() 훅이 반환하는 입력 상태·저장 로직을 그대로 props로 받아
-// 렌더링만 담당한다(순수 프레젠테이션 컴포넌트). PC 웹 팝업 창(ProjectAddPopup)과 회의록 화면
-// 내 중앙 고정폭 팝업(MeetingScreen) 양쪽에서 재사용된다. 창 닫기/팝업 닫기 같은 호출 측 전용
+// 렌더링만 담당한다(순수 프레젠테이션 컴포넌트). ProjectScreen.js "새 프로젝트 추가"와 회의록 화면
+// 내 중앙 고정폭 팝업(MeetingScreen) 양쪽에서 재사용된다. 팝업 닫기 같은 호출 측 전용
 // 동작은 onCancel로 위임하고, 이 컴포넌트는 그런 컨테이너 로직을 알지 못한다.
 export default function ProjectAddForm({
   newTitle, setNewTitle, newStartDate, setNewStartDate,
@@ -46,7 +46,7 @@ export default function ProjectAddForm({
   return (
     <>
       <View style={s.header}>
-        <Text style={s.headerTitle}>프로젝트 추가</Text>
+        <Text style={s.headerTitle}>새 프로젝트</Text>
         <TouchableOpacity onPress={onCancel}>
           <Text style={s.closeBtn}>✕</Text>
         </TouchableOpacity>

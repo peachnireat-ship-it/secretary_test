@@ -10,7 +10,6 @@ import { UserProvider, useUser } from './src/context/UserContext';
 import { ICONS, tabColor } from './src/navConfig';
 import { IS_PC } from './src/utils/deviceType';
 import PCSidebar, { PC_SIDEBAR_WIDTH } from './src/components/PCSidebar';
-import ProjectAddPopup from './src/screens/ProjectAddPopup';
 import ScheduleAddPopup from './src/screens/ScheduleAddPopup';
 
 const Tab = createBottomTabNavigator();
@@ -88,7 +87,7 @@ function AppContent() {
       <View style={authWebStyles.outer}>
         <View style={authWebStyles.inner}>
           <SafeAreaProvider>
-            <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={loadingStyles.wrap}>
               <ActivityIndicator color={C.accentBlue} />
             </View>
           </SafeAreaProvider>
@@ -140,16 +139,6 @@ export default function App() {
     }
   }, []);
 
-  if (POPUP_ROUTE === 'project-new') {
-    return (
-      <UserProvider>
-        <SafeAreaProvider>
-          <ProjectAddPopup />
-        </SafeAreaProvider>
-      </UserProvider>
-    );
-  }
-
   if (POPUP_ROUTE === 'schedule-new') {
     return (
       <UserProvider>
@@ -183,3 +172,8 @@ const mainWebStyles = StyleSheet.create(
     ? { outer: { flex: 1, minHeight: '100vh', backgroundColor: C.bg }, inner: { flex: 1, width: '100%' } }
     : { outer: { flex: 1, minHeight: '100vh', backgroundColor: C.bg, alignItems: 'center' }, inner: { flex: 1, width: '100%', maxWidth: 480 } }
 );
+
+// 유저 세션 복원 대기 중 로딩 인디케이터
+const loadingStyles = StyleSheet.create({
+  wrap: { flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
+});

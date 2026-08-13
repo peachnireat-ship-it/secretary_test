@@ -478,10 +478,9 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
       </Modal>
 
       {/* ── 토픽 관리 모달 (이름은 등록 시 확정, 여기서는 공유 전환/삭제/추가만) ── */}
-      <Modal visible={showTopicManager} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHandle} />
+      <Modal visible={showTopicManager} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.centerModalOverlay}>
+          <View style={s.centerModalCard}>
             <View style={s.topicMgrHeaderRow}>
               <View style={s.flex1}>
                 <Text style={s.modalTitle}>토픽 관리</Text>

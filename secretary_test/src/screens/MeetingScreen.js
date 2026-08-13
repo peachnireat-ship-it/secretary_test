@@ -1620,8 +1620,8 @@ export default function MeetingScreen({ navigation }) {
       </Modal>
 
       {/* "저장된 기록" 탭 TASKS 섹션의 "프로젝트로 묶기" 버튼 → 화면 전환 없이 회의록 화면 위에 뜨는
-          중앙 고정폭 팝업(fade). 폼 로직은 useProjectForm에 캡슐화되어 있고 UI는 ProjectAddPopup(PC 웹
-          팝업창)과 동일한 ProjectAddForm 컴포넌트를 재사용한다. */}
+          중앙 고정폭 팝업(fade). 폼 로직은 useProjectForm에 캡슐화되어 있고 UI는 ProjectScreen.js
+          "새 프로젝트 추가"와 동일한 ProjectAddForm 컴포넌트를 재사용한다. */}
       <Modal visible={showAdd} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowAdd(false)}>
         <View style={[s.modalOverlay, s.modalOverlayCentered]}>
           <View style={[s.modalBox, s.projectAddBox]}>
