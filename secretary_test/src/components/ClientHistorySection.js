@@ -385,10 +385,10 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
       </ScrollView>
 
       {/* ── 히스토리 추가 모달 ── */}
-      <Modal visible={showAddHistory} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHandle} />
+      <Modal visible={showAddHistory} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.centerModalOverlay}>
+          <View style={s.centerModalCard}>
+            <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={s.modalTitle}>히스토리 추가</Text>
             <Text style={s.modalSubTitle}>{client?.company} — {client?.name}</Text>
 
@@ -419,13 +419,14 @@ export default function ClientHistorySection({ client, histories, mutualHistorie
             <SharedToggleRow visible={isLinked} value={hShared} onToggle={setHShared} />
 
             <View style={s.modalBtns}>
+              <TouchableOpacity style={s.modalConfirmEqual} onPress={handleAddHistory}>
+                <Text style={s.modalConfirmText}>저장</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={s.modalCancel} onPress={() => { setShowAddHistory(false); resetHistoryForm(); }}>
                 <Text style={s.modalCancelText}>취소</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.modalConfirm} onPress={handleAddHistory}>
-                <Text style={s.modalConfirmText}>저장</Text>
-              </TouchableOpacity>
             </View>
+          </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -720,6 +721,13 @@ const s = StyleSheet.create({
     ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, width: '100%', maxWidth: 480 }
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
   modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
+  // 히스토리 추가 모달 전용 (중앙 카드형 팝업 — 다른 모달의 modalOverlay/modalSheet에는 영향 없음)
+  centerModalOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' }
+    : { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 20 },
+  centerModalCard: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxWidth: 480, maxHeight: '85%' }
+    : { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxHeight: '85%' },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 4 },
   modalSubTitle: { color: C.textDim, fontSize: 12, marginBottom: 16 },
   inputLabel: { color: C.textDim, fontSize: 10, letterSpacing: 1.5 },
@@ -739,5 +747,8 @@ const s = StyleSheet.create({
   modalCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   modalCancelText: { color: C.textSecondary, fontSize: 14 },
   modalConfirm: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentTeal, alignItems: 'center' },
+  // 히스토리 추가 모달 전용 — 취소 버튼과 크기를 동일하게 맞추기 위해 flex만 1로 낮춘 modalConfirm 변형.
+  // modalConfirm은 히스토리 수정/기존 히스토리 추가 모달에서도 공유하므로 직접 수정하지 않는다.
+  modalConfirmEqual: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentTeal, alignItems: 'center' },
   modalConfirmText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 });
