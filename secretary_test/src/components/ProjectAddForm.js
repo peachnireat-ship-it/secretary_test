@@ -177,12 +177,12 @@ export default function ProjectAddForm({
         </TouchableOpacity>
       </ScrollView>
 
-      <View style={s.footer}>
-        <TouchableOpacity style={s.cancelBtn} onPress={onCancel}>
-          <Text style={s.cancelBtnText}>취소</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.confirmBtn} onPress={handleAdd}>
+      <View style={s.mainFooter}>
+        <TouchableOpacity style={s.mainConfirmBtn} onPress={handleAdd}>
           <Text style={s.confirmBtnText}>추가</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.mainCancelBtn} onPress={onCancel}>
+          <Text style={s.cancelBtnText}>취소</Text>
         </TouchableOpacity>
       </View>
 
@@ -274,6 +274,10 @@ const s = StyleSheet.create({
   cancelBtnText: { color: C.textSecondary, fontSize: 14 },
   confirmBtn: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.gold, alignItems: 'center' },
   confirmBtnText: { color: '#09090E', fontSize: 14, fontWeight: '600' },
+
+  mainFooter: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: C.border, justifyContent: 'center' },
+  mainCancelBtn: { flex: 0, minWidth: 120, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  mainConfirmBtn: { flex: 0, minWidth: 120, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, backgroundColor: C.gold, alignItems: 'center' },
 
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   overlayCard: { width: '100%', maxWidth: 440, maxHeight: '80%', backgroundColor: C.surfaceHigh, borderRadius: 16, borderWidth: 1, borderColor: C.border, padding: 20 },

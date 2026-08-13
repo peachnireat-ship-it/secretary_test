@@ -257,7 +257,6 @@ export default function ProjectScreen({ navigation, route }) {
   const swipeAdd = useSwipeClose(() => setShowAdd(false), showAdd);
   const swipeProjectView = useSwipeClose(() => setShowProjectView(false), showProjectView);
   const swipeMeetingDetail = useSwipeClose(() => setShowMeetingDetail(false), showMeetingDetail);
-  const swipePersonDetail = useSwipeClose(() => setShowPersonDetail(false), showPersonDetail);
   const swipeCompanyDetail = useSwipeClose(() => setShowCompanyDetail(false), showCompanyDetail);
 
   const urgencyAnim = useRef(new Animated.Value(0)).current;
@@ -1881,13 +1880,11 @@ export default function ProjectScreen({ navigation, route }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── 인물 상세 모달 ── */}
-      <Modal visible={showPersonDetail} animationType="slide" transparent onRequestClose={() => setShowPersonDetail(false)}>
-        <View style={s.modalOverlay}>
-          <Animated.View style={[s.modalSheet, commonStyles.maxH85pct, swipePersonDetail.animStyle]}>
-            <View style={s.modalHandleWrap} {...swipePersonDetail.panHandlers}>
-              <View style={s.modalHandle} />
-            </View>
+      {/* ── 인물 상세 팝업: 하단에서 슬라이드되는 바텀시트 모달이 아니라, 화면 중앙에 사면 모두
+          둥근 카드로 뜨는 팝업(ScheduleScreen의 PC "일정 수정" 팝업과 동일 패턴)을 쓴다 ── */}
+      <Modal visible={showPersonDetail} animationType="fade" transparent onRequestClose={() => setShowPersonDetail(false)}>
+        <View style={s.personPopupOverlay}>
+          <View style={[s.personPopupCard, commonStyles.maxH85pct]}>
             {personDetailClient && (
               <>
                 <View style={s.personDetailHeader}>
@@ -1939,7 +1936,7 @@ export default function ProjectScreen({ navigation, route }) {
                 </ScrollView>
               </>
             )}
-          </Animated.View>
+          </View>
         </View>
       </Modal>
 
@@ -2576,6 +2573,14 @@ const s = StyleSheet.create({
   pickerAddForm: { flex: 1, paddingHorizontal: 20 },
   spacerH40: { height: 40 },
 
+  personPopupOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },
+  personPopupCard: {
+    backgroundColor: C.surfaceHigh, borderRadius: 20, width: '100%', maxWidth: 480,
+    paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24,
+    ...(Platform.OS === 'web' ? { boxShadow: '0 12px 40px rgba(0,0,0,0.45)' } : {
+      shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 12,
+    }),
+  },
   personDetailHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
   personDetailAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.accentTeal + '33', borderWidth: 1, borderColor: C.accentTeal + '55', alignItems: 'center', justifyContent: 'center' },
   personDetailName: { color: C.textPrimary, fontSize: 16, fontWeight: '500' },

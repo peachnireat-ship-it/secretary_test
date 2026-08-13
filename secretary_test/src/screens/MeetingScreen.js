@@ -86,6 +86,7 @@ export default function MeetingScreen({ navigation }) {
 
   const scrollRef = useRef(null);
   const scrollToTopOnPickRef = useRef(false);
+  const historyListRef = useRef(null);
 
   const diarization = useDiarization({
     meetingRecords,
@@ -180,6 +181,8 @@ export default function MeetingScreen({ navigation }) {
 
   useFocusEffect(useCallback(() => {
     if (activeTab === 'history' || IS_PC) loadRecords();
+    // 다른 메뉴로 갔다가 돌아왔을 때 저장된 기록 목록이 이전 스크롤 위치에 남아있지 않도록 항상 맨 위로 되돌린다.
+    historyListRef.current?.scrollToOffset({ offset: 0, animated: false });
     // 화면을 벗어날 때 선택(조회) 중이던 회의록을 초기화한다 — 다른 메뉴로 갔다가 돌아왔을 때
     // 이전 세션에서 보던 요약이 상세 패널(PC)/펼침(모바일)에 그대로 남아있지 않도록 한다.
     return () => setExpandedId(null);
@@ -1680,6 +1683,7 @@ export default function MeetingScreen({ navigation }) {
             <View style={s.bodyPC}>
               <View style={s.listColumn}>
                 <FlatList
+                  ref={historyListRef}
                   data={meetingRecords}
                   extraData={[meetingRecords, expandedId]}
                   keyExtractor={(item) => item.id}
@@ -1708,6 +1712,7 @@ export default function MeetingScreen({ navigation }) {
       ) : (
         /* 저장된 기록 탭 (모바일) */
         <FlatList
+          ref={historyListRef}
           data={meetingRecords}
           extraData={meetingRecords}
           keyExtractor={(item) => item.id}
