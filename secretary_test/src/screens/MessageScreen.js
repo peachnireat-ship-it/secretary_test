@@ -439,11 +439,11 @@ export default function MessageScreen() {
         <View style={s.modalBtns}>
           {replyMode ? (
             <>
-              <TouchableOpacity style={s.cancelBtn} onPress={() => setReplyMode(false)}>
-                <Text style={s.cancelText}>취소</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={s.confirmBtn} onPress={handleReply}>
                 <Text style={s.confirmText}>전송</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setReplyMode(false)}>
+                <Text style={s.cancelText}>취소</Text>
               </TouchableOpacity>
             </>
           ) : !editMode ? (
@@ -810,10 +810,10 @@ const s = StyleSheet.create({
   optionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   optionText: { color: C.textDim, fontSize: 12 },
 
-  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 24 },
-  cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
+  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 24, justifyContent: 'center' },
+  cancelBtn: { flex: 0, minWidth: 120, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   cancelText: { color: C.textSecondary, fontSize: 14 },
-  confirmBtn: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.accentPurple, alignItems: 'center' },
+  confirmBtn: { flex: 0, minWidth: 120, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, backgroundColor: C.accentPurple, alignItems: 'center' },
   confirmText: { color: '#ECEAF5', fontSize: 14, fontWeight: '600' },
   // 상세 패널 보기 모드의 답장/수정·삭제 버튼: 폭을 고정 동일값으로 맞추고 패널 기준 가운데 정렬
   pairRow: { flex: 1, flexDirection: 'row', gap: 12, justifyContent: 'center' },
