@@ -24,6 +24,10 @@ const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const DELAY_EXEMPT_STATUSES = ['완료', '취소', '지연'];
 const TITLE_MAX_LENGTH = 200;
 const NOTES_MAX_LENGTH = 2000;
+// PC 전용 AI/새 일정 버튼 행(pcPanelBtnRow)과 월 네비게이션 사이 간격. 스타일의 marginBottom과
+// 프로젝트 패널 타이틀의 paddingTop 계산(calBtnRowHeight + 이 값) 양쪽에서 같이 써서 어긋나지
+// 않게 한다.
+const CAL_BTN_ROW_MARGIN_BOTTOM = 10;
 // 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
 const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
 
@@ -64,6 +68,26 @@ const TODAY_STR = dateStr(new Date());
 // window.open() 창 이름을 호출마다 고유하게 만들기 위한 카운터 (이유는 MessageScreen.js 참고)
 let popupSeq = 0;
 
+// 달력이 실제로 필요로 하는 최대 행 수(1일 요일 + 그 달의 일수 조합상 최대 6행까지 나옴).
+// PC에서는 buildMonthGrid가 이 값(42칸)까지 항상 빈 칸으로 채워, 달이 바뀌어도(4~6행 사이를
+// 오가도) 그리드 총 높이가 항상 동일하게 유지되도록 한다 — PC 레이아웃에서 달력 열이 세로 중앙
+// 정렬(calendarRowOuter)되어 있어, 그리드 높이가 달마다 다르면 월 네비게이션 등 그 위 요소들까지
+// 화면상 위치가 매달 흔들린다. 모바일은 세로 중앙 정렬이 없어 이 문제가 없고, 불필요한 빈 행이
+// 화면을 더 차지하게 되므로 패딩하지 않는다.
+const MONTH_GRID_CELLS = 42;
+const MONTH_GRID_ROWS = MONTH_GRID_CELLS / 7;
+// PC 전용 달력 그리드 치수를 실측이 아닌 상수로 고정한다. 날짜 셀 수(MONTH_GRID_CELLS)는 이미
+// 월과 무관하게 항상 42칸으로 고정돼 있으므로, 셀 자체의 높이(PC_GRID_ROW_HEIGHT, 기존
+// gridCell의 minHeight:52와 동일한 값 — 화면 비율 변경 없음)와 그리드 하단 여백(
+// PC_GRID_BOTTOM_MARGIN, 기존 gridPCTaller의 marginBottom:108과 동일)만 고정하면 그리드
+// 콘텐츠의 총 높이(PC_GRID_CONTENT_HEIGHT)는 수학적으로 항상 동일해진다. 이 상수를 그리드
+// 컨테이너(gridClip) 자체의 height와, 그 오른쪽 목록·상세 패널의 height 계산에도 그대로 써서
+// "부모 컨테이너 높이가 달력 콘텐츠(월별 행 수, 일정 bar 개수)에 의해 결정되는" 구조 자체를
+// 없앤다 — onLayout 실측값(gridHeight)에 더 이상 의존하지 않는다.
+const PC_GRID_ROW_HEIGHT = 52;
+const PC_GRID_BOTTOM_MARGIN = 108;
+const PC_GRID_CONTENT_HEIGHT = MONTH_GRID_ROWS * PC_GRID_ROW_HEIGHT + PC_GRID_BOTTOM_MARGIN;
+
 function buildMonthGrid(year, month) {
   // month: 1-based
   const firstDay = new Date(year, month - 1, 1).getDay();
@@ -73,6 +97,9 @@ function buildMonthGrid(year, month) {
   for (let d = 1; d <= daysInMonth; d++) {
     const dt = new Date(year, month - 1, d);
     cells.push({ str: dateStr(dt), date: d, day: DAYS[dt.getDay()] });
+  }
+  if (IS_PC) {
+    while (cells.length < MONTH_GRID_CELLS) cells.push(null);
   }
   return cells;
 }
@@ -85,14 +112,23 @@ export default function ScheduleScreen({ navigation, route }) {
   const [projects, setProjects] = useState([]);
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth() + 1);
-  // PC 전용 "등록된 일정·프로젝트" 목록 높이를 달력 그리드 높이와 맞추기 위한 실측값. 그리드 행 수는
-  // 월마다 5~6행으로 달라져 고정값을 둘 수 없으므로, 그리드 실제 렌더 높이를 onLayout으로 읽어 저장한다.
-  const [gridHeight, setGridHeight] = useState(null);
   // PC 전용: 달력의 "그리드 위쪽 영역"(월 네비게이션+요일 헤더) 실측 높이. 프로젝트 패널의
   // "목록 위쪽 영역"(AI/추가 버튼 행+타이틀)에 동일한 높이를 줘서, 달력 그리드와 일정·프로젝트
-  // 목록이 같은 y좌표에서 시작하도록 맞춘다(gridHeight와 동일한 이유로 폰트 렌더링에 따라 고정값을
-  // 둘 수 없어 onLayout 실측 필요).
+  // 목록이 같은 y좌표에서 시작하도록 맞춘다. 이 값은 월 네비게이션·버튼 행처럼 폰트 렌더링에
+  // 따라 달라질 수 있는 "고정 텍스트 UI"의 높이라 onLayout 실측이 필요하지만(모든 달에서 항상
+  // 동일한 값이 나온다), 그 아래 그리드 자체의 높이는 더 이상 이렇게 실측하지 않는다 — 월별 행
+  // 수·일정 bar 개수 같은 "콘텐츠 데이터"에 좌우되는 값이라 실측 대신 상수(PC_GRID_CONTENT_HEIGHT)로
+  // 고정한다(위 상수 선언부 참고).
   const [calHeaderHeight, setCalHeaderHeight] = useState(null);
+  // PC 전용: 월 네비게이션 위에 놓인 AI/새 일정 버튼 행의 실측 높이(marginBottom 포함). 프로젝트
+  // 패널 타이틀("등록된 일정 · 프로젝트")이 이 값만큼 아래로 내려가야 버튼 행이 아니라 그 아래
+  // 월 네비게이션과 같은 y좌표에서 시작한다 — calHeaderHeight(버튼 행 포함 전체 높이)만으로는
+  // 타이틀이 버튼 행 위치에 붙어버린다.
+  const [calBtnRowHeight, setCalBtnRowHeight] = useState(0);
+  // PC 전용: 월 네비게이션(년월 컨트롤러) 자체의 실측 높이. 프로젝트 패널 타이틀 박스를 이 높이와
+  // 똑같이 만들고 justifyContent:'center'로 세로 중앙 정렬하면, monthNav 안에서 alignItems:'center'로
+  // 이미 세로 중앙에 있는 "년 월" 텍스트와 타이틀 텍스트가 같은 y좌표(수평선)에 놓이게 된다.
+  const [calMonthNavHeight, setCalMonthNavHeight] = useState(0);
 
   const [copyTarget, setCopyTarget] = useState(null);
   const [copyTitleInput, setCopyTitleInput] = useState('');
@@ -983,30 +1019,6 @@ export default function ScheduleScreen({ navigation, route }) {
         )}
       </View>
 
-      {/* ── PC 전용 AI/새 일정 버튼 행: 등록된 일정·프로젝트 목록(가운데 칼럼) 위, 달력보다 살짝 높은
-          위치에 둔다. calendarRow와 동일한 3칼럼 폭 구조(캘린더 폭 스페이서 + 목록 칼럼 + 상세 칼럼
-          스페이서)를 그대로 재사용해 버튼이 목록 칼럼 우측 끝 위에 정확히 오도록 맞춘다. 이렇게
-          분리한 이유는 아래 목록 패널의 top/height를 달력 그리드와 정확히 일치시키기 위해서다 —
-          버튼 행이 목록 패널 안에 있으면 그 높이만큼 목록 top이 그리드보다 아래로 밀린다 ── */}
-      {IS_PC && (
-        <View style={s.pcTopBarOuter}>
-          <View style={s.pcTopBar}>
-            <View style={s.calendarWrap} />
-            <View style={s.pcTopBarBtnCol}>
-              <View style={s.pcPanelBtnRow}>
-                <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
-                  <Text style={s.aiBtnText}>✦ AI</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.pcAddBtnInline} onPress={openAddSheet}>
-                  <Text style={s.pcAddBtnInlineText}>+ 새 일정</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={commonStyles.flex1} />
-          </View>
-        </View>
-      )}
-
       {/* ── 달력 + 프로젝트 패널(PC 전용): PC는 넓은 화면을 활용해 캘린더 좌측 + 등록된 프로젝트를
           우측에 가로로 나란히 배치한다. 모바일은 프로젝트 패널을 렌더링하지 않아 기존과 동일하게
           세로 스택으로만 보인다. 바깥(calendarRowOuter)이 alignItems:'center'로 화면 가로 중앙을
@@ -1016,12 +1028,30 @@ export default function ScheduleScreen({ navigation, route }) {
       {/* ── 달력(월 네비게이션+요일 헤더+그리드): PC는 넓은 화면에 그리드 칸이 과도하게 커지지 않도록
           모바일 기준 너비로 줄여서 가운데 정렬한다 ── */}
       <View style={s.calendarWrap}>
-      {/* ── 월 네비게이션 + 요일 헤더(달력 그리드 위쪽 영역): 실제 렌더 높이를 onLayout으로 재서
-          calHeaderHeight에 저장 — 우측 프로젝트 패널의 목록 위쪽 영역(pcPanelBtnRow+타이틀)이
-          이 높이를 그대로 받아 달력 그리드와 목록이 같은 y좌표에서 시작하도록 맞춘다 ── */}
+      {/* ── 월 네비게이션 + 요일 헤더 + (PC 전용) AI/새 일정 버튼 행(달력 그리드 위쪽 영역): 실제
+          렌더 높이를 onLayout으로 재서 calHeaderHeight에 저장 — 우측 프로젝트 패널의 목록 위쪽
+          영역(타이틀)이 이 높이를 그대로 받아 달력 그리드와 목록이 같은 y좌표에서 시작하도록
+          맞춘다 ── */}
       <View onLayout={IS_PC ? (e) => setCalHeaderHeight(e.nativeEvent.layout.height) : undefined}>
+      {/* ── PC 전용 AI/새 일정 버튼 행: 월 네비게이션(년월 컨트롤러) 바로 위, 왼쪽 끝(‹ 화살표)에
+          맞춰 좌측 정렬로 배치. 이 View는 여전히 calHeaderHeight를 재는 바깥 View(월 네비게이션+
+          요일 헤더를 감싸는 그 View) 안에 있으므로, 버튼 행 높이가 calHeaderHeight에 자동으로
+          포함되어 우측 목록·상세 패널의 top/height도 별도 계산 없이 그대로 따라온다. 버튼 행
+          자체 높이(calBtnRowHeight)는 따로 재서, 프로젝트 패널 타이틀이 이 버튼 행이 아니라 그
+          아래 월 네비게이션과 y좌표를 맞추는 데 쓴다(아래 projectPanelHeader 참고) ── */}
+      {IS_PC && (
+        <View style={s.pcPanelBtnRow} onLayout={(e) => setCalBtnRowHeight(e.nativeEvent.layout.height)}>
+          <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+            <Text style={s.aiBtnText}>✦ AI</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.pcAddBtnInline} onPress={openAddSheet}>
+            <Text style={s.pcAddBtnInlineText}>+ 새 일정</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* ── 월 네비게이션 ── */}
-      <View style={s.monthNav}>
+      <View style={s.monthNav} onLayout={IS_PC ? (e) => setCalMonthNavHeight(e.nativeEvent.layout.height) : undefined}>
         <TouchableOpacity onPress={() => moveMonth(-1)} style={s.monthArrow}>
           <Text style={s.monthArrowText}>‹</Text>
         </TouchableOpacity>
@@ -1041,12 +1071,17 @@ export default function ScheduleScreen({ navigation, route }) {
       </View>
       </View>
 
-      {/* ── 캘린더 그리드 ── */}
-      <View style={s.gridClip} onLayout={IS_PC ? (e) => setGridHeight(e.nativeEvent.layout.height) : undefined}>
+      {/* ── 캘린더 그리드: PC는 height를 PC_GRID_CONTENT_HEIGHT 상수로 고정하고 overflow:'hidden'을
+          둔다. 셀 수(42, 6행 고정)·셀 높이(PC_GRID_ROW_HEIGHT, 고정+overflow:hidden)가 모두
+          상수이므로 이 컨테이너의 실제 콘텐츠 높이는 항상 정확히 이 값과 같다 — overflow:hidden은
+          안전장치이지 실제로 잘라낼 내용이 있어서가 아니다. onLayout 실측을 쓰지 않으므로 달이
+          바뀌거나(4~6행) 특정 날짜에 일정 bar가 아무리 많아져도 이 컨테이너의 높이·그 값을 그대로
+          물려받는 목록·상세 패널의 높이는 전혀 흔들리지 않는다 ── */}
+      <View style={[s.gridClip, IS_PC && { height: PC_GRID_CONTENT_HEIGHT }]}>
         {/* eslint-disable-next-line react-hooks/refs -- calPanResponder/calTranslateX는 최초 렌더에서 한 번만 생성되는 안전한 ref */}
-        <Animated.View style={[s.grid, { transform: [{ translateX: calTranslateX }] }]} {...calPanResponder.panHandlers}>
+        <Animated.View style={[s.grid, IS_PC && s.gridPCTaller, { transform: [{ translateX: calTranslateX }] }]} {...calPanResponder.panHandlers}>
         {monthGrid.map((cell, i) => {
-          if (!cell) return <View key={`e-${i}`} style={s.gridCell} />;
+          if (!cell) return <View key={`e-${i}`} style={[s.gridCell, IS_PC && s.gridCellPC]} />;
           const isSelected = selectedDate === cell.str;
           const isToday = cell.str === TODAY_STR;
           const isSun = i % 7 === 0;
@@ -1069,7 +1104,7 @@ export default function ScheduleScreen({ navigation, route }) {
             ...deadlineProjs.map(() => C.gold),
           ];
           return (
-            <TouchableOpacity key={cell.str} style={s.gridCell} onPress={() => setSelectedDate(cell.str)}>
+            <TouchableOpacity key={cell.str} style={[s.gridCell, IS_PC && s.gridCellPC]} onPress={() => setSelectedDate(cell.str)}>
               <View style={[s.gridNumWrap, isSelected && s.gridNumWrapActive]}>
                 <Text style={[
                   s.gridNum,
@@ -1131,21 +1166,37 @@ export default function ScheduleScreen({ navigation, route }) {
 
       {/* ── 등록된 일정/프로젝트 패널(PC 전용): dayProjects·daySchedules를 그대로 재사용, 카드 클릭 시
           아래 일정 목록과 동일한 상세 모달을 띄운다(아래쪽 목록과의 중복 표시는 의도된 동작).
-          AI/새 일정 버튼은 위쪽 별도 행(pcTopBar)으로 옮겨졌으므로 여기는 목록(제목+카드)만 남는다 ── */}
+          AI/새 일정 버튼은 달력의 월 네비게이션 위(calHeaderHeight로 측정되는 영역 안)로 옮겨졌으므로
+          여기는 목록(제목+카드)만 남는다 ── */}
       {IS_PC && (
         <View style={s.projectPanel}>
-          {/* 제목 영역: calHeaderHeight(달력 위쪽 영역 실측값)를 그대로 적용해 달력의 월 네비게이션+
-              요일 헤더와 같은 y좌표·높이를 차지하게 한다 — 타이틀이 달력 타이틀과 같은 줄에서
-              시작하도록 맞추기 위함. */}
+          {/* 제목 영역: 전체 높이는 calHeaderHeight(달력 위쪽 영역 전체 실측값, 버튼 행 포함)로
+              맞춰 목록 카드가 달력 그리드와 같은 y좌표에서 시작하게 한다. 안쪽 타이틀 박스는
+              marginTop(calBtnRowHeight, marginBottom 10 포함)으로 월 네비게이션과 같은 y좌표에서
+              시작하고, height를 월 네비게이션 실측 높이(calMonthNavHeight)와 똑같이 맞춘 뒤
+              justifyContent:'center'로 세로 중앙 정렬해 "년 월" 텍스트와 수평(같은 y)으로
+              가운데 정렬되도록 한다. */}
           <View style={[s.projectPanelHeader, calHeaderHeight ? { height: calHeaderHeight } : null]}>
-            <Text style={s.projectPanelTitle}>등록된 일정 · 프로젝트</Text>
+            <View style={[
+              s.projectPanelTitleRow,
+              calBtnRowHeight ? { marginTop: calBtnRowHeight + CAL_BTN_ROW_MARGIN_BOTTOM } : null,
+              calMonthNavHeight ? { height: calMonthNavHeight } : null,
+            ]}>
+              <Text style={s.projectPanelTitle}>등록된 일정 · 프로젝트</Text>
+            </View>
           </View>
+          {/* 목록을 감싸는 고정 높이 박스: height를 PC_GRID_CONTENT_HEIGHT 상수(달력 그리드와 동일한
+              값, 실측이 아님)로 고정하고 overflow:'hidden'으로 물리적으로 클리핑한다. 월 전체
+              보기 등으로 항목 수가 아무리 늘어나도 이 박스 자체는 절대 커지지 않고, 안쪽
+              ScrollView(flex:1)만 넘치는 내용을 스크롤한다 — 비어있을 때도 같은 높이를 차지해
+              옆 상세 패널과 어긋나지 않게 한다. */}
+          <View style={[s.projectPanelListWrap, IS_PC && { height: PC_GRID_CONTENT_HEIGHT }]}>
           {dayProjects.length === 0 && daySchedules.length === 0 ? (
             <Text style={s.projectPanelEmpty}>등록된 일정·프로젝트가 없습니다</Text>
           ) : (
             <ScrollView
               nativeID="schedule-project-panel-list"
-              style={[s.projectPanelList, gridHeight ? [s.projectPanelListMeasured, { height: gridHeight }] : null]}
+              style={s.projectPanelList}
               contentContainerStyle={s.projectPanelListContent}
               showsVerticalScrollIndicator={true}
             >
@@ -1212,6 +1263,7 @@ export default function ScheduleScreen({ navigation, route }) {
               })}
             </ScrollView>
           )}
+          </View>
         </View>
       )}
 
@@ -1221,9 +1273,10 @@ export default function ScheduleScreen({ navigation, route }) {
           변경 없음), PC에서는 Modal 렌더링 대신 이 View 표시 여부 조건으로만 쓰인다. 콘텐츠는
           renderScheduleDetailBody()/renderProjectDetailBody()로 모달과 완전히 공유한다 ── */}
       {IS_PC && (
-        // detailPanel의 세로 높이를 calHeaderHeight+gridHeight(달력 칼럼 실측 높이)로 고정한다.
-        // detailPanel은 calendarRow(flexDirection:'row')의 직계 항목이라 이 축의 main axis는
-        // 가로다 — projectPanelList(세로 컨테이너 안, flexBasis가 세로에 적용)와 달리 여기서는
+        // detailPanel의 세로 높이를 calHeaderHeight(월 네비게이션 등 위쪽 영역 실측값) +
+        // PC_GRID_CONTENT_HEIGHT(달력 그리드 높이, 실측이 아닌 상수)로 고정한다. detailPanel은
+        // calendarRow(flexDirection:'row')의 직계 항목이라 이 축의 main axis는 가로다 —
+        // projectPanelListWrap(세로 컨테이너 안, flexBasis가 세로에 적용)와 달리 여기서는
         // flexGrow/flexShrink/flexBasis를 건드리지 않고 height만 직접 지정해도 가로 폭(flex:1)
         // 계산과 전혀 충돌하지 않는다(실제로 flexGrow/flexShrink:0을 같이 주면 이 항목의 flex-basis
         // 축이 가로가 되어 폭 자체가 내용물 크기로 결정돼버려 선택 항목마다 폭이 들쑥날쑥해지는
@@ -1231,7 +1284,17 @@ export default function ScheduleScreen({ navigation, route }) {
         // 캘린더보다 커져 화면(App.js가 전역으로 켜 둔 document.body 스크롤) 전체 높이가 뷰포트를
         // 넘고, 그때 나타나는 브라우저 스크롤바가 가로 폭을 갉아먹는 문제도 있어 높이 고정이
         // 필요하다 — 내부 ScrollView(detailScroll)가 넘치는 내용만 스크롤한다.
-        <View style={[s.detailPanel, calHeaderHeight && gridHeight ? { height: calHeaderHeight + gridHeight } : null]}>
+        // marginTop을 버튼 행 높이(calBtnRowHeight, marginBottom 포함)만큼 줘서 패널 상단을
+        // "등록된 일정 · 프로젝트" 타이틀 시작 지점(= 월 네비게이션 시작 지점)과 맞추고, height는
+        // 그만큼 줄여 하단(calHeaderHeight+PC_GRID_CONTENT_HEIGHT, 달력 그리드 최하단)은 그대로
+        // 유지한다.
+        <View style={[
+          s.detailPanel,
+          calHeaderHeight ? {
+            marginTop: calBtnRowHeight + CAL_BTN_ROW_MARGIN_BOTTOM,
+            height: calHeaderHeight + PC_GRID_CONTENT_HEIGHT - (calBtnRowHeight + CAL_BTN_ROW_MARGIN_BOTTOM),
+          } : null,
+        ]}>
           {showScheduleView && viewSchedule ? (
             renderScheduleDetailBody(true)
           ) : showProjectView && viewProject ? (
@@ -1994,24 +2057,27 @@ const s = StyleSheet.create({
   // calendarRow가 row일 때 align-items 기본값(stretch)으로 캘린더와 높이가 맞춰져, 내부
   // ScrollView(flex:1)가 유효한 높이를 가지고 스크롤할 수 있게 된다.
   projectPanel: { flex: 1 },
-  // 제목 영역(버튼 행은 pcTopBar로 이동해 이제 타이틀만 남음): calHeaderHeight를 인라인으로 받아
-  // 달력 위쪽 영역(월 네비게이션+요일 헤더)과 같은 y좌표·높이를 차지하도록 맞춘다.
+  // 제목 영역(버튼 행은 달력의 월 네비게이션 위로 이동해 이제 타이틀만 남음): calHeaderHeight를
+  // 인라인으로 받아 달력 위쪽 영역(버튼 행+월 네비게이션+요일 헤더)과 같은 y좌표·높이를 차지하도록 맞춘다.
   projectPanelHeader: { justifyContent: 'flex-start' },
-  projectPanelTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '600', letterSpacing: 0.5, marginBottom: 12 },
+  // 타이틀을 감싸는 박스: monthNav와 같은 height를 인라인으로 받아 justifyContent:'center'로
+  // 세로 중앙 정렬 — monthNav 안의 "년 월" 텍스트도 monthNav의 alignItems:'center'로 세로 중앙에
+  // 있으므로, 결과적으로 둘의 y좌표(수평선)가 일치한다.
+  projectPanelTitleRow: { justifyContent: 'center' },
+  projectPanelTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
+  // 목록 박스: height(PC_GRID_CONTENT_HEIGHT 상수, 인라인 유지)로 고정하고 overflow:'hidden'으로
+  // 물리적 클리핑.
+  // flexGrow/flexShrink:0 + flexBasis:'auto'는 RN(Yoga)에서 부모(projectPanel: flex:1)의 flex
+  // 컨텍스트 안에서 flex:0이 flexBasis:0%로 변환돼 height를 덮어쓰는 버그를 막기 위해 필요
+  // (ScheduleScreen.js 750번째 줄 주석 참고).
+  projectPanelListWrap: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', overflow: 'hidden' },
   projectPanelList: { flex: 1 },
-  // gridHeight(달력 그리드 실측 높이, 인라인 유지) 적용 시 함께 켜지는 정적 부분만 분리.
-  // flexGrow/flexShrink:0 + flexBasis:'auto'는 RN(Yoga)에서 flex:0이 flexBasis:0%로 변환돼
-  // height를 덮어쓰는 버그를 막기 위해 필요(ScheduleScreen.js 750번째 줄 주석 참고).
-  projectPanelListMeasured: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
   projectPanelListContent: { gap: 10, paddingBottom: 24 },
   projectPanelEmpty: { color: C.textDim, fontSize: 12 },
-  // PC 전용 AI/새 일정 버튼 행이 놓이는 상단 바: calendarRow와 동일한 3칼럼 폭 구조(캘린더 폭
-  // 스페이서 + 목록 칼럼 + 상세 칼럼 스페이서)를 재사용해 버튼이 목록 칼럼 위에 오도록 맞추고,
-  // marginBottom으로 달력/목록보다 위쪽에 위치하게 한다.
-  pcTopBarOuter: { alignItems: 'center' },
-  pcTopBar: { flexDirection: 'row', width: '100%', maxWidth: 1400, gap: 24, marginBottom: 12 },
-  pcTopBarBtnCol: { flex: 1, alignItems: 'flex-end' },
-  pcPanelBtnRow: { flexDirection: 'row', gap: 8 },
+  // PC 전용 AI/새 일정 버튼 행: 월 네비게이션(년월 컨트롤러) 바로 위, calendarWrap(480px) 폭
+  // 안에서 좌측 정렬. alignSelf:'flex-start'로 버튼 행 왼쪽 끝이 월 네비게이션의 왼쪽 끝(‹ 화살표)과
+  // 맞춰지고, marginBottom으로 월 네비게이션과의 간격을 둔다.
+  pcPanelBtnRow: { flexDirection: 'row', alignSelf: 'flex-start', gap: 8, marginBottom: CAL_BTN_ROW_MARGIN_BOTTOM },
   pcAddBtnInline: { paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentBlue + '22', borderWidth: 1, borderColor: C.accentBlue + '55', borderRadius: 20 },
   pcAddBtnInlineText: { color: C.accentBlue, fontSize: 12, fontWeight: '600' },
   // 상세 보기 패널(PC 전용 3번째 칼럼): projectPanel과 동일하게 flex:1로 calendarRow의 stretch
@@ -2020,7 +2086,13 @@ const s = StyleSheet.create({
   // minWidth:0 — 웹 flexbox는 flex item의 min-width 기본값이 'auto'(내용 크기)라, 선택한 일정/
   // 프로젝트의 메모 등에 줄바꿈 없는 긴 텍스트가 있으면 flex:1 계산 폭보다 이 칼럼이 넓어져 선택
   // 항목에 따라 폭이 들쑥날쑥해질 수 있다. 0으로 명시해 항상 flex 비율대로만 폭이 고정되게 한다.
-  detailPanel: { flex: 1, minWidth: 0, backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 20 },
+  // overflow:'hidden' — height는 위에서 인라인으로 calHeaderHeight+PC_GRID_CONTENT_HEIGHT
+  // 기준 고정값을 받지만, calHeaderHeight를 못 받는 아주 짧은 순간(최초 마운트 등)이나 내용이
+  // 극단적으로 길 때 RN View의
+  // 기본 overflow('visible')로 인해 내용이 카드 경계 밖으로 그대로 삐져나올 수 있다. 물리적으로
+  // 클리핑해 상세 내용 길이와 무관하게 패널(및 그 아래로는 없지만 옆 목록·버튼 행)의 자리가
+  // 항상 고정되도록 한다(내부 detailScroll이 넘치는 내용을 스크롤로 흡수).
+  detailPanel: { flex: 1, minWidth: 0, overflow: 'hidden', backgroundColor: C.surfaceHigh, borderRadius: 16, padding: 20 },
   // renderScheduleDetailBody/renderProjectDetailBody가 PC 인라인 패널(isInline=true)에서만 쓰는
   // ScrollView 스타일 — detailPanel(flex:1로 stretch된 고정 높이) 안에서 실제로 스크롤되려면
   // flex:1이 필요하다. 모바일 바텀시트는 원래 style prop 없이 콘텐츠 기준 auto 높이(모달의
@@ -2040,7 +2112,15 @@ const s = StyleSheet.create({
   weekDay: { flex: 1, textAlign: 'center', color: C.textDim, fontSize: 10, letterSpacing: 0.5 },
   gridClip: { overflow: 'hidden' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, marginBottom: 8 },
+  // PC 3칼럼 레이아웃에서 그리드(및 이를 따라가는 목록·상세 패널)를 늘리기 위한 하단 여백.
+  // PC_GRID_CONTENT_HEIGHT 계산에 쓰인 값과 반드시 같아야 하므로 상수를 그대로 참조한다.
+  gridPCTaller: { marginBottom: PC_GRID_BOTTOM_MARGIN },
   gridCell: { width: '14.28%', minHeight: 52, alignItems: 'center', justifyContent: 'flex-start', paddingVertical: 4 },
+  // PC 전용: 셀 높이를 minHeight가 아닌 고정 height로 바꾸고 overflow:'hidden'을 둬서, 특정
+  // 날짜에 일정 bar·점(dot)이 아무리 많아져도 그 셀(과 그 셀이 속한 행)이 커지지 않고 내부에서
+  // 잘리도록 한다 — 이게 없으면 바쁜 날짜 하나 때문에 그 주(행) 전체가 늘어나 그리드 총 높이가
+  // PC_GRID_CONTENT_HEIGHT와 어긋난다.
+  gridCellPC: { height: PC_GRID_ROW_HEIGHT, overflow: 'hidden' },
   gridNumWrap: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   gridNumWrapActive: { backgroundColor: C.accentBlue, borderRadius: 15 },
   gridNum: { color: C.textSecondary, fontSize: 13, fontWeight: '300' },
