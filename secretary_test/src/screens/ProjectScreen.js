@@ -149,6 +149,13 @@ export default function ProjectScreen({ navigation, route }) {
   // moved 플래그로 실제 드래그와 단순 클릭을 구분해 칩의 onPress가 드래그 도중에 실수로 실행되지
   // 않도록 막는다(칩 onPress 쪽에서 isQuickDragClick()으로 확인).
   const quickScrollRef = useRef(null);
+  const gridListRef = useRef(null);
+  // useFocusEffect 콜백이 실제 focus 이벤트에서만 재실행되도록 deps를 비우는 대신([]),
+  // 콜백 내부에서 최신 viewMode/openProjectId를 읽기 위한 ref (stale closure 방지).
+  const viewModeRef = useRef(viewMode);
+  useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
+  const openProjectIdRef = useRef(route?.params?.openProjectId);
+  useEffect(() => { openProjectIdRef.current = route?.params?.openProjectId; }, [route?.params?.openProjectId]);
   const quickDragRef = useRef({ dragging: false, moved: false, startX: 0, startScrollLeft: 0 });
   function handleQuickWheel(e) {
     if (Platform.OS !== 'web' || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
@@ -297,9 +304,23 @@ export default function ProjectScreen({ navigation, route }) {
     setHistories(histList);
     setSchedules(scheduleList);
     setTopics(topicList);
+    return finalProjects;
   }
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  useFocusEffect(useCallback(() => {
+    // TOCTOU 방지: await load() 도중 딥링크 useEffect(253~273행)가 openProjectIdRef를
+    // undefined로 갱신해버릴 수 있으므로, await 이전(동기 구간)에 판정 조건을 로컬로 캡처해둔다.
+    const hadOpenProjectId = !!openProjectIdRef.current;
+    const wasMineView = viewModeRef.current === 'mine';
+    (async () => {
+      const loaded = await load();
+      gridListRef.current?.scrollTo({ y: 0, animated: false });
+      if (IS_PC && wasMineView && !hadOpenProjectId && loaded.length > 0) {
+        const newest = loaded.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+        openDetail(newest);
+      }
+    })();
+  }, []));
 
   async function loadCompanyProjects() {
     setCompanyLoading(true);
@@ -1043,11 +1064,13 @@ export default function ProjectScreen({ navigation, route }) {
             <Text style={s.headerSub}>{delayedCount}건 지연·위험</Text>
           ) : null}
         </View>
-        <View style={s.headerBtns}>
-          <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
-            <Text style={s.aiBtnText}>AI</Text>
-          </TouchableOpacity>
-        </View>
+        {!showDetailPanel && (
+          <View style={s.headerBtns}>
+            <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+              <Text style={s.aiBtnText}>AI</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* ── 회사 관리자, 또는 "본인 이하 직급 프로젝트 조회"가 허용된 직책의 직원: 내 프로젝트 / 회사 전체 보기 전환 ── */}
@@ -1156,11 +1179,16 @@ export default function ProjectScreen({ navigation, route }) {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              <TouchableOpacity style={s.addBtnPC} onPress={handleAddPress}>
-                <Text style={s.addBtnPCText}>+ 새 프로젝트</Text>
-              </TouchableOpacity>
+              <View style={s.headerBtns}>
+                <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+                  <Text style={s.aiBtnText}>AI</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.addBtnPC} onPress={handleAddPress}>
+                  <Text style={s.addBtnPCText}>+ 새 프로젝트</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <ScrollView style={s.gridList} contentContainerStyle={s.gridListContent} showsVerticalScrollIndicator={false}>
+            <ScrollView ref={gridListRef} style={s.gridList} contentContainerStyle={s.gridListContent} showsVerticalScrollIndicator={false}>
               {filtered.length === 0 ? (
                 <View style={s.emptyWrap}>
                   <Text style={s.emptyText}>프로젝트가 없습니다</Text>
@@ -1763,24 +1791,30 @@ export default function ProjectScreen({ navigation, route }) {
             />
             <ScrollView style={s.clientPickerList} keyboardShouldPersistTaps="handled">
               {clients
-                .filter((c) => !editClientIds.includes(c.id))
                 .filter((c) => !detailPersonPickerSearch || c.name.includes(detailPersonPickerSearch) || (c.company || '').includes(detailPersonPickerSearch))
-                .map((c) => (
-                  <TouchableOpacity key={c.id} style={s.clientPickerItem} onPress={() => addClientToDetail(c)} activeOpacity={0.7}>
-                    <Text style={s.clientPickerName}>{c.name}</Text>
-                    {!!c.company && <Text style={s.clientPickerCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text>}
-                  </TouchableOpacity>
-                ))
+                .map((c) => {
+                  const selected = editClientIds.includes(c.id);
+                  return (
+                    <TouchableOpacity key={c.id} style={[s.clientPickerItem, s.clientPickerItemMulti, selected && s.clientPickerItemSelected]} onPress={() => addClientToDetail(c)} activeOpacity={0.7}>
+                      <View style={[s.notifyEmailCheckbox, selected && s.notifyEmailCheckboxChecked]}>
+                        {selected && <Text style={s.notifyEmailCheckmark}>✓</Text>}
+                      </View>
+                      <View style={s.clientPickerTextCol}>
+                        <Text style={s.clientPickerName}>{c.name}</Text>
+                        {!!c.company && <Text style={s.clientPickerCompany}>{c.company}{c.role ? ` · ${c.role}` : ''}</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
               }
               {clients
-                .filter((c) => !editClientIds.includes(c.id))
                 .filter((c) => !detailPersonPickerSearch || c.name.includes(detailPersonPickerSearch) || (c.company || '').includes(detailPersonPickerSearch))
                 .length === 0 && (
                 <Text style={s.clientPickerEmpty}>검색 결과가 없습니다</Text>
               )}
             </ScrollView>
             <TouchableOpacity style={s.speakerCancelBtn} onPress={() => setDetailPersonPickerVisible(false)} activeOpacity={0.7}>
-              <Text style={s.speakerCancelText}>취소</Text>
+              <Text style={s.speakerCancelText}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2162,6 +2196,9 @@ const s = StyleSheet.create({
   clientPickerInput: { backgroundColor: C.bg, borderWidth: 1, borderColor: C.borderHigh, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: C.textPrimary, fontSize: 14 },
   clientPickerList: { maxHeight: 280 },
   clientPickerItem: { paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.border },
+  clientPickerItemMulti: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  clientPickerItemSelected: { backgroundColor: C.red + '14' },
+  clientPickerTextCol: { flex: 1 },
   clientPickerName: { color: C.textPrimary, fontSize: 14, fontWeight: '500' },
   clientPickerCompany: { color: C.textDim, fontSize: 12, marginTop: 2 },
   clientPickerEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 24 },

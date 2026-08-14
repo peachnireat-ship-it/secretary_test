@@ -66,16 +66,22 @@ export function stripNonKorean(text) {
 }
 
 // fixForeignWordsInText는 "문맥에 맞지 않는 외국어"를 AI가 판단해 고치는 방식이라,
-// 한자 병기(예: "계약(契約)")나 일본어 히라가나·가타카나처럼 AI가 자연스럽다고 판단해
-// 남겨두는 경우가 있다. 이를 보완하는 결정적 후처리로, 한자(CJK 통합 표의문자)와
-// 일본어 가나(히라가나·가타카나·반각 가타카나)를 무조건 제거한다.
-// 괄호로 병기된 경우는 괄호째 제거하고, 그 외에는 문자 단위로 제거한다.
-const FOREIGN_SCRIPT_CHARS = '\\u4E00-\\u9FFF\\u3400-\\u4DBF\\uF900-\\uFAFF\\u3040-\\u30FF\\uFF66-\\uFF9F';
+// 한자 병기(예: "계약(契約)")나 일본어 히라가나·가타카나, 데바나가리·키릴·아랍 문자 등
+// AI가 자연스럽다고 판단해 남겨두는 경우가 있다. 이를 보완하는 결정적 후처리 안전망이다.
+// 개별 문자셋을 나열하는 차단목록 방식(한자·가나만 나열하는 식)은 나열되지 않은 문자셋
+// (힌디어 등)을 놓치므로, 대신 "허용 문자만 남긴다"는 허용목록 방식을 쓴다.
+// 한글, 라틴 문자(영어 고유명사 보존용), 숫자, 공백, 기본 문장부호만 허용하고
+// 그 외 모든 문자(한자·가나·데바나가리·키릴·아랍 문자 등)를 제거한다.
+// 괄호로 병기된 경우 괄호 안에 비허용 문자가 하나라도 있으면 괄호째 제거하고,
+// 그 외에는 문자 단위로 제거한다.
+const ALLOWED_CHARS_PATTERN = "\\p{Script=Hangul}\\p{Script=Latin}\\s0-9.,!?():;'\"~%\\-/·\\[\\]";
 export function stripForeignScripts(text) {
   if (!text) return text;
+  const disallowedGlobal = new RegExp(`[^${ALLOWED_CHARS_PATTERN}]`, 'gu');
+  const disallowedTest = new RegExp(`[^${ALLOWED_CHARS_PATTERN}]`, 'u');
   return text
-    .replace(new RegExp(`[(（][${FOREIGN_SCRIPT_CHARS}]+[)）]`, 'g'), '')
-    .replace(new RegExp(`[${FOREIGN_SCRIPT_CHARS}]`, 'g'), '')
+    .replace(/[(（]([^)）]*)[)）]/gu, (whole, inner) => (disallowedTest.test(inner) ? '' : whole))
+    .replace(disallowedGlobal, '')
     .replace(/ {2,}/g, ' ')
     .replace(/ +([,.!?])/g, '$1');
 }
@@ -236,7 +242,7 @@ export function buildTaskExtractionSystem() {
 async function callFixForeignWordsOnce(text, provider) {
   const systemPrompt = `[언어 규칙] 반드시 한국어로만 응답하세요.
 
-주어진 텍스트에서 문맥에 맞지 않는 외국어(영어, 일본어, 한자 등)를 자연스러운 한국어로 수정하세요.
+주어진 텍스트에서 문맥에 맞지 않는 외국어(영어, 일본어, 한자, 힌디어, 러시아어, 아랍어 등 한국어가 아닌 모든 문자)를 자연스러운 한국어로 수정하세요.
 
 규칙:
 - [화자 N] 형식의 화자 표시, ## 제목, 줄바꿈 등 텍스트 구조는 절대 변경하지 마세요

@@ -156,9 +156,8 @@ export default function HomeScreen({ navigation }) {
 
   const STATS = [
     { label: '오늘 일정', value: String(todaySchedules.length), unit: '건', color: C.accentBlue, tab: '일정' },
-    { label: '프로젝트', value: String(activeProjectCount), unit: '건', color: C.accentPurple, tab: '프로젝트' },
+    { label: '프로젝트', value: String(activeProjectCount), unit: '건', color: C.accentPurple, tab: '프로젝트', subLabel: delayedProjectCount > 0 ? `지연·위험 ${delayedProjectCount}건` : undefined },
     { label: '미확인 메세지', value: String(unreadMessageCount), unit: '건', color: unreadMessageCount > 0 ? C.accentPurple : C.textSecondary, tab: '메세지' },
-    { label: '지연·위험', value: String(delayedProjectCount), unit: '건', color: delayedProjectCount > 0 ? C.red : C.textSecondary, tab: '프로젝트' },
   ];
 
   return (
@@ -202,6 +201,7 @@ export default function HomeScreen({ navigation }) {
                 <Text style={[s.statValue, { color: item.color }]}>{item.value}</Text>
                 <Text style={s.statUnit}>{item.unit}</Text>
               </View>
+              {item.subLabel && <Text style={s.statSubLabel}>{item.subLabel}</Text>}
             </TouchableOpacity>
           ))}
         </View>
@@ -439,6 +439,7 @@ const s = StyleSheet.create({
   statValue: { fontSize: 22, fontWeight: '300' },
   statUnit: { color: C.textDim, fontSize: 10 },
   statLabel: { color: C.textSecondary, fontSize: 11, marginBottom: 2 },
+  statSubLabel: { color: C.red, fontSize: 10, marginTop: 2 },
   card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, overflow: 'hidden' },
   agendaRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   agendaRowBorder: { borderBottomWidth: 1, borderBottomColor: C.border },

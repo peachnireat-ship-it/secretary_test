@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Alert } from '../utils/alertCompat';
 import { addProject, updateProject, updateClient, getTestAccounts } from '../services/storage';
 import { dateTimeFromTimestamp, findOverlappingItems, formatOverlapMessage, isValidOptionalDateStr } from '../utils/dateUtils';
+import { IS_PC } from '../utils/deviceType';
 
 const TITLE_MAX_LENGTH = 200;
 const NOTES_MAX_LENGTH = 2000;
@@ -296,7 +297,7 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setProjects(updated);
     const refreshed = updated.find((p) => p.id === detailProject.id);
     setDetailProject(refreshed);
-    setShowDetail(false);
+    if (!IS_PC) setShowDetail(false);
   }
 
   function proceedToSaveEdit(startDateStr, deadlineStr) {
@@ -378,11 +379,10 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
   }
 
   function addClientToDetail(client) {
-    if (client.id && !editClientIds.includes(client.id)) {
-      setEditClientIds((prev) => [...prev, client.id]);
-    }
-    setDetailPersonPickerVisible(false);
-    setDetailPersonPickerSearch('');
+    if (!client.id) return;
+    setEditClientIds((prev) =>
+      prev.includes(client.id) ? prev.filter((id) => id !== client.id) : [...prev, client.id]
+    );
   }
 
   return {
