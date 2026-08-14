@@ -13,8 +13,8 @@ import { useSwipeClose } from '../hooks/useSwipeClose';
 import { IS_PC } from '../utils/deviceType';
 
 const PRIORITIES = ['긴급', '일반', '낮음'];
-const STATUSES = ['미확인', '확인', '처리중', '완료'];
-const FILTERS = ['전체', '미확인', '처리중', '완료'];
+const STATUSES = ['미확인', '확인'];
+const FILTERS = ['전체', '미확인', '확인'];
 const BOXES = [
   { key: 'received', label: '받은 메세지함' },
   { key: 'sent', label: '보낸 메세지함' },
@@ -27,7 +27,7 @@ function priorityColor(p) {
 }
 
 function statusColor(s) {
-  return { 미확인: C.gold, 확인: C.accentBlue, 처리중: C.accentTeal, 완료: C.textDim }[s] || C.textDim;
+  return { 미확인: C.gold, 확인: C.accentBlue }[s] || C.textDim;
 }
 
 function timeAgo(ts) {
@@ -85,7 +85,7 @@ export default function MessageScreen() {
     setShowAdd(true);
   }
 
-  const STATUS_ORDER = { 미확인: 0, 처리중: 1, 확인: 2, 완료: 3 };
+  const STATUS_ORDER = { 미확인: 0, 확인: 1 };
   const PRIORITY_ORDER = { 긴급: 0, 일반: 1, 낮음: 2 };
   const filtered = messages
     .filter((m) => {

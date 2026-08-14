@@ -191,7 +191,7 @@ C.red          = '#C45B5B'   // 프로젝트, 위험·긴급
   subject: string,
   content: string,
   priority: '긴급'|'일반'|'낮음',
-  status: '미확인'|'확인'|'처리중'|'완료',
+  status: '미확인'|'확인',
   createdAt: number,
   updatedAt: number,
 }
