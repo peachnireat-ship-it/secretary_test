@@ -11,7 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
 import { getSchedules, addSchedule, deleteSchedule, updateSchedule, getProjects, updateProject, getClients, getMeetingRecords, addClient } from '../services/storage';
-import { askClaude, buildScheduleSystem, stripNonKorean } from '../services/claude';
+import { askClaude, buildScheduleSystem, stripNonKorean, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { useUser } from '../context/UserContext';
 import { IS_PC } from '../utils/deviceType';
@@ -30,6 +30,9 @@ const NOTES_MAX_LENGTH = 2000;
 const CAL_BTN_ROW_MARGIN_BOTTOM = 10;
 // 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
 const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
+// AI 도우미 팝업 초기 인사말. bottom-tabs는 탭 전환 시 화면을 unmount하지 않아 chatMessages state가
+// 그대로 보존되므로, 팝업을 다시 열 때마다 이 값으로 되돌려 이전 대화가 남아있지 않도록 한다.
+const INITIAL_SCHEDULE_CHAT_MESSAGE = { role: 'assistant', text: '안녕하세요! 일정 관련해서 무엇이든 물어보세요.\n\n예) "내일 오후 2시 클라이언트 미팅 잡아줘", "이번 주 바쁜 날이 언제야?", "오늘 일정 요약해줘"' };
 
 // 하이픈 없이 입력해도 기존 회원 데이터와 동일한 010-0000-0000 형식으로 자동 정렬
 function fmtPhone(text) {
@@ -192,15 +195,17 @@ export default function ScheduleScreen({ navigation, route }) {
   const [editEndAmPm, setEditEndAmPm] = useState('오후');
 
   const [showAI, setShowAI] = useState(false);
-  const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', text: '안녕하세요! 일정 관련해서 무엇이든 물어보세요.\n\n예) "내일 오후 2시 클라이언트 미팅 잡아줘", "이번 주 바쁜 날이 언제야?", "오늘 일정 요약해줘"' },
-  ]);
+  const [chatMessages, setChatMessages] = useState([INITIAL_SCHEDULE_CHAT_MESSAGE]);
   const [chatInput, setChatInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const chatScrollRef = useRef(null);
+  // AI 도우미 팝업을 열 때마다 이전 대화 내역을 초기 인사말로 되돌린다(탭 전환 후 재진입 시 잔존 방지).
+  function openAIChat() {
+    setChatMessages([INITIAL_SCHEDULE_CHAT_MESSAGE]);
+    setShowAI(true);
+  }
 
   const swipeAdd = useSwipeClose(() => setShowAdd(false), showAdd);
-  const swipeAI = useSwipeClose(() => setShowAI(false), showAI);
   const swipeProject = useSwipeClose(() => setShowProjectView(false), showProjectView);
   const swipePerson = useSwipeClose(() => setShowPersonView(false), showPersonView);
   const swipeSchedule = useSwipeClose(() => { setShowScheduleView(false); setEditMode(false); }, showScheduleView);
@@ -267,7 +272,7 @@ export default function ScheduleScreen({ navigation, route }) {
   useEffect(() => {
     if (!route?.params?.openAI) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setShowAI(true);
+    openAIChat();
     navigation.setParams({ openAI: undefined });
   }, [route?.params?.openAI]);
 
@@ -637,6 +642,7 @@ export default function ScheduleScreen({ navigation, route }) {
 
       // Check if AI wants to create a schedule
       const jsonMatch = reply.match(/\{[\s\S]*"action"\s*:\s*"create_schedule"[\s\S]*\}/);
+      let handled = false;
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
@@ -649,12 +655,21 @@ export default function ScheduleScreen({ navigation, route }) {
             setSchedules(updated);
             const confirmText = `일정을 추가했습니다.\n📅 ${parsed.data.date} ${parsed.data.time} — ${parsed.data.title} (${parsed.data.tag})`;
             setChatMessages([...history, { role: 'assistant', text: confirmText }]);
+            handled = true;
           }
         } catch {
-          setChatMessages([...history, { role: 'assistant', text: reply }]);
+          // JSON 파싱 실패 시 순수 텍스트 응답으로 간주해 아래 외국어 교정 경로로 폴백
         }
-      } else {
-        setChatMessages([...history, { role: 'assistant', text: reply }]);
+      }
+      if (!handled) {
+        let fixedReply = reply;
+        try {
+          fixedReply = await fixForeignWordsInText(reply);
+        } catch {
+          // 외국어 교정 실패는 채팅 응답 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+          fixedReply = stripForeignScripts(fixedReply);
+        }
+        setChatMessages([...history, { role: 'assistant', text: fixedReply }]);
       }
     } catch (e) {
       const errText = e.message === 'API_KEY_MISSING'
@@ -1013,7 +1028,7 @@ export default function ScheduleScreen({ navigation, route }) {
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <Text style={s.headerTitle}>일정 관리</Text>
         {!IS_PC && (
-          <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+          <TouchableOpacity style={s.aiBtn} onPress={openAIChat}>
             <Text style={s.aiBtnText}>✦ AI</Text>
           </TouchableOpacity>
         )}
@@ -1041,7 +1056,7 @@ export default function ScheduleScreen({ navigation, route }) {
           아래 월 네비게이션과 y좌표를 맞추는 데 쓴다(아래 projectPanelHeader 참고) ── */}
       {IS_PC && (
         <View style={s.pcPanelBtnRow} onLayout={(e) => setCalBtnRowHeight(e.nativeEvent.layout.height)}>
-          <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+          <TouchableOpacity style={s.aiBtn} onPress={openAIChat}>
             <Text style={s.aiBtnText}>✦ AI</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.pcAddBtnInline} onPress={openAddSheet}>
@@ -1580,12 +1595,9 @@ export default function ScheduleScreen({ navigation, route }) {
       </Modal>
 
       {/* ── AI 채팅 모달 ── */}
-      <Modal visible={showAI} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <Animated.View style={[s.sheetBase, s.modalSheet, commonStyles.h85pct, swipeAI.animStyle]}>
-            <View style={s.modalHandleWrap} {...swipeAI.panHandlers}>
-              <View style={s.modalHandle} />
-            </View>
+      <Modal visible={showAI} animationType="fade" transparent onRequestClose={() => setShowAI(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.centerModalOverlay}>
+          <View style={s.centerModalCard}>
             <View style={s.chatHeader}>
               <View style={s.chatHeaderLeft}>
                 <Text style={s.aiGlyph}>✦</Text>
@@ -1628,7 +1640,7 @@ export default function ScheduleScreen({ navigation, route }) {
                 <Text style={s.sendBtnText}>↑</Text>
               </TouchableOpacity>
             </View>
-          </Animated.View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -2181,6 +2193,13 @@ const s = StyleSheet.create({
     ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, width: '100%', maxWidth: 480 }
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   modalSheet: { paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
+  // AI 채팅 등 중앙 카드형 팝업 전용 (다른 모달의 modalOverlay/modalSheet/sheetBase에는 영향 없음)
+  centerModalOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' }
+    : { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 20 },
+  centerModalCard: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxWidth: 480, maxHeight: '85%' }
+    : { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxHeight: '85%' },
   // 일정 수정 팝업(PC 전용) 전용 스타일 — 다른 모달들처럼 하단에 붙는 바텀시트가 아니라 화면
   // 중앙에 사면 모두 둥근 별도 창처럼 띄우기 위해 sheetBase/modalOverlay 대신 사용한다.
   editPopupOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 24 },
