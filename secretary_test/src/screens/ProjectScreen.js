@@ -913,8 +913,8 @@ export default function ProjectScreen({ navigation, route }) {
     );
   }
 
-  // "내 프로젝트" 카드 렌더링(모바일 세로 목록 / PC 그리드 공용). PC에서만 고정폭(cardPC)과 선택
-  // 강조(cardPCActive)가 추가로 붙고, 모바일에서는 IS_PC가 false라 두 스타일 다 무효(byte-동일 동작).
+  // "내 프로젝트" 카드 렌더링(모바일/PC 공용 세로 단일 컬럼 리스트). PC에서만 선택 강조(cardPCActive)가
+  // 추가로 붙고, 모바일에서는 IS_PC가 false라 무효(byte-동일 동작). 카드 폭 고정 없이 목록 컬럼 폭에 맞춰 늘어난다.
   function renderMineCard(item) {
     const days = daysUntil(item.deadline);
     const isCompleted = item.status === '완료';
@@ -939,7 +939,7 @@ export default function ProjectScreen({ navigation, route }) {
     return (
       <TouchableOpacity
         key={item.id}
-        style={[s.card, IS_PC && s.cardPC, risk && s.cardRisk, isSelectedOnPC && s.cardPCActive]}
+        style={[s.card, risk && s.cardRisk, isSelectedOnPC && s.cardPCActive]}
         activeOpacity={0.75}
         onPress={() => (isMirror ? openMirrorDetail(item) : openDetail(item))}
         onLongPress={isMirror ? undefined : () => handleDelete(item.id, item.title)}
@@ -952,17 +952,16 @@ export default function ProjectScreen({ navigation, route }) {
               <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
             </View>
             <View style={s.cardTopRight}>
+              <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
+                <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
+              </View>
               <View style={[s.statusBadge, { borderColor: statusColor(item.status) + '66', backgroundColor: statusColor(item.status) + '18' }]}>
                 <Text style={[s.statusText, { color: statusColor(item.status) }]}>{item.status}</Text>
               </View>
-              {isMirror ? (
+              {isMirror && (
                 <View style={s.readOnlyChip}>
                   <Text style={s.readOnlyChipText}>조회 전용</Text>
                 </View>
-              ) : (
-                <TouchableOpacity style={s.editProgressChip} onPress={() => openDetail(item)}>
-                  <Text style={s.editProgress}>수정</Text>
-                </TouchableOpacity>
               )}
             </View>
           </View>
@@ -977,9 +976,6 @@ export default function ProjectScreen({ navigation, route }) {
 
           {/* 메타 정보 */}
           <View style={s.cardMeta}>
-            <View style={[s.priorityBadge, { borderColor: priorityColor(item.priority) + '55' }]}>
-              <Text style={[s.priorityText, { color: priorityColor(item.priority) }]}>{item.priority}</Text>
-            </View>
             <View style={s.deadlineWrap}>
               {item.startDate ? (
                 <Text style={s.startDateText}>{item.startDate} 시작</Text>
@@ -1303,10 +1299,9 @@ export default function ProjectScreen({ navigation, route }) {
       </Modal>
 
       {/* ── AI 지연 분석 채팅 모달 ── */}
-      <Modal visible={showAI} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={[s.modalSheet, s.h88pct]}>
-            <View style={s.modalHandle} />
+      <Modal visible={showAI} animationType="fade" transparent onRequestClose={() => setShowAI(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.centerModalOverlay}>
+          <View style={s.centerModalCard}>
             <View style={s.chatHeader}>
               <View style={s.chatHeaderLeft}>
                 <Text style={s.aiGlyph}>✦</Text>
@@ -2063,8 +2058,8 @@ const s = StyleSheet.create({
   sidebarItemTextActive: { color: C.companyIndigo, fontWeight: '600' },
   treePrefix: { color: C.textDim, fontWeight: '400' },
 
-  // PC 전용: "내 프로젝트" 그리드 + 우측 상세패널(마스터-디테일, IS_PC일 때만 사용). 모바일은
-  // 기존 list/listContent/card를 그대로 쓰고 이 스타일들은 참조하지 않는다.
+  // PC 전용: "내 프로젝트" 목록 컬럼(세로 단일 컬럼 리스트) + 우측 상세패널(마스터-디테일, IS_PC일
+  // 때만 사용). 모바일은 기존 list/listContent/card를 그대로 쓰고 이 스타일들은 참조하지 않는다.
   mineBodyPC: { flex: 1, flexDirection: 'row' },
   gridColumn: { flex: 1 },
   gridHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, paddingRight: 20 },
@@ -2072,8 +2067,7 @@ const s = StyleSheet.create({
   addBtnPC: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: C.gold + '22', borderWidth: 1, borderColor: C.gold + '55', borderRadius: 20 },
   addBtnPCText: { color: C.gold, fontSize: 12, fontWeight: '600' },
   gridList: { flex: 1 },
-  gridListContent: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100, gap: 14 },
-  cardPC: { width: 320 },
+  gridListContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100, gap: 10 },
   cardPCActive: { borderColor: C.accentBlue + 'aa', backgroundColor: C.accentBlue + '0c' },
   detailPanel: { width: 400, borderLeftWidth: 1, borderLeftColor: C.border, paddingHorizontal: 20, paddingTop: 12 },
   detailPanelEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 },
@@ -2092,7 +2086,7 @@ const s = StyleSheet.create({
   emptyText: { color: C.textDim, fontSize: 14 },
   emptyHint: { color: C.textDim, fontSize: 11 },
 
-  card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 16, gap: 10, height: 300, overflow: 'hidden' },
+  card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 16, gap: 10 },
   cardRisk: { borderColor: C.gold + '55' },
   urgencyBorder: { borderRadius: 14, borderWidth: 3 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -2110,8 +2104,6 @@ const s = StyleSheet.create({
   viewText: { color: C.textSecondary, fontSize: 14, paddingHorizontal: 4, marginBottom: 12, lineHeight: 20 },
   viewBadgeRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 4, marginBottom: 16 },
   registrantText: { color: C.textDim, fontSize: 12, paddingHorizontal: 4, marginBottom: 8 },
-  editProgressChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#2E7D5E99', backgroundColor: '#2E7D5E22', alignItems: 'center', justifyContent: 'center' },
-  editProgress: { color: '#2E7D5E', fontSize: 10, fontWeight: '600', textAlign: 'center' },
   readOnlyChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: C.textSecondary + '55', backgroundColor: C.textSecondary + '18', alignItems: 'center', justifyContent: 'center' },
   readOnlyChipText: { color: C.textSecondary, fontSize: 10, fontWeight: '600', textAlign: 'center' },
 
@@ -2234,6 +2226,13 @@ const s = StyleSheet.create({
   modalSheet: Platform.OS === 'web'
     ? { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12, width: '100%', maxWidth: 480 }
     : { backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 12 },
+  // AI 채팅 등 중앙 카드형 팝업 전용 (다른 모달의 modalOverlay/modalSheet에는 영향 없음)
+  centerModalOverlay: Platform.OS === 'web'
+    ? { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' }
+    : { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 20 },
+  centerModalCard: Platform.OS === 'web'
+    ? { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxWidth: 480, maxHeight: '85%' }
+    : { backgroundColor: C.surfaceHigh, borderRadius: 20, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, width: '100%', maxHeight: '85%' },
   modalHandleWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 40, marginBottom: 10 },
   modalHandle: { width: 36, height: 4, backgroundColor: C.borderHigh, borderRadius: 2, alignSelf: 'center' },
   modalTitle: { color: C.textPrimary, fontSize: 18, fontWeight: '400', marginBottom: 2 },
@@ -2328,10 +2327,9 @@ const s = StyleSheet.create({
   ampmBtnText: { color: C.textDim, fontSize: 13 },
   ampmBtnTextActive: { color: C.gold, fontWeight: '600' },
 
-  deadlineWrap: { flex: 1, gap: 2 },
+  deadlineWrap: { flex: 1, gap: 2, alignItems: 'flex-end' },
   closeBtnOffset: { marginLeft: 12, marginTop: 20 },
   h80: { height: 80 },
-  h88pct: { height: '88%' },
   inputLabelInline: { marginTop: 0, marginBottom: 0 },
   personChipInner: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   removePersonIcon: { color: C.textDim, fontSize: 13 },
