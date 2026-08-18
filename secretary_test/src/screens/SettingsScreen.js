@@ -320,7 +320,7 @@ export default function SettingsScreen() {
               <Text style={s.cardTitle}>Groq API 키</Text>
             </View>
             <Text style={s.cardDesc}>
-              일정 관리 및 담당자 히스토리의 AI 기능을 사용하려면 Groq API 키가 필요합니다. 모델: llama-3.3-70b-versatile
+              일정 관리 및 담당자 히스토리의 AI 기능을 사용하려면 Groq API 키가 필요합니다. 모델: openai/gpt-oss-120b
             </Text>
             <View style={s.inputWrap}>
               <TextInput

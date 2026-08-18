@@ -1,7 +1,7 @@
 import { getApiKey, getGrokApiKey, getAiProvider } from './storage';
 import { ONE_DAY_MS } from '../utils/dateUtils';
 
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROK_MODEL = 'grok-3';
 
 async function callGroq(messages, systemPrompt, apiKey) {
