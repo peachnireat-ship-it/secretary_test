@@ -135,7 +135,17 @@ export default function ProjectScreen({ navigation, route }) {
   // "회사 전체" 보기에서는 companyGroups(다른 부서/직원 등록분 포함, ownerName/departmentName 포함)를
   // 평탄화해 AI에 넘긴다 — 본인 소유 프로젝트만 담긴 projects state 그대로 넘기면 다른 사람이 등록한
   // 프로젝트에 대한 질문(예: "등록한 사람이 누구야?")에 AI가 답할 데이터 자체가 없기 때문.
-  const aiProjects = viewMode === 'company' ? companyGroups.flatMap((g) => g.projects) : projects;
+  // "내 프로젝트" 보기의 projects state는 getProjects()로 채워지는데, 이 함수는 relatedPeople을
+  // 계산하지 않는다(clientIds만 저장됨 — company 보기의 relatedPeople은 get_company_projects()
+  // RPC가 서버에서 조인해 별도로 채워주는 필드라 여기엔 없음). 화면(예: 상세 모달)은 clientIds를
+  // clients 목록과 매칭해 관련 인물을 보여주는데 AI에 넘기는 데이터에는 이 매칭이 빠져있어, AI가
+  // "관련인물이 누구야?" 류 질문에 답하지 못하고 관련인물로 프로젝트를 찾지도 못하던 버그가 있었다.
+  const aiProjects = viewMode === 'company'
+    ? companyGroups.flatMap((g) => g.projects)
+    : projects.map((p) => ({
+        ...p,
+        relatedPeople: (p.clientIds || []).map((id) => clients.find((c) => c.id === id)).filter(Boolean),
+      }));
   const {
     showAI, setShowAI, chatMessages, chatInput, setChatInput, aiLoading, chatScrollRef,
     handleAIChat, handleQuickAnalysis, resetChat: resetAiChat,
@@ -1062,7 +1072,7 @@ export default function ProjectScreen({ navigation, route }) {
         </View>
         {!showDetailPanel && (
           <View style={s.headerBtns}>
-            <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+            <TouchableOpacity style={s.aiBtn} onPress={() => { resetAiChat(); setShowAI(true); }}>
               <Text style={s.aiBtnText}>AI</Text>
             </TouchableOpacity>
           </View>
@@ -1176,7 +1186,7 @@ export default function ProjectScreen({ navigation, route }) {
                 ))}
               </ScrollView>
               <View style={s.headerBtns}>
-                <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
+                <TouchableOpacity style={s.aiBtn} onPress={() => { resetAiChat(); setShowAI(true); }}>
                   <Text style={s.aiBtnText}>AI</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.addBtnPC} onPress={handleAddPress}>

@@ -13,6 +13,7 @@ async function callGroq(messages, systemPrompt, apiKey) {
     },
     body: JSON.stringify({
       model: GROQ_MODEL,
+      temperature: 0.2,
       messages: [
         { role: 'system', content: systemPrompt },
         ...messages,
@@ -36,6 +37,7 @@ async function callGrok(messages, systemPrompt, apiKey) {
     },
     body: JSON.stringify({
       model: GROK_MODEL,
+      temperature: 0.2,
       messages: [
         { role: 'system', content: systemPrompt },
         ...messages,
@@ -75,11 +77,22 @@ export function stripNonKorean(text) {
 // 괄호로 병기된 경우 괄호 안에 비허용 문자가 하나라도 있으면 괄호째 제거하고,
 // 그 외에는 문자 단위로 제거한다.
 const ALLOWED_CHARS_PATTERN = "\\p{Script=Hangul}\\p{Script=Latin}\\s0-9.,!?():;'\"~%\\-/·\\[\\]";
+
+// 모델이 줄바꿈을 <br> 같은 HTML 태그로 표현하는 경우가 있다. <, >는 ALLOWED_CHARS_PATTERN에
+// 없어 stripForeignScripts가 결국 지우긴 하지만, 그대로 두면 태그 안의 글자(예: "br")만 남아
+// 문장에 낯선 글자 잔재가 보인다. 줄바꿈 의도는 살리고 태그 자체는 통째로 제거하기 위해
+// disallowedGlobal 필터보다 먼저 처리한다.
+function stripHtmlTags(text) {
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?[a-zA-Z][^<>]*>/g, '');
+}
+
 export function stripForeignScripts(text) {
   if (!text) return text;
   const disallowedGlobal = new RegExp(`[^${ALLOWED_CHARS_PATTERN}]`, 'gu');
   const disallowedTest = new RegExp(`[^${ALLOWED_CHARS_PATTERN}]`, 'u');
-  return text
+  return stripHtmlTags(text)
     .replace(/[(（]([^)）]*)[)）]/gu, (whole, inner) => (disallowedTest.test(inner) ? '' : whole))
     .replace(disallowedGlobal, '')
     .replace(/ {2,}/g, ' ')
@@ -145,12 +158,17 @@ export function buildProjectDelaySystem(projects, schedules, { readOnly = false 
         }).join(', ')}`
       : '';
     const mirrorLabel = p.originProjectId ? ' [타인 등록 사본 - 수정 불가]' : '';
-    return `- [${p.status}${riskFlag}] ${p.title}${mirrorLabel}${ownerLabel} | 우선순위: ${p.priority} | 진행률: ${p.progress}% | 마감: ${p.deadline} (${daysLabel}) | 메모: ${p.notes || '없음'}${relatedPeopleLabel}`;
+    const notifyEmailLabel = typeof p.notifyEmail === 'boolean'
+      ? ` | 알림메일: ${p.notifyEmail ? '발송함' : '발송 안 함'}`
+      : '';
+    return `- [${p.status}${riskFlag}] ${p.title}${mirrorLabel}${ownerLabel} | 우선순위: ${p.priority} | 진행률: ${p.progress}% | 마감: ${p.deadline} (${daysLabel}) | 메모: ${p.notes || '없음'}${relatedPeopleLabel}${notifyEmailLabel}`;
   }).join('\n');
 
   const hasMirrorProject = projects.some((p) => p.originProjectId);
 
   const hasRelatedPeople = projects.some((p) => Array.isArray(p.relatedPeople) && p.relatedPeople.length > 0);
+
+  const hasNotifyEmailInfo = projects.some((p) => typeof p.notifyEmail === 'boolean');
 
   const delayedCount = projects.filter((p) => p.status === '지연' || p.status === '위험').length;
   const overdueCount = projects.filter((p) => {
@@ -169,6 +187,7 @@ ${projectLines || '(등록된 프로젝트 없음)'}
 
 이 목록에 다른 직원이 등록한 프로젝트가 포함될 수 있습니다. 각 항목의 "등록자" 필드는 그 프로젝트를 실제로 등록한 사람입니다. "이거 등록한 사람이 누구야?", "담당자가 누구야?" 같은 질문에는 반드시 등록자 필드를 참고해 정확히 답하세요.
 ${hasRelatedPeople ? '\n각 항목의 "관련인물" 필드는 그 프로젝트와 관련된 거래처 담당자입니다. "관련인물이 누구야", "이 프로젝트 관련된 사람 누구야" 같은 질문에는 관련인물 필드를 참고해 답하세요.\n' : ''}
+${hasNotifyEmailInfo ? '\n각 항목의 "알림메일" 필드는 그 프로젝트의 관련 인물에게 등록·수정 시 알림 메일이 자동 발송되는지 여부입니다. "이 프로젝트 관련 인물한테 메일 가나요?", "알림 메일 설정돼 있어?" 같은 질문에는 알림메일 필드를 참고해 정확히 답하세요.\n' : ''}
 
 ## 응답 규칙
 - 분석·조언·조회 요청: 자연스러운 한국어 텍스트로만 응답하세요. JSON을 절대 포함하지 마세요.${readOnly ? '' : `
@@ -348,4 +367,50 @@ ${clientList || '(등록된 담당자 없음)'}
 
 모든 응답은 자연스러운 한국어로만 작성하세요. 한자·일본어·영어 문장은 절대 사용하지 마세요.
 날짜를 언급할 때는 반드시 'yyyy년 mm월 dd일' 형식으로 표기하세요 (예: 2024년 01월 15일). YYYY-MM-DD, YYYY.MM.DD, YYYYMMDD 등 다른 형식은 절대 사용하지 마세요.`;
+}
+
+export function buildMessageSystem(messages) {
+  const received = messages.filter((m) => (m.direction || 'received') === 'received');
+  const sent = messages.filter((m) => m.direction === 'sent');
+
+  const fmtReceived = (m) => `- [${m.status}/${m.priority}] 발신자: ${m.sender}${m.company ? ` (${m.company})` : ''} — ${m.subject}${m.content ? `: ${m.content}` : ''}`;
+  const fmtSent = (m) => `- [${m.status}/${m.priority}] 수신자: ${m.sender}${m.company ? ` (${m.company})` : ''} — ${m.subject}${m.content ? `: ${m.content}` : ''}`;
+
+  const receivedList = received.map(fmtReceived).join('\n') || '(받은 메세지 없음)';
+  const sentList = sent.map(fmtSent).join('\n') || '(보낸 메세지 없음)';
+
+  const receivedSenders = [...new Set(received.map((m) => m.sender).filter(Boolean))];
+  const sentRecipients = [...new Set(sent.map((m) => m.sender).filter(Boolean))];
+
+  const today = new Date();
+  const todayLabel = `${today.getFullYear()}년 ${String(today.getMonth() + 1).padStart(2, '0')}월 ${String(today.getDate()).padStart(2, '0')}일`;
+
+  return `[언어 규칙 - 최우선] 반드시 한국어(한글)로만 응답하세요. 영어 문장도 사용하지 마세요. 회사명·인명 등 고유명사에만 예외적으로 영어를 쓸 수 있습니다. 한자(漢字), 중국어 간체·번체, 일본어 히라가나·가타카나는 절대 사용 금지입니다.
+
+당신은 개인 비서 앱의 메세지함 관리 AI 비서입니다. 사용자의 받은/보낸 메세지 데이터를 기반으로 간결하고 실용적인 도움을 줍니다.
+
+오늘 날짜: ${todayLabel}
+
+받은 메세지함:
+${receivedList}
+
+보낸 메세지함:
+${sentList}
+
+[실제 발신자 목록] 아래 이름만 실제 발신자입니다: ${receivedSenders.join(', ') || '(없음)'}
+[실제 수신자 목록] 아래 이름만 실제 수신자입니다: ${sentRecipients.join(', ') || '(없음)'}
+이 두 목록에 없는 이름은 설령 메세지 내용(본문) 안에 언급되어 있더라도 발신자나 수신자가 아닙니다. 메세지 본문에 언급된 제3자 이름을 발신자·수신자로 착각해서 답변에 포함하지 마세요.
+
+## 응답 규칙
+이 화면의 AI 비서는 조회·요약·질의응답 전용입니다. 다른 화면과 달리 메세지를 생성·수정하는 JSON 액션은 전혀 지원하지 않습니다. 항상 자연스러운 한국어 텍스트로만 응답하세요. JSON을 절대 포함하지 마세요.
+- 위 받은/보낸 메세지함 목록에 실제로 존재하는 발신자·회사·내용만 언급하세요. 목록에 없는 사람이나 정보를 절대 지어내지 마세요.
+- 받은 메세지함 항목의 이름은 실제로 메세지를 보낸 사람(발신자)입니다. 보낸 메세지함 항목의 이름은 사용자가 메세지를 보낸 대상(수신자)이며 발신자가 아닙니다. "발신자"를 묻거나 발신자별로 정리해달라는 요청에는 반드시 받은 메세지함 항목만 근거로 답하고, 보낸 메세지함의 수신자 이름을 발신자로 취급하지 마세요.
+- [실제 발신자 목록]/[실제 수신자 목록]에 없는 이름은 절대 발신자나 수신자로 답변에 포함하지 마세요.
+
+## 할 수 있는 작업
+- 미확인 메세지 요약
+- 긴급 우선순위 메세지 안내
+- 특정 회사·발신자와 주고받은 내용 정리
+- 메세지함 현황(전체/미확인/확인 건수 등) 요약
+- 발신자별 메세지 그룹핑·정리`;
 }

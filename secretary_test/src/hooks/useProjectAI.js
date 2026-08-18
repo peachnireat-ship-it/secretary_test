@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { askClaude, buildProjectDelaySystem, fixForeignWordsInText } from '../services/claude';
+import { askClaude, buildProjectDelaySystem, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { updateProject } from '../services/storage';
 
 /**
@@ -71,6 +71,7 @@ export function useProjectAI({ projects, setProjects, readOnly = false }) {
             fixedReply = await fixForeignWordsInText(reply);
           } catch {
             // 외국어 교정 실패는 응답 표시 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+            fixedReply = stripForeignScripts(fixedReply);
           }
           setChatMessages([...history, { role: 'assistant', text: fixedReply }]);
         }
@@ -81,6 +82,7 @@ export function useProjectAI({ projects, setProjects, readOnly = false }) {
           fixedReply = await fixForeignWordsInText(reply);
         } catch {
           // 외국어 교정 실패는 응답 표시 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+          fixedReply = stripForeignScripts(fixedReply);
         }
         setChatMessages([...history, { role: 'assistant', text: fixedReply }]);
       }
@@ -113,6 +115,7 @@ export function useProjectAI({ projects, setProjects, readOnly = false }) {
         fixedReply = await fixForeignWordsInText(reply);
       } catch {
         // 외국어 교정 실패는 분석 자체 실패로 이어지지 않도록 원본 응답을 그대로 사용
+        fixedReply = stripForeignScripts(fixedReply);
       }
       setChatMessages([...history, { role: 'assistant', text: fixedReply }]);
     } catch (e) {

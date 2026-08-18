@@ -540,7 +540,7 @@ create or replace function get_company_projects()
 returns table (
   id text, title text, deadline text, start_date text, status text, priority text, notes text,
   progress int, client_ids jsonb, owner_client_id text, meeting_record_ids jsonb,
-  origin_project_id text, created_at timestamptz, updated_at timestamptz,
+  origin_project_id text, created_at timestamptz, updated_at timestamptz, notify_email boolean,
   owner_name text, owner_team text, department_name text, related_people jsonb
 )
 language sql security definer stable
@@ -553,7 +553,7 @@ as $$
     where me.id = auth.uid()
   )
   select p.id, p.title, p.deadline, p.start_date, p.status, p.priority, p.notes, p.progress,
-    p.client_ids, p.owner_client_id, p.meeting_record_ids, p.origin_project_id, p.created_at, p.updated_at,
+    p.client_ids, p.owner_client_id, p.meeting_record_ids, p.origin_project_id, p.created_at, p.updated_at, p.notify_email,
     coalesce(orig_pr.name, pr.name),
     coalesce(orig_pr.team, pr.team),
     coalesce(orig_d.name, d.name),
