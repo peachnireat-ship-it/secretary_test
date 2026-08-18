@@ -140,6 +140,15 @@ ${list || '(등록된 일정 없음)'}
 - 일정 우선순위 제안 및 시간 관리 조언`;
 }
 
+// 알림메일 발송 여부로 프로젝트를 나누는 단일 기준 함수. buildProjectDelaySystem(프롬프트 보조 표시용)와
+// useProjectAI.js(필터링 질문 결정적 응답용)가 공유해서 쓴다.
+export function summarizeNotifyEmailProjects(projects) {
+  return {
+    on: projects.filter((p) => p.notifyEmail === true).map((p) => p.title),
+    off: projects.filter((p) => p.notifyEmail === false).map((p) => p.title),
+  };
+}
+
 export function buildProjectDelaySystem(projects, schedules, { readOnly = false } = {}) {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -169,6 +178,11 @@ export function buildProjectDelaySystem(projects, schedules, { readOnly = false 
   const hasRelatedPeople = projects.some((p) => Array.isArray(p.relatedPeople) && p.relatedPeople.length > 0);
 
   const hasNotifyEmailInfo = projects.some((p) => typeof p.notifyEmail === 'boolean');
+  // 정답 목록을 프롬프트에 텍스트로 줘도 모델이 무시하고 전체 프로젝트를 다시 나열해버리는
+  // 경우가 실사용에서 반복 확인됐다(미체크 프로젝트를 "발송 설정됨" 목록에 포함시킴). 이 필드는
+  // 프롬프트 보조용으로만 남기고, 실제 필터링 질문 응답은 useProjectAI.js가 summarizeNotifyEmailProjects()
+  // 결과로 AI 호출 없이 직접 답한다(detectNotifyEmailListIntent).
+  const { on: notifyOnTitles, off: notifyOffTitles } = summarizeNotifyEmailProjects(projects);
 
   const delayedCount = projects.filter((p) => p.status === '지연' || p.status === '위험').length;
   const overdueCount = projects.filter((p) => {
@@ -187,7 +201,14 @@ ${projectLines || '(등록된 프로젝트 없음)'}
 
 이 목록에 다른 직원이 등록한 프로젝트가 포함될 수 있습니다. 각 항목의 "등록자" 필드는 그 프로젝트를 실제로 등록한 사람입니다. "이거 등록한 사람이 누구야?", "담당자가 누구야?" 같은 질문에는 반드시 등록자 필드를 참고해 정확히 답하세요.
 ${hasRelatedPeople ? '\n각 항목의 "관련인물" 필드는 그 프로젝트와 관련된 거래처 담당자입니다. "관련인물이 누구야", "이 프로젝트 관련된 사람 누구야" 같은 질문에는 관련인물 필드를 참고해 답하세요.\n' : ''}
-${hasNotifyEmailInfo ? '\n각 항목의 "알림메일" 필드는 그 프로젝트의 관련 인물에게 등록·수정 시 알림 메일이 자동 발송되는지 여부입니다. "이 프로젝트 관련 인물한테 메일 가나요?", "알림 메일 설정돼 있어?" 같은 질문에는 알림메일 필드를 참고해 정확히 답하세요.\n' : ''}
+${hasNotifyEmailInfo ? `
+각 항목의 "알림메일" 필드는 그 프로젝트의 관련 인물에게 등록·수정 시 알림 메일이 자동 발송되는지 여부입니다. "이 프로젝트 관련 인물한테 메일 가나요?", "알림 메일 설정돼 있어?" 같은 개별 프로젝트 질문에는 그 프로젝트 항목의 알림메일 필드를 참고해 정확히 답하세요.
+
+[알림메일 발송 설정 - 미리 계산된 정답 목록]
+발송함: ${notifyOnTitles.join(', ') || '없음'}
+발송 안 함: ${notifyOffTitles.join(', ') || '없음'}
+"관련 인물에게 메일 발송하기로 설정된 프로젝트가 뭐야", "알림메일 켜진/꺼진 프로젝트 요약해줘" 같이 여러 프로젝트를 필터링·요약하는 질문에는 반드시 위 "미리 계산된 정답 목록"만 근거로 답하세요. 각 프로젝트 줄 끝의 알림메일 표시를 직접 다시 세거나 판단하지 말고, 이 목록에 없는 프로젝트를 추측해서 포함하지 마세요.
+` : ''}
 
 ## 응답 규칙
 - 분석·조언·조회 요청: 자연스러운 한국어 텍스트로만 응답하세요. JSON을 절대 포함하지 마세요.${readOnly ? '' : `

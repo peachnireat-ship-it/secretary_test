@@ -1,13 +1,14 @@
 import {
   Text, View, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Modal, KeyboardAvoidingView, Platform, Animated,
+  TextInput, Modal, KeyboardAvoidingView, Platform, Animated, ActivityIndicator,
 } from 'react-native';
 import { Alert } from '../utils/alertCompat';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 import { commonStyles } from '../styles/common';
 import { getMessages, addMessage, addMessageForUser, updateMessage, updateMessageForUser, deleteMessage, getClients } from '../services/storage';
+import { askClaude, buildMessageSystem, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
 import { useUser } from '../context/UserContext';
 import { useSwipeClose } from '../hooks/useSwipeClose';
 import { IS_PC } from '../utils/deviceType';
@@ -21,6 +22,9 @@ const BOXES = [
 ];
 const SUBJECT_MAX_LENGTH = 200;
 const CONTENT_MAX_LENGTH = 2000;
+// AI 도우미 팝업 초기 인사말. bottom-tabs는 탭 전환 시 화면을 unmount하지 않아 chatMessages state가
+// 그대로 보존되므로, 팝업을 다시 열 때마다 이 값으로 되돌려 이전 대화가 남아있지 않도록 한다.
+const INITIAL_MESSAGE_CHAT_MESSAGE = { role: 'assistant', text: '메세지함에 대해 무엇이든 물어보세요.\n\n예) "미확인 메세지 요약해줘", "긴급 우선순위 메세지 있어?", "OOO회사와 주고받은 내용 정리해줘"' };
 
 function priorityColor(p) {
   return { 긴급: C.red, 일반: C.accentBlue, 낮음: C.textDim }[p] || C.textDim;
@@ -46,6 +50,17 @@ export default function MessageScreen() {
   const [messages, setMessages] = useState([]);
   const [box, setBox] = useState('received');
   const [filter, setFilter] = useState('전체');
+
+  const [showAI, setShowAI] = useState(false);
+  const [chatMessages, setChatMessages] = useState([INITIAL_MESSAGE_CHAT_MESSAGE]);
+  const [chatInput, setChatInput] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const chatScrollRef = useRef(null);
+  // AI 도우미 팝업을 열 때마다 이전 대화 내역을 초기 인사말로 되돌린다(탭 전환 후 재진입 시 잔존 방지).
+  function openAIChat() {
+    setChatMessages([INITIAL_MESSAGE_CHAT_MESSAGE]);
+    setShowAI(true);
+  }
 
   const [showAdd, setShowAdd] = useState(false);
   const [newSender, setNewSender] = useState('');
@@ -83,6 +98,44 @@ export default function MessageScreen() {
 
   function handleAddPress() {
     setShowAdd(true);
+  }
+
+  async function handleAIChat() {
+    const text = chatInput.trim();
+    if (!text || aiLoading) return;
+    setChatInput('');
+    const userMsg = { role: 'user', text };
+    const history = [...chatMessages, userMsg];
+    setChatMessages(history);
+    setAiLoading(true);
+    try {
+      const apiMessages = history
+        .filter((m, idx) => m.role !== 'assistant' || idx > 0)
+        .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
+      const visibleMessages = messages.filter((m) => {
+        const direction = m.direction || 'received';
+        if (direction === 'received' && m.toId !== user?.id) return false;
+        if (direction === 'sent' && m.fromId && m.fromId !== user?.id) return false;
+        return true;
+      });
+      const systemPrompt = buildMessageSystem(visibleMessages);
+      const reply = await askClaude(apiMessages, systemPrompt, { raw: true });
+      let fixedReply = reply;
+      try {
+        fixedReply = await fixForeignWordsInText(reply);
+      } catch {
+        fixedReply = stripForeignScripts(fixedReply);
+      }
+      setChatMessages([...history, { role: 'assistant', text: fixedReply }]);
+    } catch (e) {
+      const errText = e.message === 'API_KEY_MISSING'
+        ? 'API 키가 설정되지 않았습니다. 설정 탭에서 API 키를 입력해주세요.'
+        : `오류: ${e.message}`;
+      setChatMessages([...history, { role: 'assistant', text: errText }]);
+    } finally {
+      setAiLoading(false);
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
   }
 
   const STATUS_ORDER = { 미확인: 0, 확인: 1 };
@@ -496,9 +549,9 @@ export default function MessageScreen() {
   }
 
   // 받은/보낸함 탭(모바일 상단 전체 폭 / PC는 좌측 목록 컬럼 안에서 공용으로 재사용).
-  function renderBoxTabs() {
+  function renderBoxTabs(extraStyle) {
     return (
-      <View style={s.boxRow}>
+      <View style={[s.boxRow, extraStyle]}>
         {BOXES.map((b) => (
           <TouchableOpacity
             key={b.key}
@@ -516,9 +569,9 @@ export default function MessageScreen() {
   }
 
   // 상태 필터 탭(모바일 상단 전체 폭 / PC는 좌측 목록 컬럼 안에서 공용으로 재사용).
-  function renderFilterTabs() {
+  function renderFilterTabs(extraStyle) {
     return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterWrap} contentContainerStyle={s.filterRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[s.filterWrap, extraStyle]} contentContainerStyle={s.filterRow}>
         {FILTERS.map((f) => (
           <TouchableOpacity key={f} style={[s.filterTab, filter === f && s.filterTabActive]} onPress={() => setFilter(f)}>
             <Text style={[s.filterText, filter === f && s.filterTextActive]}>{f}</Text>
@@ -581,9 +634,10 @@ export default function MessageScreen() {
       </View>
 
       {/* 모바일: 받은/보낸 박스 탭 + 필터 탭이 전체 폭 상단에 놓인다. PC는 아래 좌측 목록
-          컬럼(listColumn) 안으로 옮겨 목록 카드와 한 영역으로 묶고, 남은 폭 전체를 상세 패널이 쓴다. */}
-      {!showDetailPanel && renderBoxTabs()}
-      {!showDetailPanel && renderFilterTabs()}
+          컬럼(listColumn) 안으로 옮겨 목록 카드와 한 영역으로 묶고, 남은 폭 전체를 상세 패널이 쓴다.
+          모바일에서는 우측 상단에 떠 있는 aiFab과 겹치지 않도록 오른쪽 여백을 추가로 확보한다. */}
+      {!showDetailPanel && renderBoxTabs(s.boxRowFabSpace)}
+      {!showDetailPanel && renderFilterTabs(s.filterWrapFabSpace)}
 
       {/* 메세지 목록 (PC: 좌측 목록+우측 상세패널 / 모바일: 세로 목록+하단시트) */}
       {showDetailPanel ? (
@@ -591,6 +645,9 @@ export default function MessageScreen() {
           <View style={s.listColumn}>
             <View style={s.boxRowPC}>
               <View style={s.boxRowPCBoxes}>{renderBoxTabs()}</View>
+              <TouchableOpacity style={s.aiBtn} onPress={openAIChat}>
+                <Text style={s.aiBtnText}>✦ AI</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={s.addBtnPC} onPress={handleAddPress}>
                 <Text style={s.addBtnPCText}>+ 새 메세지</Text>
               </TouchableOpacity>
@@ -628,6 +685,11 @@ export default function MessageScreen() {
             )}
           </ScrollView>
 
+          {/* AI FAB: 새 메세지 FAB 바로 아래에 배치 */}
+          <TouchableOpacity style={[s.aiFab, { top: insets.top + 16 + 52 + 12 }]} onPress={openAIChat}>
+            <Text style={s.aiFabText}>✦</Text>
+          </TouchableOpacity>
+
           {/* FAB: 받은/보낸 메세지함 탭 바로 위에 떠 있도록 헤더 영역 안쪽에 배치 */}
           <TouchableOpacity style={[s.fab, { top: insets.top + 16 }]} onPress={handleAddPress}>
             <Text style={s.fabText}>+</Text>
@@ -644,6 +706,41 @@ export default function MessageScreen() {
             </View>
             {detailMsg && renderDetailFields()}
           </Animated.View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── AI 채팅 모달 ── */}
+      <Modal visible={showAI} animationType="fade" transparent onRequestClose={() => setShowAI(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.centerModalOverlay}>
+          <View style={[s.centerModalCard, commonStyles.maxH85pct]}>
+            <View style={s.chatHeader}>
+              <View style={s.chatHeaderLeft}>
+                <Text style={s.aiGlyph}>✦</Text>
+                <Text style={s.modalTitle}>AI 메세지 비서</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowAI(false)}>
+                <Text style={s.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView ref={chatScrollRef} style={s.chatLog} contentContainerStyle={s.chatLogContent} showsVerticalScrollIndicator={false}>
+              {chatMessages.map((m, i) => (
+                <View key={i} style={[s.bubble, m.role === 'user' ? s.bubbleUser : s.bubbleAI]}>
+                  <Text style={[s.bubbleText, m.role === 'user' ? s.bubbleTextUser : s.bubbleTextAI]}>{m.text}</Text>
+                </View>
+              ))}
+              {aiLoading && (
+                <View style={s.bubbleAI}>
+                  <ActivityIndicator size="small" color={C.accentPurple} />
+                </View>
+              )}
+            </ScrollView>
+            <View style={s.chatInputRow}>
+              <TextInput style={s.chatInput} value={chatInput} onChangeText={setChatInput} placeholder="메세지함에 대해 물어보세요..." placeholderTextColor={C.textDim} onSubmitEditing={handleAIChat} returnKeyType="send" />
+              <TouchableOpacity style={[s.sendBtn, !chatInput.trim() && commonStyles.opacity40]} onPress={handleAIChat} disabled={!chatInput.trim() || aiLoading}>
+                <Text style={s.sendBtnText}>↑</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -740,17 +837,22 @@ const s = StyleSheet.create({
   headerSub: { color: C.gold, fontSize: 11, marginTop: 2 },
 
   boxRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: C.border, marginHorizontal: 20 },
+  // 모바일 전용: aiFab(우측 상단 고정)이 boxTab 텍스트 위에 겹치지 않도록 오른쪽에 추가 여백 확보.
+  // boxTab이 flex:1이라 이 paddingRight만큼 자동으로 좁아진다. PC(boxRowPCBoxes 내부)에는 적용하지 않음.
+  boxRowFabSpace: { paddingRight: 66 },
   boxTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   boxTabActive: { borderBottomColor: C.accentPurple },
   boxText: { color: C.textDim, fontSize: 13, fontWeight: '500' },
   boxTextActive: { color: C.accentPurple, fontWeight: '600' },
 
-  boxRowPC: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, paddingRight: 20 },
+  boxRowPC: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 12, paddingRight: 20 },
   boxRowPCBoxes: { flex: 1 },
   addBtnPC: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: C.accentPurple + '22', borderWidth: 1, borderColor: C.accentPurple + '55', borderRadius: 20 },
   addBtnPCText: { color: C.accentPurple, fontSize: 12, fontWeight: '600' },
 
   filterWrap: { maxHeight: 44 },
+  // 모바일 전용: aiFab과 겹치지 않도록 스크롤 뷰포트 우측에 여백 확보(PC 목록 컬럼에는 미적용).
+  filterWrapFabSpace: { paddingRight: 66 },
   filterRow: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
   filterTab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: C.border },
   filterTabActive: { borderColor: C.accentPurple + '88', backgroundColor: C.accentPurple + '18' },
@@ -871,4 +973,25 @@ const s = StyleSheet.create({
   h120: { height: 120 },
   h100: { height: 100 },
   textRed: { color: C.red },
+
+  // AI 채팅 (일정/거래처/프로젝트 탭과 동일한 중앙 카드형 패턴, 메세지 탭 색상은 accentPurple)
+  aiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentPurple + '22', borderWidth: 1, borderColor: C.accentPurple + '55', borderRadius: 20 },
+  aiBtnText: { color: C.accentPurple, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
+  aiFab: { position: 'absolute', right: 24, width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentPurple + '22', borderWidth: 1, borderColor: C.accentPurple + '55', alignItems: 'center', justifyContent: 'center' },
+  aiFabText: { color: C.accentPurple, fontSize: 20 },
+  aiGlyph: { color: C.accentPurple, fontSize: 14 },
+  chatHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  chatHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  chatLog: { flex: 1 },
+  chatLogContent: { gap: 10, paddingBottom: 10 },
+  bubble: { maxWidth: '85%', borderRadius: 14, padding: 12 },
+  bubbleAI: { alignSelf: 'flex-start', backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  bubbleUser: { alignSelf: 'flex-end', backgroundColor: C.accentPurple + '33', borderWidth: 1, borderColor: C.accentPurple + '55' },
+  bubbleText: { fontSize: 13, lineHeight: 20 },
+  bubbleTextAI: { color: C.textSecondary },
+  bubbleTextUser: { color: C.textPrimary },
+  chatInputRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  chatInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 24, color: C.textPrimary, fontSize: 14, paddingHorizontal: 18, paddingVertical: 12 },
+  sendBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: C.accentPurple },
+  sendBtnText: { color: '#fff', fontSize: 18 },
 });

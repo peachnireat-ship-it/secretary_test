@@ -266,19 +266,33 @@ export function useProjectForm({ meetingRecords, projects = [], schedules = [], 
     setEditPriority(project.priority);
     setEditNotes(project.notes || '');
     setEditClientIds(project.clientIds || []);
+    // 관련 인물이 없으면 알림메일은 어차피 의미가 없어(보낼 대상이 없음) false로 맞추고,
+    // 있으면 실제 저장된 값을 그대로 반영한다 — 예전에는 이 초기화 자체가 없어서 아래
+    // useEffect가 매번 clientIds 유무만으로 값을 덮어써, 저장된 notifyEmail이 화면에
+    // 전혀 반영되지 않고 저장할 때마다 그 잘못된 값으로 다시 덮어써지는 버그가 있었다.
+    setEditNotifyEmail((project.clientIds || []).length > 0 ? !!project.notifyEmail : false);
     setShowDetail(true);
   }
 
+  // 관련 인물을 전부 제거하면 알림 보낼 대상이 없으므로 자동으로 꺼준다(체크박스 자체도
+  // 이 상태에서는 토글이 막혀있다). 관련 인물이 있는 동안에는 사용자가 명시적으로 설정한
+  // 값(또는 openDetail이 project.notifyEmail에서 읽어온 값)을 그대로 유지해야 하므로 건드리지
+  // 않는다 — 예전처럼 "있으면 무조건 true"로 강제하면 사용자가 껐던 설정이나 저장된 값이
+  // 매번 덮어써진다.
   useEffect(() => {
     if (!showAdd) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setNewNotifyEmail(newClientIds.length > 0);
+    if (newClientIds.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNewNotifyEmail(false);
+    }
   }, [newClientIds, showAdd]);
 
   useEffect(() => {
     if (!showDetail) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEditNotifyEmail(editClientIds.length > 0);
+    if (editClientIds.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditNotifyEmail(false);
+    }
   }, [editClientIds, showDetail]);
 
   async function saveEditedProject(startDateStr, deadlineStr) {

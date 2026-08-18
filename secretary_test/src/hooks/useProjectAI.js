@@ -1,6 +1,21 @@
 import { useState, useRef } from 'react';
-import { askClaude, buildProjectDelaySystem, fixForeignWordsInText, stripForeignScripts } from '../services/claude';
+import { askClaude, buildProjectDelaySystem, fixForeignWordsInText, stripForeignScripts, summarizeNotifyEmailProjects } from '../services/claude';
 import { updateProject } from '../services/storage';
+
+// "관련 인물에게 알림 메일 발송하기로 설정된 프로젝트 요약해줘" 같은 필터링 질문은 시스템
+// 프롬프트에 정답 목록을 넣어줘도 모델이 무시하고 전체 프로젝트를 다시 나열해버리는 경우가
+// 실사용에서 반복 확인됐다(체크 해제된 프로젝트를 "발송 설정됨"에 포함시켜 답함). 이런 유형의
+// 질문은 AI 호출 자체를 건너뛰고 코드에서 계산한 목록으로 결정적으로 답한다. 특정 프로젝트 하나를
+// 콕 집어 묻는 질문("이 프로젝트 알림메일 설정 어때?")은 목록형 표현이 없어 매칭되지 않고 기존
+// AI 응답 경로로 흘러간다.
+const NOTIFY_EMAIL_OFF_HINT = /(안\s*함|미발송|꺼진|해제|미체크|체크\s*(안|해제)|되지\s*않|안\s*(보내|가))/;
+const NOTIFY_EMAIL_LIST_HINT = /(요약|목록|리스트|뭐야|뭐가|알려줘|보여줘|정리|어떤)/;
+function detectNotifyEmailListIntent(text) {
+  if (!/(알림\s*메일|알림메일)/.test(text)) return null;
+  if (!/프로젝트/.test(text)) return null;
+  if (!NOTIFY_EMAIL_LIST_HINT.test(text)) return null;
+  return NOTIFY_EMAIL_OFF_HINT.test(text) ? 'off' : 'on';
+}
 
 /**
  * 프로젝트 화면 AI 지연 분석 채팅 상태·로직 공통 훅.
@@ -29,6 +44,20 @@ export function useProjectAI({ projects, setProjects, readOnly = false }) {
     const userMsg = { role: 'user', text };
     const history = [...chatMessages, userMsg];
     setChatMessages(history);
+
+    const notifyIntent = detectNotifyEmailListIntent(text);
+    if (notifyIntent) {
+      const { on, off } = summarizeNotifyEmailProjects(projects);
+      const list = notifyIntent === 'off' ? off : on;
+      const label = notifyIntent === 'off' ? '발송 안 함으로 설정된' : '발송으로 설정된';
+      const replyText = list.length > 0
+        ? `관련 인물에게 알림 메일이 ${label} 프로젝트는 다음과 같습니다.\n\n${list.map((t) => `- ${t}`).join('\n')}`
+        : `관련 인물에게 알림 메일이 ${label} 프로젝트가 없습니다.`;
+      setChatMessages([...history, { role: 'assistant', text: replyText }]);
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+      return;
+    }
+
     setAiLoading(true);
 
     try {

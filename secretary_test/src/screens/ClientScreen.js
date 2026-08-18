@@ -25,6 +25,9 @@ const SPEAKER_COLORS = ['#5B7FC4', '#4AADA0', '#8B6FC4', '#C4A35A', '#C45B5B', '
 // 국내 전화번호 형식 검증: 010-1234-5678, 02-123-4567, 031-1234-5678 등. 하이픈은 선택.
 const PHONE_REGEX = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
 const NOTES_MAX_LENGTH = 2000;
+// AI 도우미 팝업 초기 인사말. bottom-tabs는 탭 전환 시 화면을 unmount하지 않아 chatMessages state가
+// 그대로 보존되므로, 팝업을 다시 열 때마다 이 값으로 되돌려 이전 대화가 남아있지 않도록 한다.
+const INITIAL_CLIENT_CHAT_MESSAGE = { role: 'assistant', text: '담당자 관련 무엇이든 물어보세요.\n\n예) "삼성물산이랑 마지막 만난 게 언제야?", "LG전자 다음 미팅 전에 뭘 준비해야 해?", "현재 가장 관리가 필요한 담당자는?"' };
 
 // 하이픈 없이 입력해도 기존 회원 데이터와 동일한 010-0000-0000 형식으로 자동 정렬
 function fmtPhone(text) {
@@ -101,14 +104,17 @@ export default function ClientScreen({ navigation, route }) {
 
   const [selectedMeetingRecord, setSelectedMeetingRecord] = useState(null);
   const [showAI, setShowAI] = useState(false);
-  const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', text: '담당자 관련 무엇이든 물어보세요.\n\n예) "삼성물산이랑 마지막 만난 게 언제야?", "LG전자 다음 미팅 전에 뭘 준비해야 해?", "현재 가장 관리가 필요한 담당자는?"' },
-  ]);
+  const [chatMessages, setChatMessages] = useState([INITIAL_CLIENT_CHAT_MESSAGE]);
   const [chatInput, setChatInput] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [fixingMsgIndex, setFixingMsgIndex] = useState(null);
   const [sendingEmailIndex, setSendingEmailIndex] = useState(null);
   const chatScrollRef = useRef(null);
+  // AI 도우미 팝업을 열 때마다 이전 대화 내역을 초기 인사말로 되돌린다(탭 전환 후 재진입 시 잔존 방지).
+  function openAIChat() {
+    setChatMessages([INITIAL_CLIENT_CHAT_MESSAGE]);
+    setShowAI(true);
+  }
 
   const swipeClient = useSwipeClose(() => setSelectedClient(null), !!selectedClient);
 
@@ -1075,6 +1081,9 @@ export default function ClientScreen({ navigation, route }) {
           <TouchableOpacity style={s.searchAddBtn} onPress={() => setShowSourcePicker(true)}>
             <Text style={s.searchAddBtnText}>+</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={s.aiBtn} onPress={openAIChat}>
+            <Text style={s.aiBtnText}>✦ AI</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={s.tabRow}>
@@ -1108,9 +1117,6 @@ export default function ClientScreen({ navigation, route }) {
       {/* ── 헤더 ── */}
       <View style={[s.header, { paddingTop: insets.top + 16 }]}>
         <Text style={s.headerTitle}>담당자 관리</Text>
-        <TouchableOpacity style={s.aiBtn} onPress={() => setShowAI(true)}>
-          <Text style={s.aiBtnText}>✦ AI</Text>
-        </TouchableOpacity>
       </View>
 
       {/* ── 검색+탭+목록 (PC: 좌우 50:50 분할 + 우측 상세 패널 / 모바일: 기존과 동일) ── */}
@@ -1452,10 +1458,9 @@ export default function ClientScreen({ navigation, route }) {
       </Modal>
 
       {/* ── AI 채팅 모달 ── */}
-      <Modal visible={showAI} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
-          <View style={[s.modalSheet, commonStyles.h85pct]}>
-            <View style={s.modalHandle} />
+      <Modal visible={showAI} animationType="fade" transparent onRequestClose={() => setShowAI(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.centerModalOverlay}>
+          <View style={[s.centerModalCard, commonStyles.maxH85pct]}>
             <View style={s.chatHeader}>
               <View style={s.chatHeaderLeft}>
                 <Text style={s.aiGlyph}>✦</Text>
@@ -1713,7 +1718,7 @@ const s = StyleSheet.create({
   detailPanelEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 },
   detailPanelEmptyText: { color: C.textDim, fontSize: 13 },
   headerTitle: { color: C.textPrimary, fontSize: 22, fontWeight: '300', letterSpacing: -0.5 },
-  aiBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: C.accentTeal + '22', borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 20 },
+  aiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, height: 44, paddingHorizontal: 14, backgroundColor: C.accentTeal + '22', borderWidth: 1, borderColor: C.accentTeal + '55', borderRadius: 20 },
   aiBtnText: { color: C.accentTeal, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
   searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 24, paddingBottom: 12 },
   searchInput: { flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, color: C.textPrimary, fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 },
